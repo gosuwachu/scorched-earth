@@ -11,7 +11,7 @@
  *   round loop  FUN_33a1_05ee : terrain gen -> tank placement -> turn loop by
  *               PLAY_MODE -> survival award -> e342++ -> rankings + shop
  *   turn loop   FUN_33a1_06eb : advance firing order e4f6 (skip dead +0x18),
- *               human (caseD_1e) vs AI (FUN_21b5_0003) -> fire   (SEQUENTIAL)
+ *               AI (caseD_1e) vs human (FUN_21b5_0003) -> fire   (SEQUENTIAL)
  *   sync loop   FUN_4249_000f : every alive player picks power/angle/weapon, THEN
  *               all shots fire at once; the volley flies together; survivors
  *               re-aim each volley (catalog 04 s.6.1, 13 s.1.4)   (SYNCHRONOUS)
@@ -196,6 +196,11 @@ export class GameState {
   explosions: Array<{ [k: string]: unknown }>; // visual fireballs {x,y,maxr,frame,dirt}
   beams: Array<{ pts: Array<[number, number]>; frame: number }>; // laser beams {pts, frame}
   last_landing: [number, number] | null; // DAT_5f38_e346/e348 (Tosser)
+  // DAT_5f38_e1e4/e1e6: far pointer to the tank the CURRENT/LAST flight
+  // directly hit (set during flight, FUN_2a4a_1349.c:105; cleared at the
+  // next shot launch).  Read by the Tosser's turn-end bracket
+  // (FUN_4b6b_00fe.c:84-93) as the forced-target override.
+  direct_hit_tank: Tank | null;
   firing_order: number[]; // DAT_5f38_e4f6
   fire_index: number; // DAT_5f38_e4f4
   phase: string;
@@ -266,6 +271,7 @@ export class GameState {
     this.explosions = []; // visual fireballs {x,y,maxr,frame,dirt}
     this.beams = []; // laser beams {pts, frame}
     this.last_landing = null; // DAT_5f38_e346/e348 (Tosser)
+    this.direct_hit_tank = null; // DAT_5f38_e1e4/e1e6 (Tosser forced-target latch)
     this.firing_order = []; // DAT_5f38_e4f6
     this.fire_index = 0; // DAT_5f38_e4f4
     this.phase = PLACE;
@@ -447,6 +453,7 @@ export class GameState {
     this.shield_fades = {};
     this._prev_shield_hp = {};
     this.last_landing = null;
+    this.direct_hit_tank = null; // DAT_5f38_e1e4/e1e6 (Tosser forced-target latch)
     this.fire_index = 0;
     this.timer = 0.0;
     // PLAY_MODE dispatch (catalog 13 s.1.2): SEQUENTIAL keeps the firing-order
@@ -848,6 +855,9 @@ export class GameState {
     }
     // ERRATIC re-rolls the live wall sub-mode PER SHOT (FUN_2a4a_0b1f.c:197-198).
     this._reroll_erratic();
+    // A new flight starts: the direct-hit latch (DAT_5f38_e1e4/e1e6) is
+    // cleared so the Tosser's bracket reads THIS flight's hit, not a stale one.
+    this.direct_hit_tank = null;
     // Stash the launch height for the POS flight-tone pitch (pivot_y = t.y - 4).
     sfx.set_launch_y(t.y - 4);
     let slot = t.selected_weapon;
@@ -1741,6 +1751,10 @@ export class GameState {
         proj.active = false;
         return;
       }
+      // Latch the directly-hit tank (DAT_5f38_e1e4/e1e6, set during the
+      // flight; FUN_2a4a_1349.c:105).  The Tosser's turn-end bracket reads
+      // it as the forced target (FUN_4b6b_00fe.c:84-93).
+      this.direct_hit_tank = tank;
       damage.direct_hit(this as unknown as damage.State, tank as unknown as damage.Tank); // instakill
       wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y); // radial + crater
       proj.active = false;

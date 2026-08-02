@@ -77,6 +77,7 @@ export interface AIState {
   h: number;
   round_index: number;
   last_landing: [number, number] | null;
+  direct_hit_tank: Tank | null; // DAT_5f38_e1e4/e1e6 (Tosser forced-target latch)
   live_sky?: string;
 }
 
@@ -690,8 +691,10 @@ function _tosser_opener(
   return [_clamp_ang(angle), _clamp_pow(power), weapon];
 }
 
-/** FUN_4b6b_0007 / _00fe / _033c. Artillery ranging. */
-function _turn_tosser(state: AIState, tank: Tank): [number, number, number] {
+/** FUN_4b6b_0007 / _00fe / _033c. Artillery ranging.
+ * Exported for the differential gate (test/ai.test.ts), like
+ * _tosser_steepen_gate. */
+export function _turn_tosser(state: AIState, tank: Tank): [number, number, number] {
   const last = state.last_landing;
   const weapon = pick_weapon(state, tank);
 
@@ -702,7 +705,15 @@ function _turn_tosser(state: AIState, tank: Tank): [number, number, number] {
 
   const lx = last[0];
   const ly = last[1]; // FUN_4b6b_00fe: enemy nearest the landing x
-  const target = _enemy_nearest_x(state, tank, lx);
+  // FUN_4b6b_00fe.c:84-93 forced-target override: if the last flight's
+  // directly-hit tank (DAT_5f38_e1e4/e1e6) is valid, alive, and reachable
+  // (FUN_3a16_198d friendly test), aim at THAT tank instead of the
+  // nearest-to-landing pick.  Cleared at each shot launch (game.fire).
+  const forced = state.direct_hit_tank;
+  const target =
+    forced !== null && forced.alive && !_friendly(state, tank, forced)
+      ? forced
+      : _enemy_nearest_x(state, tank, lx);
   if (target === null) {
     return [_clamp_ang(tank.angle), _clamp_pow(tank.power), weapon];
   }

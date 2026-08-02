@@ -37,6 +37,7 @@
  *   provider is set, draw_cursor() is a no-op (it cannot fabricate the sprite).
  */
 import * as pygame from "./pygame";
+import * as joystick from "./joystick";
 import { pyRound } from "./damage";
 
 // palette-ish UI colors (Borland-dialog gray look)
@@ -1028,6 +1029,7 @@ export function setMousePosProvider(p: () => [number, number]): void {
  * No-op until the integrator supplies the sprite + mouse-pos providers (it
  * cannot fabricate the sprite asset here). */
 export function draw_cursor(surf: pygame.Surface): void {
+  joystick.set_screen_size(surf.get_size());
   if (_cursorProvider === null || _mousePosProvider === null) {
     return;
   }
@@ -1035,8 +1037,17 @@ export function draw_cursor(surf: pygame.Surface): void {
     _CURSOR_CACHE = _cursorProvider([255, 255, 255], 1);
   }
   const [cur, hot] = _CURSOR_CACHE;
-  const [x, y] = _mousePosProvider(); // SCALED surfaces report logical coords already
-  surf.blit(cur, [x - hot[0], y - hot[1]]);
+  // POINTER=Joystick: the software cursor moves from the calibrated stick
+  // (joystick.advance_pointer, FUN_54e7_0213 poll-then-redraw); hit-tests in
+  // ingame read peek_pointer_pos() so they track the drawn cursor.
+  let pos: [number, number];
+  if (joystick.active()) {
+    joystick.advance_pointer();
+    pos = joystick.peek_pointer_pos();
+  } else {
+    pos = _mousePosProvider(); // SCALED surfaces report logical coords already
+  }
+  surf.blit(cur, [pos[0] - hot[0], pos[1] - hot[1]]);
 }
 
 // ---------------------------------------------------------------------------

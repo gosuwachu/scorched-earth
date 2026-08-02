@@ -60,6 +60,7 @@ import * as diag from "./diag";
 import * as talk from "./talk";
 import * as ui from "./ui";
 import * as ingame from "./ingame";
+import * as joystick from "./joystick";
 import * as C from "./constants";
 import * as _pal from "./palette";
 import { sfx } from "./sound";
@@ -604,6 +605,9 @@ export class App {
     // Config is loaded by the boot sequence (async fetch) and passed in via the
     // factory below; here we adopt the already-loaded cfg off the surface owner.
     this.cfg = (surface as unknown as { _cfg?: Config })._cfg ?? Config.load(null);
+    // Sync the joystick pointer mode from the saved config (the Hardware
+    // menu selector keeps it live afterwards; joystick.set_pointer_mode).
+    joystick.set_pointer_mode(this.cfg.POINTER);
     // `mayhem` give-all-weapons cheat (runtime attribute, not a saved field).
     (this.cfg as unknown as { mayhem: boolean }).mayhem = mayhem;
     this.w = surface.get_width();
@@ -1417,6 +1421,8 @@ function _installInput(canvas: HTMLCanvasElement): void {
   });
   // Feed ingame's mouse-state provider (pygame.mouse equivalent).
   ingame.setMouseStateProvider(() => ({ pressed: _mousePressed, pos: _mousePos }));
+  // Feed joystick.peek_pointer_pos's inactive-state fallback (pygame.mouse.get_pos).
+  joystick.setMousePosProvider(() => _mousePos);
 }
 
 // ===========================================================================

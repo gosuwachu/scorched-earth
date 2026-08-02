@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, it, expect, afterEach } from "vitest";
 import * as screens from "../src/screens";
+import * as joystick from "../src/joystick";
 import * as weapons from "../src/weapons";
 import * as W from "../src/widgets";
 import * as pygame from "../src/pygame";
@@ -512,6 +513,52 @@ describe("screens_flow: OptionsScreen weapon-list scroll == Python", () => {
 // ===========================================================================
 // 6. CalibrateScreen + RegistrationScreen handle/update
 // ===========================================================================
+// 9e (tests/test_re_equivalence.py): the functional calibrate protocol --
+// detect -> center capture on the first fire press -> demonstrated-travel
+// range tracking -> second press stores the runtime calibration
+// (joystick.set_calibration), which the POINTER=Joystick cursor path consumes.
+// The screen CANNOT be `new`-ed headless (the constructor builds font-measured
+// widgets), so the protocol is driven through the Object.create seam with the
+// constructor-built state attached, exactly like the Python test constructs
+// CalibrateScreen(cfg, w, h, joy=fake) directly.
+class FakeJoyDev {
+  axes: [number, number];
+  btn: boolean;
+
+  constructor(ax0 = 0.0, ax1 = 0.0, btn = false) {
+    this.axes = [ax0, ax1];
+    this.btn = btn;
+  }
+
+  get_axis(i: number): number {
+    return this.axes[i];
+  }
+
+  get_button(_b: number): boolean {
+    return this.btn;
+  }
+
+  get_name(): string {
+    return "fake";
+  }
+}
+
+function calibrateSeam(dev: FakeJoyDev): screens.CalibrateScreen {
+  const self = Object.create(screens.CalibrateScreen.prototype) as screens.CalibrateScreen;
+  self.panel = fakePanel(null) as unknown as typeof self.panel;
+  self.phase = "center";
+  self.joy = new joystick.Joystick(dev);
+  self.samples = [];
+  self.prev_fire = false;
+  self.cal = new joystick.Calibration(0.0, 0.0, 1.0, 1.0, true);
+  self._max_dx = 0.0;
+  self._max_dy = 0.0;
+  self._pop = false;
+  self._instr1 = { label: "" } as unknown as typeof self._instr1;
+  self._instr2 = { label: "" } as unknown as typeof self._instr2;
+  return self;
+}
+
 describe("screens_flow: Calibrate/Registration handle+update == Python", () => {
   const c = vec.calibrate_registration;
 
@@ -529,6 +576,46 @@ describe("screens_flow: Calibrate/Registration handle+update == Python", () => {
   it("CalibrateScreen.update -> null", () => {
     const self = Object.create(screens.CalibrateScreen.prototype) as screens.CalibrateScreen;
     expect(self.update(0.016)).toBe(c.update_ret);
+  });
+
+  it("CalibrateScreen.update: center capture -> range tracking -> store (9e)", () => {
+    joystick.reset_for_tests();
+    const dev = new FakeJoyDev(0.02, -0.03);
+    const self = calibrateSeam(dev);
+    for (let i = 0; i < 6; i++) {
+      expect(self.update(0.016), `resting sample ${i}`).toBeNull();
+    }
+    expect(self.phase, "starts in the center phase").toBe("center");
+    dev.btn = true; // fire edge -> center captured
+    expect(self.update(0.016)).toBeNull();
+    expect(self.phase, "fire press advances to the range phase").toBe("range");
+    expect(Math.abs(self.cal.center_x - 0.02), "center = mean of resting samples").toBeLessThan(1e-9);
+    expect(Math.abs(self.cal.center_y + 0.03)).toBeLessThan(1e-9);
+    dev.btn = false;
+    dev.axes = [0.5, 0.0];
+    self.update(0.016); // track demonstrated travel
+    dev.axes = [-0.6, 0.4];
+    self.update(0.016);
+    expect(Math.abs(self._max_dx - 0.62), "range tracks |raw-center| maxima").toBeLessThan(1e-9);
+    expect(Math.abs(self._max_dy - 0.43)).toBeLessThan(1e-9);
+    dev.btn = true; // second fire -> store + pop
+    expect(self.update(0.016)).toBeNull();
+    expect(self._pop, "second fire press closes the dialog").toBe(true);
+    const cal = joystick.get_calibration();
+    expect(cal.present, "stored calibration reaches the joystick module").toBe(true);
+    expect(Math.abs(cal.center_x - 0.02)).toBeLessThan(1e-9);
+    expect(Math.abs(cal.range_x - 0.62)).toBeLessThan(1e-9);
+    expect(self.handle({ type: pygame.KEYDOWN, key: pygame.K_a, unicode: "a" }), "any key cancels").toBe("pop");
+  });
+
+  it("CalibrateScreen: absent stick -> update null, any key pops (9e)", () => {
+    joystick.reset_for_tests();
+    const self = Object.create(screens.CalibrateScreen.prototype) as screens.CalibrateScreen;
+    self.panel = fakePanel(null) as unknown as typeof self.panel;
+    self.phase = "absent";
+    self._pop = false;
+    expect(self.update(0.016), "absent dialog update is a no-op").toBeNull();
+    expect(self.handle({ type: pygame.KEYDOWN, key: pygame.K_a, unicode: "a" }), "absent dialog cancels on any key").toBe("pop");
   });
 
   it("RegistrationScreen.update -> null", () => {

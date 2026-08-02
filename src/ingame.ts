@@ -62,6 +62,7 @@
 import * as pygame from "./pygame";
 
 import * as C from "./constants";
+import * as joystick from "./joystick";
 import * as movement from "./movement";
 import * as weapons from "./weapons";
 import * as widgets from "./widgets";
@@ -391,7 +392,9 @@ function _mouse_hold_keys(state: GameState): { [code: number]: boolean } {
     return {};
   }
   const boxes = hud_hitboxes(state);
-  const pos = ms.pos;
+  // POINTER=Joystick: read the software cursor drawn by widgets.draw_cursor
+  // (joystick.peek_pointer_pos), so panel hits track the joystick cursor.
+  const pos = joystick.active() ? joystick.peek_pointer_pos() : ms.pos;
   const extra: { [code: number]: boolean } = {};
   let r = boxes["power"];
   if (r !== undefined && r.collidepoint(pos)) {

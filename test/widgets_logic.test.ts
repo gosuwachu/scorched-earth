@@ -228,12 +228,15 @@ describe("widgets.Panel handle (focus + value paths)", () => {
 // ===========================================================================
 describe("widgets.draw_cursor", () => {
   type BlitCall = { args: unknown[] };
-  function fakeSurf(): { blit: ReturnType<typeof vi.fn>; calls: BlitCall[] } {
+  function fakeSurf(): { blit: ReturnType<typeof vi.fn>; calls: BlitCall[]; get_size: () => [number, number] } {
     const calls: BlitCall[] = [];
     const blit = vi.fn((...args: unknown[]) => {
       calls.push({ args });
     });
-    return { blit, calls };
+    // draw_cursor feeds surf.get_size() to joystick.set_screen_size each frame
+    // (the Python port's unconditionally-called sync); the fake must expose the
+    // real Surface contract (pygame.ts get_size) like the real surface does.
+    return { blit, calls, get_size: () => [1024, 768] };
   }
 
   it("is a no-op until BOTH providers are set", () => {

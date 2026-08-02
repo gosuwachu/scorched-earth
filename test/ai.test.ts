@@ -113,6 +113,7 @@ class MockState implements ai.AIState {
   h: number;
   round_index: number;
   last_landing: [number, number] | null;
+  direct_hit_tank: Tank | null; // DAT_5f38_e1e4/e1e6 (Tosser forced-target latch)
   live_sky: string;
   constructor(
     cfg: Config,
@@ -122,6 +123,7 @@ class MockState implements ai.AIState {
       h?: number;
       seed?: number;
       last_landing?: [number, number] | null;
+      direct_hit_tank?: Tank | null;
       round_index?: number;
       live_sky?: string;
       terrain?: ai.AITerrain;
@@ -137,6 +139,7 @@ class MockState implements ai.AIState {
     this.terrain = opts.terrain ?? new MockTerrain();
     this.round_index = opts.round_index ?? 0;
     this.last_landing = opts.last_landing ?? null;
+    this.direct_hit_tank = opts.direct_hit_tank ?? null;
     this.live_sky = opts.live_sky ?? "";
   }
 }
@@ -416,6 +419,64 @@ runTurnBattery("turn_poolshark", C.AI_POOLSHARK, (s, t) => ai.take_turn(s, t));
 runTurnBattery("turn_spoiler", C.AI_SPOILER, (s, t) => ai.take_turn(s, t));
 runTurnBattery("turn_cyborg", C.AI_CYBORG, (s, t) => ai.take_turn(s, t));
 runTurnBattery("turn_chooser", C.AI_CHOOSER, (s, t) => ai.take_turn(s, t));
+
+// ---------------------------------------------------------------------------
+// 9c: tosser forced-target override (FUN_4b6b_00fe.c:84-93)
+// ---------------------------------------------------------------------------
+// The last flight's directly-hit tank (DAT_5f38_e1e4/e1e6) overrides the
+// nearest-to-landing pick when valid, alive, and NOT friendly (FUN_3a16_198d).
+// Mirrors tests/test_re_equivalence.py 9c (same 4 cases, 100 seeds each).
+describe("ai: tosser forced-target override (FUN_4b6b_00fe.c:84-93)", () => {
+  const mk = (): { st: MockState; t: Tank; near: Tank } => {
+    const cfg = mkCfg();
+    const t = mkTank(0, 200, 400, C.AI_TOSSER, 0);
+    const near = mkTank(1, 195, 380, 0, 0); // |200-195|=5 < |200-lx| -> OVERSHOT
+    const land = mkTank(2, 810, 400, 0, 0); // nearest to lx=800; |200-810|=610 -> NOT overshoot
+    t.angle = 60;
+    t.power = 600;
+    const st = new MockState(cfg, [t, near, land], { last_landing: [800, 350] });
+    return { st, t, near };
+  };
+
+  // power 590 = the forced target (near) drove the overshoot bracket;
+  // anything else = the nearest-to-landing fallback (steepen + power+10).
+  const run = (st: MockState, t: Tank, seed: number, hit: Tank | null): number => {
+    st.rng.seed(seed);
+    st.direct_hit_tank = hit;
+    return ai._turn_tosser(st, t)[1];
+  };
+
+  it("forced target overrides nearest-to-landing (all seeds)", () => {
+    const { st, t, near } = mk();
+    for (let seed = 0; seed < 100; seed++) {
+      expect(run(st, t, seed, near), `seed=${seed}: forced near target -> overshoot 590`).toBe(590);
+    }
+  });
+
+  it("friendly forced target is vetoed (FUN_3a16_198d) -> fallback", () => {
+    const { st, t, near } = mk();
+    st.cfg.TEAM_MODE = "STANDARD"; // t and near both team 0
+    for (let seed = 0; seed < 100; seed++) {
+      expect(run(st, t, seed, near), `seed=${seed}: friendly forced target must be vetoed`).not.toBe(590);
+    }
+    st.cfg.TEAM_MODE = "NONE";
+  });
+
+  it("dead forced target is vetoed -> fallback", () => {
+    const { st, t, near } = mk();
+    near.alive = false;
+    for (let seed = 0; seed < 100; seed++) {
+      expect(run(st, t, seed, near), `seed=${seed}: dead forced target must be vetoed`).not.toBe(590);
+    }
+  });
+
+  it("no latch falls back to nearest-to-landing", () => {
+    const { st, t } = mk();
+    for (let seed = 0; seed < 100; seed++) {
+      expect(run(st, t, seed, null), `seed=${seed}: no latch must fall back`).not.toBe(590);
+    }
+  });
+});
 
 describe("ai: turn_geo (varied geometry: bracket / recurse / wind-seed / flatten)", () => {
   for (const r of vec.turn_geo) {

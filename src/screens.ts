@@ -59,6 +59,7 @@ import * as weapons from "./weapons";
 import * as palette from "./palette";
 import * as render from "./render";
 import * as savegame from "./savegame";
+import * as joystick from "./joystick";
 import * as W from "./widgets";
 import {
   Panel,
@@ -851,6 +852,9 @@ export class OptionsScreen extends Screen {
         };
         const sp = (i: number): void => {
           this.cfg.POINTER = tokens[((i % tokens.length) + tokens.length) % tokens.length];
+          // The joystick pointer path keys off the mode (joystick.set_pointer_mode);
+          // keep it live when the Hardware menu cycles the selector.
+          joystick.set_pointer_mode(this.cfg.POINTER);
         };
         p.add(new Selector(x, y, row[2] as string, tokens, gp, sp, 300));
         y += 24;
@@ -981,18 +985,45 @@ export class OptionsScreen extends Screen {
 }
 
 export class CalibrateScreen extends Screen {
-  /** Hardware -> ~Calibrate Joystick dialog (REMAINING_GAPS.md GAP 1).  Verbatim
-   * text (all binary-read; file offsets in REMAINING_GAPS.md).  The port has no
-   * real joystick path, so this is a display+cancel stub: ANY key (per the verbatim
-   * cancel line) or a click on ~Cancel / outside dismisses it with 'pop'. */
+  /** Hardware -> ~Calibrate Joystick dialog (REMAINING_GAPS.md GAP 1; now
+   * functional).  Verbatim original text (binary-read; file offsets in
+   * REMAINING_GAPS.md):
+   *     Calibrate Joystick           (title, 0x58b0b)
+   *     Center joystick and press    (0x58dad)
+   *     the fire button.             (0x58dc7)
+   *     (Press any key to cancel.)   (0x58dd8)
+   * Protocol (FUN_583d_0005 detect + the dialog's center/range measurement):
+   *   - detect the stick; absent -> "No joystick detected." (FUN_583d_0005
+   *     returns 0 present / 0xffff absent).
+   *   - CENTER phase: average the last ~12 resting axis reads; a fire-button
+   *     press (falling edge) captures the center.
+   *   - RANGE phase: |raw-center| maxima are live-tracked while the user
+   *     moves; a second fire press stores the runtime calibration
+   *     (joystick.set_calibration), which the POINTER=Joystick cursor path
+   *     consumes (joystick.advance_pointer / FUN_54e7_0213).
+   * Calibration is runtime-only: the original persists no joystick keys to
+   * scorch.cfg (config schema: 0 hits), so neither does the port.
+   * Any key cancels (verbatim cancel line).
+   * [port-added text -- NO recovered string exists]: the phase-2 instruction
+   * and the no-joystick notice; marked as such in the labels. */
   override opaque = false;
 
   cfg: CfgLike;
   w: number;
   h: number;
   panel: Panel;
+  joy: joystick.Joystick | null;
+  _pop = false;
+  phase: "absent" | "center" | "range" = "absent";
+  _instr1: Label;
+  _instr2: Label;
+  samples: Array<[number, number]> = [];
+  prev_fire = false;
+  cal = new joystick.Calibration(0.0, 0.0, 1.0, 1.0, true);
+  _max_dx = 0.0;
+  _max_dy = 0.0;
 
-  constructor(cfg: CfgLike, w: number, h: number) {
+  constructor(cfg: CfgLike, w: number, h: number, joy: joystick.Joystick | null = null) {
     super();
     this.cfg = cfg;
     this.w = w;
@@ -1000,16 +1031,33 @@ export class CalibrateScreen extends Screen {
     this.panel = new Panel(Math.trunc(w / 2) - 160, Math.trunc(h / 2) - 70, 320, 140, "Calibrate Joystick", false, "pop");
     const x = this.panel.rect.x + 20;
     let y = this.panel.rect.y + 36;
-    this.panel.add(new Label(x, y, "Center joystick and press"));
+    this._instr1 = this.panel.add(new Label(x, y, "Center joystick and press"));
     y += 22;
-    this.panel.add(new Label(x, y, "the fire button."));
+    this._instr2 = this.panel.add(new Label(x, y, "the fire button."));
     y += 26;
     this.panel.add(new Label(x, y, "(Press any key to cancel.)"));
     y += 28;
     this.panel.add(new Button(this.panel.rect.centerx - 32, this.panel.rect.bottom - 28, "~Cancel", "pop", null, true));
+    // `joy` is a test seam: the screen takes the device it calibrates.
+    this.joy = joy !== null ? joy : joystick.detect();
+    if (this.joy === null) {
+      this.phase = "absent";
+      this._instr1.label = "[port-added] No joystick detected.";
+      this._instr2.label = "";
+    } else {
+      this.phase = "center";
+      this.samples = [];
+      this.prev_fire = false;
+      this.cal = new joystick.Calibration(0.0, 0.0, 1.0, 1.0, true);
+      this._max_dx = 0.0;
+      this._max_dy = 0.0;
+    }
   }
 
   override handle(e: ScreenEvent): ScreenAction {
+    if (this._pop) {
+      return "pop";
+    }
     // "(Press any key to cancel.)": any KEYDOWN dismisses, not only Esc.
     if (e.type === pygame.KEYDOWN) {
       return "pop";
@@ -1018,6 +1066,40 @@ export class CalibrateScreen extends Screen {
   }
 
   override update(_dt: number): ScreenAction {
+    if (this.phase !== "center" && this.phase !== "range") {
+      return null;
+    }
+    if (this.joy === null) {
+      return null; // unreachable: phases require a detected stick
+    }
+    const [x, y] = this.joy.axes();
+    const fire = this.joy.fire_down();
+    const edge = fire && !this.prev_fire;
+    this.prev_fire = fire;
+    if (this.phase === "center") {
+      this.samples.push([x, y]);
+      this.samples = this.samples.slice(-12); // del self.samples[:-12]
+      if (edge) {
+        const n = this.samples.length;
+        this.cal.center_x = this.samples.reduce((s, p) => s + p[0], 0) / n;
+        this.cal.center_y = this.samples.reduce((s, p) => s + p[1], 0) / n;
+        this.phase = "range";
+        this._instr1.label = "[port-added] Move joystick to the limits,";
+        this._instr2.label = "[port-added] then press the fire button.";
+      }
+    } else if (edge) {
+      // range = the user's demonstrated stick travel (|raw-center| max);
+      // deflect() maps that travel to full cursor deflection -- the
+      // original's "move the stick around" gain semantics.
+      this.cal.range_x = Math.max(this._max_dx, 0.1);
+      this.cal.range_y = Math.max(this._max_dy, 0.1);
+      joystick.set_calibration(this.cal);
+      this._pop = true;
+    } else {
+      // live-track the demonstrated deflection range while the user moves
+      this._max_dx = Math.max(this._max_dx, Math.abs(x - this.cal.center_x));
+      this._max_dy = Math.max(this._max_dy, Math.abs(y - this.cal.center_y));
+    }
     return null;
   }
 
