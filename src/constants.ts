@@ -140,7 +140,7 @@ export const COL_SKY = 0x00;               // background (index < 0x50 = empty/s
 export const COL_DIRT = 0x50;              // plain-mode single dirt color (80)
 export const DIRT_SHADE_LO = 0x58;         // shaded-mode dirt band low (88)
 export const DIRT_SHADE_HI = 0x68;         // shaded-mode dirt band high (104)
-// dirt test: index == 0x50 OR 0x58 <= index <= 0x68
+// Dirt spans 0x50..0x68, including the 0x51..0x55 heated-earth band.
 export const COL_TANK_BASE = 0x69;         // >= 0x69 = tank/object/non-dirt
 export const EXPLOSION_LO = 0xc8;          // 200: explosion color band low
 export const EXPLOSION_HI = 0xef;          // 239: band TOP (eefc(200,0x28)=40 entries 200..239,
@@ -151,12 +151,12 @@ export const COL_TRACER = 0xe0;            // tracer/smoke
 
 /** Dirt-band test used by every collision/carve/fill site (catalog 11 s.2.2). */
 export function is_dirt(idx: number): boolean {
-  return idx === COL_DIRT || (DIRT_SHADE_LO <= idx && idx <= DIRT_SHADE_HI);
+  return COL_DIRT <= idx && idx <= DIRT_SHADE_HI;
 }
 
 /** Solid = dirt or any object pixel (>= 0x69); sky/gap is < 0x50. */
 export function is_solid(idx: number): boolean {
-  return idx === COL_DIRT || idx >= DIRT_SHADE_LO;
+  return idx >= COL_DIRT;
 }
 
 // ---------------------------------------------------------------------------

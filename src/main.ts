@@ -54,6 +54,7 @@
  *   every screen .draw() need a DOM / a real engine and defer to the Phase-3 visual
  *   gate + a live boot (pixelsDeferredToPhase3 = true).
  */
+import { handleCharge, type ChargeState } from "./energy_controls";
 import * as pygame from "./pygame";
 import * as assets from "./assets";
 import * as diag from "./diag";
@@ -1129,6 +1130,7 @@ class GameScreen extends Screen {
 
   override handle(event: ScreenEvent): string | null {
     const gs = this.gs;
+    if (handleCharge(gs as unknown as ChargeState, event)) return null;
     if (event.type === pygame.KEYDOWN && (event.key === pygame.K_F1 || event.key === pygame.K_ESCAPE)) {
       return "push:system";
     }

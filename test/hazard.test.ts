@@ -450,69 +450,7 @@ function buildStrikeState(seed: number, caseName: string): MockState {
   }
 }
 
-describe("hazard: maybe_strike (per-turn weather hook)", () => {
-  for (const { seed, runs } of vec.maybe_strike.seeds) {
-    it(`seed ${seed}: ${runs.length} strike scenarios reproduce every mutation`, () => {
-      for (const expected of runs) {
-        const st = buildStrikeState(seed, expected.case);
-        const ret = hazard.maybe_strike(st);
-        const got = snapshotStrike(st, ret);
-        const tag = `${expected.case} seed ${seed}`;
-
-        // live_sky resolution (string, exact)
-        expect(got.live_sky, `${tag} live_sky`).toBe(expected.live_sky);
-
-        // return: None vs the exact bolt polylines
-        if (expected.return === null) {
-          expect(ret, `${tag} return is null`).toBeNull();
-        } else {
-          expect(got.return, `${tag} return not null`).not.toBeNull();
-          expect(got.return!.length, `${tag} return poly count`).toBe(expected.return.length);
-          for (let p = 0; p < expected.return.length; p++) {
-            expect(got.return![p].length, `${tag} ret poly ${p} len`).toBe(expected.return[p].length);
-            for (let q = 0; q < expected.return[p].length; q++) {
-              expect(got.return![p][q][0], `${tag} ret poly ${p} pt ${q} x`).toBe(expected.return[p][q][0]);
-              expect(got.return![p][q][1], `${tag} ret poly ${p} pt ${q} y`).toBe(expected.return[p][q][1]);
-            }
-          }
-        }
-
-        // active_bolts queued (pts + frame, exact integers)
-        expect(got.active_bolts.length, `${tag} active_bolts count`).toBe(expected.active_bolts.length);
-        for (let b = 0; b < expected.active_bolts.length; b++) {
-          expect(got.active_bolts[b].frame, `${tag} bolt ${b} frame`).toBe(expected.active_bolts[b].frame);
-          expect(got.active_bolts[b].pts.length, `${tag} bolt ${b} pts len`).toBe(expected.active_bolts[b].pts.length);
-          for (let q = 0; q < expected.active_bolts[b].pts.length; q++) {
-            expect(got.active_bolts[b].pts[q][0], `${tag} bolt ${b} pt ${q} x`).toBe(expected.active_bolts[b].pts[q][0]);
-            expect(got.active_bolts[b].pts[q][1], `${tag} bolt ${b} pt ${q} y`).toBe(expected.active_bolts[b].pts[q][1]);
-          }
-        }
-
-        // queued flashes (up, down, rgb, delay -- all integers)
-        expect(got.flashes.length, `${tag} flash count`).toBe(expected.flashes.length);
-        for (let f = 0; f < expected.flashes.length; f++) {
-          expect(got.flashes[f][0], `${tag} flash ${f} up`).toBe(expected.flashes[f][0]);
-          expect(got.flashes[f][1], `${tag} flash ${f} down`).toBe(expected.flashes[f][1]);
-          expect(got.flashes[f][2], `${tag} flash ${f} rgb`).toEqual(expected.flashes[f][2]);
-          expect(got.flashes[f][3], `${tag} flash ${f} delay`).toBe(expected.flashes[f][3]);
-        }
-
-        // per-tank health/shield/alive after the strike (integers/bool)
-        expect(got.tanks.length, `${tag} tank count`).toBe(expected.tanks.length);
-        for (let t = 0; t < expected.tanks.length; t++) {
-          expect(got.tanks[t].health, `${tag} tank ${t} health`).toBe(expected.tanks[t].health);
-          expect(got.tanks[t].shield_hp, `${tag} tank ${t} shield_hp`).toBe(expected.tanks[t].shield_hp);
-          expect(got.tanks[t].shield_item, `${tag} tank ${t} shield_item`).toBe(expected.tanks[t].shield_item);
-          expect(got.tanks[t].alive, `${tag} tank ${t} alive`).toBe(expected.tanks[t].alive);
-        }
-      }
-    });
-  }
-});
-
-// ===========================================================================
-// _thunder_flicker -- standalone flash burst
-// ===========================================================================
+// Active DOS pixel-collision strike is covered by combat_effects.test.ts.
 describe("hazard: _thunder_flicker (sky flash burst)", () => {
   for (const { seed, runs } of vec.thunder_flicker.seeds) {
     it(`seed ${seed}: ${runs.length} flicker bursts match`, () => {

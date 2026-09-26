@@ -205,6 +205,29 @@ try {
   await until(async () => (await a.locator(".lan-status").textContent()).includes("another tab"), "old controller replaced");
   await a.close(); a = replacement;
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks.length), 3);
+  // Plasma's charge is host state; cancellation and reconnect preserve ammo.
+  await host.evaluate(() => {
+    const t = window.onlineApp.gs.tanks[0];
+    t.inventory[31] = 2; t.selected_weapon = 31;
+  });
+  await click(a, "Space / Fire");
+  await a.getByLabel("Batteries for Plasma", { exact: true }).waitFor();
+  assert.equal(await b.getByLabel("Batteries for Plasma", { exact: true }).count(), 0);
+  await a.getByLabel("Batteries for Plasma", { exact: true }).fill("5");
+  await a.getByLabel("Batteries for Plasma", { exact: true }).press("Tab");
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.plasma_charge?.value) === 5, "charge reaches host");
+  await a.reload();
+  await a.getByLabel("Batteries for Plasma", { exact: true }).waitFor();
+  assert.equal(await a.getByLabel("Batteries for Plasma", { exact: true }).inputValue(), "5");
+  await click(a, "Cancel");
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.plasma_charge) === null, "charge canceled");
+  assert.deepEqual(await host.evaluate(() => {
+    const t = window.onlineApp.gs.tanks[0]; return [t.inventory[31], t.inventory[39]];
+  }), [2, 8]);
+  await click(a, "Space / Fire");
+  await a.getByLabel("Batteries for Plasma", { exact: true }).waitFor();
+  await a.getByLabel("Batteries for Plasma", { exact: true }).fill("5");
+  await a.getByLabel("Batteries for Plasma", { exact: true }).press("Tab");
   await a.screenshot({ path: `${root}/test-browser/out/online-controller.png`, fullPage: true });
   // Observe fire synchronously through a real game method, without changing it.
   await host.evaluate(() => {
@@ -212,8 +235,11 @@ try {
     const fire = gs.fire.bind(gs); window.shotCount = 0;
     gs.fire = (...args) => { window.shotCount++; return fire(...args); };
   });
-  await click(a, "Space / Fire");
+  await click(a, "Fire Plasma");
   await until(async () => await host.evaluate(() => window.shotCount) > 0, "firing");
+  assert.deepEqual(await host.evaluate(() => {
+    const t = window.onlineApp.gs.tanks[0]; return [t.inventory[31], t.inventory[39]];
+  }), [1, 3]);
   await until(async () => !await enabled(a, "Space / Fire"), "controller locked after firing");
   // End rounds deterministically through the real engine rather than waiting for random AI hits.
   await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });

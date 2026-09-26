@@ -17,13 +17,13 @@ try {
   await page.goto(`${base}/test-browser/harness.html`);
   await page.evaluate(() => window.harnessReady);
   const summary = [];
-  for (const idx of [5, 22, 23, 24]) for (const terrain of ["flat", "hill"]) {
+  for (const idx of Array.from({ length: 33 }, (_, i) => i)) for (const terrain of ["flat", "hill"]) {
     await page.evaluate(([i, t]) => window.startWeaponDemo(i, t), [idx, terrain]);
     const captures = new Set([0, 5, 10, 20, 40, 80, 120]);
     let meta;
     const start = performance.now();
-    for (let frame = 0; frame <= 1200; frame++) {
-      meta = await page.evaluate((n) => window.advanceWeaponDemo(n), frame ? 1 : 0);
+    for (let frame = 0; frame <= 4000; frame += frame < 120 ? 1 : 10) {
+      meta = await page.evaluate((n) => window.advanceWeaponDemo(n), frame ? (frame <= 120 ? 1 : 10) : 0);
       if (captures.has(frame) || (frame > 0 && meta.phase !== "firing")) {
         await page.locator("#game").screenshot({ path: `${out}/${idx}-${terrain}-${String(frame).padStart(4, "0")}.png` });
       }

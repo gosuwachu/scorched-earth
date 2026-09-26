@@ -435,8 +435,8 @@ describe("sound: play() event branches build the oracle-exact buffer", () => {
   // (event name, oracle-vector key).  Each play() drives a distinct play()
   // branch; the captured buffer must reproduce the Python plane EXACTLY.
   const EVENTS: Array<[string, string]> = [
-    ["fire", "fire"],
-    ["plasma", "plasma"],
+    ["riot", "plasma"],
+    ["plasma", "explosion"],
     ["shield_collapse", "shield_collapse"],
     ["shield_deploy", "shield_deploy"],
     ["death", "death"],
@@ -462,6 +462,12 @@ describe("sound: play() event branches build the oracle-exact buffer", () => {
     ["dialog_open", "dialog_open"],
     ["dialog_close", "dialog_close"],
   ];
+  it("uses the launch frequencies recovered at 2a4a:03d2", () => {
+    const sound = new Sfx();
+    const play = vi.spyOn(sound as unknown as { _play_tones(tones: number[][], gate: boolean): void }, "_play_tones");
+    sound.play("fire", true);
+    expect(play).toHaveBeenCalledWith([1000, 2500, 4000, 5500, 7000, 8500, 10000].map((f) => [f, 14]), true);
+  });
   for (const [name, key] of EVENTS) {
     it(`play("${name}") -> oracle event "${key}" plane (one buffer, one source)`, () => {
       installMock();

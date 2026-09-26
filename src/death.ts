@@ -1,94 +1,14 @@
-/**
- * Tank death FX -- a faithful TypeScript port of scorch-py/scorch/death.py
- * (the fidelity oracle, itself byte-verified against 1.5/SCORCH.EXE).
+/** Tank death FIFO and the eleven-way roulette (271b:0005).
+ * The live game uses staged handlers recovered directly from DOS in
+ * combat_effects.ts, weapon_effects.ts and death_effects.ts. Historical
+ * Python emitters remain as fallbacks for small oracle test doubles.
  *
- * TWO sibling systems, re-verified from binary bytes 2026-07-07
- * (scorch-re/notes_death_throe_roulette.md, the full decode; supersedes this
- * file's earlier "exactly ONE death animation" header, which is REFUTED there):
- *
- * 1. THE KILL ROULETTE -- FUN_271b_0005 (file 0x1dbb5), the per-tank death
- *    handler.  Fired by the dead-tank sweep FUN_2a4a_23f8 (sole caller in the
- *    image, far call at file 0x232e5) for EVERY tank whose 32-bit health
- *    reaches <= 0; the sweep re-runs until no new deaths (chain kills).  Per
- *    corpse, in order:
- *      a. status-row recolor + name redraw          (2.1; port: HUD redraws per frame)
- *      b. KILL AWARD  FUN_4098_0263                 (2.1 offset 006d)
- *      c. DIE TAUNT   2144:0315                     (2.1 offset 009a)
- *      d. clear in-play flag (+0x18), erase body, vertical dirt-cut 262c:0078(x,0x10)
- *         (the dirt-cut's exact semantics are NOT decoded; not ported, flagged)
- *      e. roll rand(11) -> case 0..10; REROLL while roll==8 and the Suspend-Dirt
- *         mode flag DAT_5f38_50d8 != 0              (2.2, bytes at file 0x1dca4+)
- *      f. cases 0-5 first run the 40-tick flash + rising 1000->4000 Hz tone helper
- *         271b:03b5 on the tank's colour            (2.3)
- *      g. the case body (2.4):
- *         | 0  | flash + 100 Hz thud, NO blast
- *         | 1  | single blast  radius [0x1242] (small)
- *         | 2  | double blast  [0x1242] then [0x1276] (large)
- *         | 3  | TRIPLE escalating blast [0x1242],[0x1276],[0x12aa] (cap)
- *         | 4  | expanding ball FX, rand(6)+5 steps, blue-white DAC swatch
- *         | 5  | SPIRAL (271b:0543 disassembled 2026-07-07: cos/sin pair
- *         |    | 1000:1204/13d1 + vector-stroke draw 4dcc:00a1 + particles
- *         |    | 271b:0733 + tone ladder; NO damage calls.  FUNCTIONS.md:151's
- *         |    | "Concussion-to-all" label is REFUTED by the bytes.)
- *         | 6  | sparkle-dissolve + sky-restore callback (25a0:0081: filled
- *         |    | circle + RNG particle shower per the 2026-06-25 objdump pass)
- *         | 7  | fireworks show, 6 launches + shimmer (2d4f:0258)
- *         | 8  | SINK into the ground (352c:00c9: y+=1 loop to a random depth,
- *         |    | falling 5000->300 Hz tones)
- *         | 9  | expanding trig rings (4451:016f)
- *         | 10 | ammo cook-off: armed-weapon predicate 3a16:121f, shield-collapse
- *         |    | follow-up 4912:091b, then 271b:081b = build the tank's
- *         |    | stroke-table vertex buffer (49d4:0177) and feed it to the
- *         |    | ballistic-scatter routine 37d2:0392 at the corpse -- the wreck's
- *         |    | HULL PIECES scatter.  NO projectile spawn, NO ammo consume
- *         |    | (disassembled 2026-07-07; the "fire sub-projectile" reading is
- *         |    | REFUTED -- no case stores into the projectile array).
- *         | 11 | dead table slot (rand max is 10; never reached)
- *    The roulette REPLACES the old port model's uniform weapon-radius "grave
- *    blast": most cases carve nothing at all.
- *
- * 2. THE ASCENSION / SELF-DESTRUCT SEQUENCE -- FUN_3ef5_029a (the retreat path:
- *    caseD_1e 'r' key -> confirm dialog FUN_3ef5_0031 -> 029a; plus one
- *    AI-segment caller).  Tones (:54-59), the rising 0x60c3 figure (:60-77), the
- *    grave blast FUN_4d1e_015a(x, y, DAT_5f38_120e, 1) (:96), live-count
- *    decrement (:97), and the dead-tank sweep (:98) -- so collateral kills of
- *    the ascension blast get roulette throes.  The ascending tank itself gets
- *    NO award and NO throe.
- *
- * FRAME-DRIVEN MODEL: the binary BLOCKS inside these routines; the port's
- * analogue is state.death_queue, a FIFO of staged entries played ONE at a time
- * by step_queue (called from game._animate_effects each effect tick).  Stage
- * waits observe the port's emitter lists; a live projectile (the killing shot
- * still in flight when a settle-path kill enqueued) blocks the queue, like the
- * binary's nested execution.  The FIRING/SETTLE/SYNC/SIM phase machines hold
- * while the queue is non-empty, and round-end decisions run only after it
- * drains, so every queued blast lands before a winner is declared.
- *
- * RNG stream: the roll happens when the corpse is PROCESSED (sweep order), the
- * binary's order.  Chain kills enqueue behind the current tail.
- *
- * ============================================================================
- * NUMERIC NOTES (load-bearing for the differential gate, test/death.test.ts):
- *
- *  - This module itself has NO transcendental math (no sin/cos/pow/sqrt/atan2).
- *    Every quantity it computes is an integer: Python `int(x)` truncates
- *    TOWARD ZERO -> Math.trunc(x) (the radius casts in _blast_radius /
- *    _scaled), and the roll / depth / ladder values are integer arithmetic
- *    over the shared MT19937 stream (already a green gate).  So every value
- *    this module produces is asserted EXACT.
- *
- *  - The ONE transcendental dependency is inside damage.explode (cases 1-3 +
- *    the ascension blast): the radial law round((R - d)*100/R) measures
- *    INTEGER pixel coordinates, so Math.sqrt of the exact-integer squared sum
- *    reproduces CPython math.hypot BIT-FOR-BIT (the damage.ts NUMERIC NOTES
- *    result, a green gate).
- * ============================================================================
- *
- * Provenance comments (FUN_<seg>_<off> / DAT_ refs) cite the notes file's
- * decoded bytes; geometry of the undecompiled FX segments (2dce/25a0/2d4f/4451)
- * is RECONSTRUCTED to the decoded entries + FUNCTIONS.md labels and flagged.
- * Comments are preserved from the Python source so the disassembly lineage
- * survives the language port.
+ * Cases: 0 thud; 1–3 escalating blasts; 4 Funky Bomb; 5 four-way sparks
+ * with twenty-point nearby damage; 6 Dirt Charge; 7 tall flame plumes;
+ * 8 sinking/vertical dissolve (excluded in Cavern); 9 overlapping gray
+ * bubbles; 10 hull-pixel dissolve. Retreat uses 3ef5:029a instead.
+ * Each entry retains its shooter so collateral deaths in shared volleys
+ * keep their kill credit. See oracle/COMBAT_FIDELITY.md for evidence/limits.
  */
 import * as damage from "./damage";
 import { eff_radius } from "./weapon_behaviors";
@@ -129,6 +49,8 @@ export interface DeathEntry {
   sub?: number; // throe blast-ladder index (cases 1-3)
   radius?: number; // ascension grave-blast radius
   spawned?: boolean;
+  shooter?: damage.Tank | null;
+  weapon?: Item | null;
 }
 
 /** A step_queue signal: [signal, payload] (the Python tuple). */
@@ -153,6 +75,8 @@ export type DeathSignal = [string, unknown];
  *     defensively at runtime like the Python's getattr, because dump-driven
  *     stubs may omit them.) */
 export interface DState extends damage.State {
+  combat_blast?: (x: number, y: number, radius: number) => void;
+  combat_throe?: (kind: string, x: number, y: number, tank?: DTank) => void;
   tanks: DTank[];
   w: number;
   h: number;
@@ -191,12 +115,8 @@ export const THROE_FRONT_TICKS = 40;
 export const THROE_DELAY_TICKS = 20;
 
 // The escalation radii DAT_5f38_1242 < _1276 < _12aa ("small / large / cap").
-// All three are BSS runtime globals, 00 00 in the static image, initialised
-// behind the video-mode descriptor indirection Ghidra dropped (catalog
-// 09:59,63,499) -- literal values are UNRECOVERABLE from the bytes.
-// RECONSTRUCTED to the port's weapon radius classes (missile 20 / baby nuke 40 /
-// nuke 75, weapons catalog), scaled by explosion_scale at use, preserving the
-// byte-proven strict ordering.
+// These are effective-radius fields in the weapon table, initialized at
+// 33a1:1061 from Missile 20, Baby Nuke 40 and Nuke 75. They are recoverable.
 export const RADIUS_SMALL = 20; // DAT_5f38_1242 analogue
 export const RADIUS_LARGE = 40; // DAT_5f38_1276 analogue
 export const RADIUS_CAP = 75; // DAT_5f38_12aa analogue
@@ -306,7 +226,8 @@ export function _debris_fountain(state: DState, tank: DTank, scatter = false): v
  * center with param_4=1 (carve + radial damage + settle).
  */
 export function _ascension_blast(state: DState, tank: DTank, radius: number): void {
-  damage.explode(state, tank.x, tank.y, radius, true);
+  if (state.combat_blast) state.combat_blast(tank.x, tank.y, radius);
+  else damage.explode(state, tank.x, tank.y, radius, true);
 }
 
 // --------------------------------------------------------------------------- //
@@ -341,7 +262,7 @@ export function death_sequence(
     _case_body_immediate(state, tank, roll);
     return roll;
   }
-  q.push({ kind: "throe", tank, stage: "start", roll: null, tick: 0, sub: 0 });
+  q.push({ kind: "throe", tank, stage: "start", roll: null, tick: 0, sub: 0, shooter: state.current_shooter, weapon: _weapon });
   return null;
 }
 
@@ -363,15 +284,9 @@ export function retreat_sequence(state: DState, tank: DTank, weapon: Item | null
   q.push({ kind: "ascension", tank, stage: "climb", radius, tick: 0, spawned: false });
 }
 
-/**
- * rand(11) -> 0..10, rerolling 8 (sink) while Suspend-Dirt is active
- * (FUN_271b_0005 offsets 00f4..010a; DAT_5f38_50d8 == the Suspend-Dirt mode
- * flag per catalog 11:387 -- the port's cfg.SUSPEND_DIRT nonzero is its
- * configured analogue).
- */
+/** 271b:00f4: the sink effect is excluded in Cavern (DS:50d8). */
 export function _roll_throe(state: DState): number {
-  const cfg = (state as { cfg?: { SUSPEND_DIRT?: number } }).cfg;
-  const suspend = cfg !== undefined && Boolean(cfg.SUSPEND_DIRT ?? 0);
+  const suspend = (state as DState & { live_sky?: string }).live_sky === "CAVERN";
   let roll = state.rng.pick(11);
   while (suspend && roll === 8) {
     roll = state.rng.pick(11);
@@ -412,14 +327,15 @@ export function step_queue(state: DState): DeathSignal[] {
       break; // a flight owns the screen first
     }
     const e = q[0];
-    if (e.kind === "ascension") {
-      if (!_step_ascension(state, e, signals)) {
-        break;
-      }
-    } else {
-      if (!_step_throe(state, e, signals)) {
-        break;
-      }
+    const previousShooter = state.current_shooter, previousWeapon = state.current_weapon;
+    try {
+      if (e.shooter !== undefined) state.current_shooter = e.shooter;
+      if (e.weapon !== undefined) state.current_weapon = e.weapon;
+      if (e.kind === "ascension") {
+        if (!_step_ascension(state, e, signals)) break;
+      } else if (!_step_throe(state, e, signals)) break;
+    } finally {
+      state.current_shooter = previousShooter; state.current_weapon = previousWeapon;
     }
     if (q.length > 0 && q[0] === e && e.stage === "done") {
       q.shift();
@@ -507,7 +423,8 @@ export function _case_body_staged(state: DState, e: DeathEntry, signals: DeathSi
       return false;
     }
     const r = _scaled(state, ladder[e.sub as number]);
-    damage.explode(state, t.x, t.y, r, true);
+    if (state.combat_blast) state.combat_blast(t.x, t.y, r);
+    else damage.explode(state, t.x, t.y, r, true);
     signals.push(["blast", r]);
     e.sub = (e.sub as number) + 1;
     if ((e.sub as number) >= ladder.length) {
@@ -518,12 +435,14 @@ export function _case_body_staged(state: DState, e: DeathEntry, signals: DeathSi
     return false;
   }
   if (roll === 4) {
-    // expanding blue-white ball, rand(6)+5 steps (case 4; 2dce UNDECOMPILED,
-    // visual-only reconstruction -- no crater, no damage)
+    // 2dce:0000: the actual Funky Bomb handler.
     if (!e.spawned) {
       e.spawned = true;
-      const steps = state.rng.pick(6) + 5;
-      state.add_throe("ball", t.x, t.y, t.color ?? 15, steps * BALL_STEP_FRAMES);
+      if (state.combat_throe) state.combat_throe("funky", t.x, t.y);
+      else {
+        const steps = state.rng.pick(6) + 5;
+        state.add_throe("ball", t.x, t.y, t.color ?? 15, steps * BALL_STEP_FRAMES);
+      }
       return false;
     }
     if (state.throe_fx !== undefined && state.throe_fx.length > 0) {
@@ -533,11 +452,11 @@ export function _case_body_staged(state: DState, e: DeathEntry, signals: DeathSi
     return true;
   }
   if (roll === 5) {
-    // SPIRAL (271b:0543, disassembled: cos/sin + stroke draws + particles +
-    // tones, zero damage calls).  Visual only.
+    // 271b:0543: reflected spark rays; twenty-point damage at 06e1.
     if (!e.spawned) {
       e.spawned = true;
-      state.add_throe("spiral", t.x, t.y, t.color ?? 15);
+      if (state.combat_throe) state.combat_throe("spiral", t.x, t.y);
+      else state.add_throe("spiral", t.x, t.y, t.color ?? 15);
       return false;
     }
     if (state.throe_fx !== undefined && state.throe_fx.length > 0) {
@@ -547,11 +466,11 @@ export function _case_body_staged(state: DState, e: DeathEntry, signals: DeathSi
     return true;
   }
   if (roll === 6) {
-    // sparkle-dissolve + sky restore (25a0:0081: RNG particle shower; the
-    // port's per-frame recomposite IS the sky restore).  Visual only.
+    // 25a0:0081: Dirt Charge, including its terrain deposition.
     if (!e.spawned) {
       e.spawned = true;
-      state.add_throe("sparkle", t.x, t.y, t.color ?? 15);
+      if (state.combat_throe) state.combat_throe("spray", t.x, t.y);
+      else state.add_throe("sparkle", t.x, t.y, t.color ?? 15);
       return false;
     }
     if (state.throe_fx !== undefined && state.throe_fx.length > 0) {
@@ -561,11 +480,11 @@ export function _case_body_staged(state: DState, e: DeathEntry, signals: DeathSi
     return true;
   }
   if (roll === 7) {
-    // fireworks show, 6 launches + shimmer (2d4f:0258; label per
-    // FUNCTIONS.md).  Visual-only reconstruction.
+    // 2d4f:0258: six tall flame plumes.
     if (!e.spawned) {
       e.spawned = true;
-      state.add_throe("fireworks", t.x, t.y, t.color ?? 15);
+      if (state.combat_throe) state.combat_throe("flames", t.x, t.y);
+      else state.add_throe("fireworks", t.x, t.y, t.color ?? 15);
       return false;
     }
     if (state.throe_fx !== undefined && state.throe_fx.length > 0) {
@@ -581,6 +500,11 @@ export function _case_body_staged(state: DState, e: DeathEntry, signals: DeathSi
     // visual -- the port does not draw dead tank sprites).
     if (!e.spawned) {
       e.spawned = true;
+      if (state.combat_throe) {
+        state.combat_throe("sink", t.x, t.y, t);
+        e.stage = "done";
+        return true;
+      }
       e.tick = SINK_DEPTH_MIN + state.rng.pick(SINK_DEPTH_RAND);
       state.add_throe("sink", t.x, t.y, t.color ?? 15);
       signals.push(["sink", null]);
@@ -598,10 +522,11 @@ export function _case_body_staged(state: DState, e: DeathEntry, signals: DeathSi
     return true;
   }
   if (roll === 9) {
-    // expanding trig rings (4451:016f).  The port's ring starburst visual.
+    // 4451:016f: overlapping gray bubbles, followed by terrain cleanup.
     if (!e.spawned) {
       e.spawned = true;
-      state.add_throe("ring", t.x, t.y, t.color ?? 15);
+      if (state.combat_throe) state.combat_throe("ring", t.x, t.y);
+      else state.add_throe("ring", t.x, t.y, t.color ?? 15);
       return false;
     }
     if (state.throe_fx !== undefined && state.throe_fx.length > 0) {
@@ -619,7 +544,8 @@ export function _case_body_staged(state: DState, e: DeathEntry, signals: DeathSi
     if (!e.spawned) {
       e.spawned = true;
       if (typeof t.has_ammo === "function" && t.has_ammo(t.selected_weapon ?? 0)) {
-        state.add_throe("debris", t.x, t.y, t.color ?? 15);
+        if (state.combat_throe) state.combat_throe("debris", t.x, t.y, t);
+        else state.add_throe("debris", t.x, t.y, t.color ?? 15);
         signals.push(["cookoff", null]);
       } else {
         e.stage = "done";

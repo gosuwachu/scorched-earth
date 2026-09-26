@@ -128,14 +128,8 @@ export interface State {
   on_tank_destroyed(victim: Tank, weapon: unknown): void;
 }
 
-// Direct-hit shield "chip": there is NO separate chip constant in v1.5.  When a
-// shell is intercepted by a shield on the no-detonate path, the shield absorbs the
-// projectile's OWN damage via tank+0x96 -= D (FUN_4191_0034.c:16-17; the absorb
-// gate `if (param_2 < HP) HP -= param_2`).  RECOVERED_SHIELDS.md T3c: "the chip ==
-// the projectile's damage, absorbed."  At a point-blank intercept the impact
-// distance d -> 0, so the linear law round((R-d)*100/R) (FALLOFF_NUM=100) yields the
-// weapon's full damage regardless of radius.  The prior flat 15 was fabricated.
-export const SHIELD_CHIP_FULL = C.FALLOFF_NUM; // FACT: point-blank projectile damage = 100 (d=0)
+// 4d1e:0021 and 3382:0006: shield interception chips ten, with no hull overflow.
+export const SHIELD_CHIP_FULL = 10;
 
 /**
  * Blast-distance reference for a tank: the tank's stored integer coordinate

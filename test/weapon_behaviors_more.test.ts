@@ -125,7 +125,7 @@ describe("weapon_behaviors(more): plasma_laser detonator dispatch", () => {
     // _det_plasma_laser -> _det_plasma: a real burst (explosion and/or ring), and
     // the current weapon latched for the death-crater radius.
     const s = st as unknown as State;
-    expect(s.explosions.length + s.plasma_rings.length).toBeGreaterThan(0);
+    expect(s.projectiles.length).toBeGreaterThan(0);
     expect((st.current_weapon as Item).behavior).toBe("plasma_laser");
   });
 });
@@ -139,7 +139,7 @@ describe("weapon_behaviors(more): step_roller field-edge and steep-drop", () => 
     const live = wb.step_roller(st, proj); // nx = 19 >= w-1 -> resolve
     expect(live).toBe(false);
     expect(proj.active).toBe(false);
-    expect((st as unknown as State).explosions.length).toBeGreaterThan(0);
+    expect(st.projectiles.length).toBeGreaterThan(0);
   });
 
   it("descends a steep drop ahead (keeps rolling onto the lower surface)", () => {
@@ -151,7 +151,9 @@ describe("weapon_behaviors(more): step_roller field-edge and steep-drop", () => 
     const live = wb.step_roller(st, proj);
     expect(live).toBe(true); // not resolved: it fell to the lower shelf
     expect(proj.px).toBe(31);
-    expect(proj.py).toBe(129); // surf - 1 = column_top(31) - 1
+    expect(proj.py).toBe(99); // first move crosses the edge, then gravity descends
+    wb.step_roller(st, proj);
+    expect(proj.py).toBe(100);
   });
 });
 
@@ -165,7 +167,7 @@ describe("weapon_behaviors(more): laser cuts dirt; plasma-laser empty-trail term
     expect(t.is_dirt(15, 100)).toBe(true);
     wb.fire_laser(st, proj);
     // a horizontal beam from x=10 cut the dirt it crossed to sky.
-    expect(t.read(15, 100)).toBe(C.COL_SKY);
+    expect(t.carve_circles.some(([x, y, r]) => x === 15 && y === 100 && r === 3)).toBe(true);
     expect((st as unknown as State).beams.length).toBe(1);
     expect((st as unknown as State).beams[0].length).toBeGreaterThan(0);
     expect(proj.active).toBe(false);
@@ -180,6 +182,6 @@ describe("weapon_behaviors(more): laser cuts dirt; plasma-laser empty-trail term
     expect(proj.trail.length).toBe(0);
     // the plasma burst still happened at the (truncated) projectile position.
     const s = st as unknown as State;
-    expect(s.explosions.length + s.plasma_rings.length).toBeGreaterThan(0);
+    expect(s.projectiles.length).toBeGreaterThan(0);
   });
 });

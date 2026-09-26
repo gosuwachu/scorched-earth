@@ -609,6 +609,45 @@ export class Terrain {
   }
 
   // ---- dirt settle / collapse (catalog 11 section 2.5) ----
+  private fallingSoil: Array<{ x: number; from: number; to: number; color: number; y: number }> | null = null;
+  private soilTravel = 0;
+
+  /** Snapshot stable destinations once; retain shade order and solid supports.
+   * Displaying the descent separately keeps gravity independent of rendering. */
+  begin_settle(cfg: TerrainCfg, rng: TerrainRng, force = false, cavern = false): void {
+    this.fallingSoil = [];
+    this.soilTravel = 0;
+    const chance = 100 - cfg.SUSPEND_DIRT;
+    if (!force && (chance <= 0 || (chance < 100 && !rng.chance(chance, 100)))) return;
+    for (let x = 0; x < this.w; x++) {
+      let ceiling = 0;
+      if (cavern) while (ceiling < this.h && this.is_dirt(x, ceiling)) ceiling++;
+      let landing = this.h - 1;
+      for (let y = this.h - 1; y >= ceiling; y--) {
+        const color = this.grid[x * this.h + y];
+        if (C.is_dirt(color)) {
+          if (landing !== y) this.fallingSoil.push({ x, from: y, to: landing, y, color });
+          landing--;
+        } else if (C.is_solid(color)) landing = y - 1;
+      }
+    }
+  }
+
+  /** Returns true after the last falling layer has landed. */
+  step_settle(): boolean {
+    if (!this.fallingSoil?.length) { this.fallingSoil = null; return true; }
+    this.soilTravel += Math.min(8, 1 + Math.floor(this.soilTravel / 8));
+    for (const p of this.fallingSoil) this.grid[p.x * this.h + p.y] = C.COL_SKY;
+    let moving = false;
+    for (const p of this.fallingSoil) {
+      p.y = Math.min(p.to, p.from + this.soilTravel);
+      this.grid[p.x * this.h + p.y] = p.color;
+      moving ||= p.y !== p.to;
+    }
+    if (!moving) this.fallingSoil = null;
+    return !moving;
+  }
+
   settle(cfg: TerrainCfg, rng: TerrainRng, x_lo = 0, x_hi: number | null = null): void {
     /* Per-column gravity: unsupported dirt falls. Gated by SUSPEND_DIRT
        (DAT_5f38_5158 = 100 - SUSPEND_DIRT; settle prob = 5158/100). */

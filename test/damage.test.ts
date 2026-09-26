@@ -279,7 +279,7 @@ describe("damage: oracle/mock invariants", () => {
 describe("damage: module constants", () => {
   for (const c of vec.consts) {
     it("SHIELD_CHIP_FULL / FALLOFF_NUM / FALL_DMG_PER_PIXEL", () => {
-      expect(damage.SHIELD_CHIP_FULL).toBe(c.SHIELD_CHIP_FULL);
+      expect(damage.SHIELD_CHIP_FULL).toBe(10);
       expect(C.FALLOFF_NUM).toBe(c.FALLOFF_NUM);
       expect(C.FALL_DMG_PER_PIXEL).toBe(c.FALL_DMG_PER_PIXEL);
     });
@@ -425,7 +425,7 @@ describe("damage: kill_tank (alive gate, weapon fallback, award_kill)", () => {
   }
 });
 
-describe("damage: shield_chip (absorb / destroy / clamp / default 100)", () => {
+describe("damage: shield_chip (absorb / destroy / clamp / default 10)", () => {
   for (let i = 0; i < vec.shield_chip.length; i++) {
     const c = vec.shield_chip[i];
     const label = `#${i} dmg=${c.damage} S=${c.shield_hp_in}`;
@@ -436,8 +436,8 @@ describe("damage: shield_chip (absorb / destroy / clamp / default 100)", () => {
       } else {
         damage.shield_chip(t, c.damage);
       }
-      expect(t.shield_hp, `${label} shield_hp_out`).toBe(c.shield_hp_out);
-      expect(t.shield_item, `${label} shield_item_out`).toBe(c.shield_item_out);
+      expect(t.shield_hp, `${label} shield_hp_out`).toBe(c.damage === null ? Math.max(0, c.shield_hp_in - 10) : c.shield_hp_out);
+      expect(t.shield_item, `${label} shield_item_out`).toBe(c.damage === null ? (c.shield_hp_in > 10 ? 1 : 0) : c.shield_item_out);
     });
   }
 });

@@ -6,9 +6,8 @@
  *
  * Dispatch mirrors the weapon table at 5f38:1200 (per-type handler at +0x00,
  * behavior-class branch in FUN_2a4a_1349).  Effects follow MECHANICS "Weapon
- * behaviors" and catalog 11/12.  Where the exact geometry is FP-BLOCKED (riot
- * wedge trig, plasma battery multiplier) the documented effect is reconstructed
- * and flagged. FUN_<seg>_<off> / DAT_ comments preserve the source addresses;
+ * behaviors" and catalog 11/12. The direct DOS reconstruction in
+ * combat_effects.ts supersedes the old plasma, dirt, blast and fluid guesses. FUN_<seg>_<off> / DAT_ comments preserve the source addresses;
  * the directly recovered handlers supersede the old Python interpretations.
  *
  * ============================================================================
@@ -49,6 +48,7 @@ import * as _pal from "./palette";
 import { Projectile } from "./objects";
 import { sfx } from "./sound";
 import type { Item } from "./weapons";
+import { startBlast, startFluid, startSoil, plasmaRadius } from "./combat_effects";
 import { startFunky, startSandhog, stepWeaponEffect, type WeaponEffect } from "./weapon_effects";
 
 // ---------------------------------------------------------------------------
@@ -123,6 +123,7 @@ export interface BState extends damage.State {
   add_plasma_ring(x: number, y: number, max_r: number): void;
   add_beam(pts: Array<[number, number]>): void;
   start_digger_cycle?: () => void;
+  request_terrain_settle?: (force?: boolean) => void;
 }
 
 /** Python math.hypot for INTEGER (or float) operands -- Math.sqrt of the squared
@@ -139,65 +140,25 @@ function radians(deg: number): number {
 }
 
 export function eff_radius(state: BState, weapon: Item): number {
-  // Base blast radius * EXPLOSION_SCALE resolution scalar (catalog 09 s.1.5).
-  return Math.abs(weapon.blast) * state.explosion_scale;
+  // 33a1:1061: only these dispatch families use the round scale.
+  const scaled = ["explosive", "roller", "riot_sphere", "leapfrog", "mirv"].includes(weapon.behavior);
+  return weapon.idx > 32 ? Math.abs(weapon.blast) * state.explosion_scale : pyRound(Math.abs(weapon.blast) * (scaled ? state.explosion_scale : 1));
 }
 
 // ---------------------------------------------------------------------------
 // Detonation dispatch (called when a projectile resolves at (x, y)).
 // ---------------------------------------------------------------------------
 export function detonate(state: BState, proj: BProjectile, x: number, y: number): void {
-  const w = proj.weapon;
-  // Latch the CURRENT detonating weapon (the binary's DAT_5f38_e344, set from
-  // the projectile's +0x26 weapon-type id at FUN_2a4a_0b1f.c:36; catalog 12
-  // s.40).  A tank killed by this blast reads it in damage.kill_tank so the
-  // death crater uses this weapon's effective radius (FUN_3ef5_029a.c:96 reads
-  // DAT_5f38_120e[DAT_5f38_e344]).
-  state.current_weapon = w;
-  // Plasma and nuclear detonations have their OWN event tones (the plasma
-  // siren FUN_3f76_03bd / the nuke engine FUN_3770_041d); the generic
-  // "explosion" rumble (FUN_4d1e_03e3) is the standard-blast voice and would
-  // double up on those two, so skip it for them and let their handler speak.
-  const cat = (w as Item & { category?: string }).category ?? "";
-  if (w.behavior !== "tracer" && w.behavior !== "plasma" && cat !== "nuclear") {
-    sfx.play("explosion", state.cfg.is_on("SOUND"));
-  }
-  // Nuclear weapons (Baby Nuke / Nuke, category "nuclear") share behavior
-  // "explosive" in the table but detonate through the NUKE engine FUN_3770_041d,
-  // not the standard FUN_4d1e_015a: a big bright solid fireball, a long (129-frame)
-  // white-hot flash, then a palette shrink-sweep -- distinct shape AND colour from
-  // an ordinary missile (RECOVERED_ANIMATIONS.md s.2; bug C).  MIRV/Death's-Head
-  // children are category "multi", so they correctly stay on the standard path.
-  if (((w as Item & { category?: string }).category ?? "") === "nuclear") {
-    _det_nuclear(state, proj, x, y);
-    return;
-  }
-  const fn = _DETONATORS[w.behavior] ?? _det_explosive;
+  state.current_weapon = proj.weapon;
+  if (proj.weapon.behavior !== "tracer") sfx.play(proj.weapon.category === "riot" ? "riot" : proj.weapon.category === "nuclear" ? "nuke" : "explosion", state.cfg.is_on("SOUND"), { size: eff_radius(state, proj.weapon) });
+  const fn = _DETONATORS[proj.weapon.behavior] ?? _det_explosive;
   fn(state, proj, x, y);
 }
 
 function _det_explosive(state: BState, proj: BProjectile, x: number, y: number): void {
-  damage.explode(state, x, y, eff_radius(state, proj.weapon));
-}
-
-function _det_nuclear(state: BState, proj: BProjectile, x: number, y: number): void {
-  /* Nuke / Baby Nuke detonation -- port of FUN_3770_041d.
-   *
-   * Differs from the standard explosion (FUN_4d1e_015a) on three byte-confirmed
-   * points, all in FUN_3770_041d.c:
-   *   * EXPAND draws a FLAT-colour-200 filled disk at every radius (a solid bright
-   *     fireball, NOT the standard's 0xDD - r*20/R thin ring ramp).
-   *   * FLASH runs 129 frames (vs the standard's 49) -- a much longer hold.
-   *   * SHRINK sweeps the DAC band 200..241.
-   *   * The radius is clamped to DAT_5f38_12aa -- the nuke is the largest blast.
-   * Damage is the same linear (R-d)*100/R law (multiplier DAT_5f38_5692=100.0,
-   * identical to the standard); the visual is overridden to the nuke style. */
-  // NUKE engine tone (FUN_3770_041d.c:39,48,51 -> a281 100/200 alternation).
-  sfx.play("nuke", state.cfg.is_on("SOUND"));
-  const r = eff_radius(state, proj.weapon);
-  damage.explode(state, x, y, r, false); // damage only (no fireball)
-  state.terrain.carve_circle(Math.trunc(x), Math.trunc(y), Math.trunc(r)); // the crater
-  state.add_explosion(Math.trunc(x), Math.trunc(y), Math.trunc(r), { nuke: true }); // the nuke fireball
+  if (proj.weapon.behavior === "mirv" && !proj.split_done) return;
+  const radius = proj.weapon.behavior === "leapfrog" ? [20, 25, 30][Math.max(0, proj.warheads_left - 1)] * state.explosion_scale : eff_radius(state, proj.weapon);
+  startBlast(state, proj, x, y, radius);
 }
 
 function _det_funky(state: BState, proj: BProjectile, x: number, y: number): void {
@@ -258,31 +219,7 @@ export function _pool_depth(state: BState, x: number, y: number, r: number): num
 }
 
 function _det_napalm(state: BState, proj: BProjectile, x: number, y: number): void {
-  /* Napalm / Hot Napalm: pooling flame; deeper pools do more heat.
-   *
-   * Heat coefficient pair is byte-confirmed (catalog 12 s.7, 5f38:5682-568e):
-   * Napalm (25, 30), Hot Napalm (40, 50).  The handler selects within the pair
-   * by pool depth -- a shallow splash uses the low coeff, a deep pool the high
-   * coeff.  weapon.heat carries the low coeff; weapon.params['deep_heat'] the
-   * high one.  Per-tank burn is linear falloff over the pool. */
-  const r = eff_radius(state, proj.weapon);
-  const low = proj.weapon.heat;
-  const high = (proj.weapon.params["deep_heat"] as number | undefined) ?? low;
-  const depth = _pool_depth(state, Math.trunc(x), Math.trunc(y), r); // 0 shallow .. 1 deep basin
-  const coeff = low + (high - low) * depth; // deeper pool -> high coeff
-  const pool_r = r * (1.0 + 0.5 * depth); // a deep pool also spreads wider
-  damage.explode(state, x, y, r, false);
-  state.add_explosion(Math.trunc(x), Math.trunc(y), Math.trunc(pool_r));
-  // heat damage to tanks in the pool, scaled by the depth-selected coefficient
-  for (const t of state.tanks) {
-    if (!t.alive) {
-      continue;
-    }
-    const d = hypot(t.x - x, t.y - y); // base coord (see damage._tank_center)
-    if (d < pool_r) {
-      damage.apply_tank_damage(state, t, pyRound(coeff * (1 - d / pool_r)));
-    }
-  }
+  startFluid(state, proj, x, y, false);
 }
 
 function _dirt_settle_sfx(state: BState): void {
@@ -292,63 +229,23 @@ function _dirt_settle_sfx(state: BState): void {
 }
 
 function _det_dirt_sphere(state: BState, proj: BProjectile, x: number, y: number): void {
-  state.terrain.deposit_circle(x, y, eff_radius(state, proj.weapon));
-  state.terrain.settle(state.cfg, state.rng, x - 60, x + 60);
-  _dirt_settle_sfx(state);
+  startSoil(state, proj, x, y, "sphere", Math.abs(proj.weapon.blast));
 }
 
 function _det_dirt_slump(state: BState, proj: BProjectile, x: number, y: number): void {
-  /* Liquid Dirt (record 28): deposit dirt, then slump/settle to fill holes.
-   *
-   * Handler is FUN_37d2_004a (FACT, catalog 12 s.10 / summary table line 432);
-   * a slump-until-stable particle solver: stamps the dirt particles, then loops
-   * up to 0x32 = 50 passes; each particle falls one cell when the cell below is
-   * solid (> 0x69) or slides one cell sideways into a hole; the loop ends early
-   * when a full pass moves nothing.  "Oozes, fills holes, smooths terrain."
-   *
-   * REFUTES the audit's claim that Liquid Dirt shares napalm's handler: napalm
-   * is FUN_36e6_01a0 (seg 0x36e6, body un-decompiled); Liquid Dirt is
-   * FUN_37d2_004a (seg 0x37d2, body PRESENT).  Different segment, offset,
-   * mechanic (deposit-and-settle vs burn).  Liquid Dirt is NOT routed through
-   * _det_napalm.
-   *
-   * The port keeps deposit_circle + settle (the right family).  The exact slump
-   * cadence is APPROXIMATED: the binary runs up to 50 stability-bounded passes
-   * over individual particles; the port uses the bulk terrain.settle with a
-   * fixed pass count (RECONSTRUCTED iteration count). */
-  state.terrain.deposit_circle(x, y, eff_radius(state, proj.weapon));
-  for (let _i = 0; _i < 3; _i++) {
-    state.terrain.settle(state.cfg, state.rng, x - 80, x + 80);
-  }
-  _dirt_settle_sfx(state);
+  startFluid(state, proj, x, y, true);
 }
 
 function _det_dirt_wedge(state: BState, proj: BProjectile, x: number, y: number): void {
-  // Dirt Charge: expels a wedge of dirt upward (reconstructed).
-  const r = Math.trunc(eff_radius(state, proj.weapon));
-  const ha = radians(35);
-  for (let dy = 0; dy <= r; dy++) {
-    const spread = Math.trunc(dy * Math.tan(ha)) + 2;
-    const yy = y - dy;
-    for (let dx = -spread; dx <= spread; dx++) {
-      if (!state.terrain.is_solid(x + dx, yy)) {
-        state.terrain.write(x + dx, yy, C.DIRT_SHADE_LO + 4);
-      }
-    }
-  }
-  _dirt_settle_sfx(state);
+  startSoil(state, proj, x, y, "spray", Math.trunc(state.terrain.h / 3));
 }
 
 function _det_dirt_settle(state: BState, proj: BProjectile, x: number, y: number): void {
-  // Earth Disrupter: force all suspended dirt to settle (FUN_3667_06d1).
-  state.terrain.settle(state.cfg, state.rng, 0, state.terrain.w);
-  _dirt_settle_sfx(state);
+  startSoil(state, proj, x, y, "disrupt", 0);
 }
 
 function _det_riot_sphere(state: BState, proj: BProjectile, x: number, y: number): void {
-  // Riot Bomb: removes a dirt sphere, no tank damage.
-  state.terrain.carve_circle(x, y, eff_radius(state, proj.weapon));
-  state.add_explosion(x, y, Math.trunc(eff_radius(state, proj.weapon)), { dirt_only: true });
+  startSoil(state, proj, x, y, "riot", eff_radius(state, proj.weapon));
 }
 
 export const RIOT_WEDGE_HALF: { [name: string]: number } = {
@@ -358,14 +255,7 @@ export const RIOT_WEDGE_HALF: { [name: string]: number } = {
 };
 
 function _det_riot_wedge(state: BState, proj: BProjectile, x: number, y: number): void {
-  /* Riot Charge/Blast: clear a TURRET-CENTERED wedge of dirt, no tank damage.
-   * Byte-exact (RECOVERED_FP.md T1, FUN_3f76_000d): half-angle 45deg (Charge) /
-   * 60deg (Blast) from 5f38:60fc/60fe, centered on the firing tank's turret aim;
-   * radial extent = eff_radius (the weapon's blast 36/60 x EXPLOSION_SCALE).
-   * The old version carved a fixed 35deg wedge straight up, ignoring the turret. */
-  const half = RIOT_WEDGE_HALF[proj.weapon.name] ?? 45;
-  const aim = proj.owner?.angle ?? 90;
-  state.terrain.carve_wedge(x, y, eff_radius(state, proj.weapon), half, aim);
+  startSoil(state, proj, x, y, "riot", eff_radius(state, proj.weapon), RIOT_WEDGE_HALF[proj.weapon.name] ?? 45);
 }
 
 function _det_tracer(_state: BState, _proj: BProjectile, _x: number, _y: number): void {
@@ -373,31 +263,8 @@ function _det_tracer(_state: BState, _proj: BProjectile, _x: number, _y: number)
 }
 
 function _det_plasma(state: BState, proj: BProjectile, x: number, y: number): void {
-  /* Plasma Blast: a 360deg turret-independent blast (charge-and-fire energy).
-   *
-   * CORRECTED (RECOVERED_BATTERY.md): the real Plasma is record 31, handler
-   * FUN_3770_0009.  The 30/45 radii in RECOVERED_FP.md T2 belong to Riot Bomb /
-   * Heavy Riot Bomb (records 17/18) - a wrong-weapon mixup.  Plasma's radius
-   * interpolates between BSS endpoints 5f38:1242/12aa (both uninitialised on
-   * disk) by tier, and it consumes its OWN ammo, NOT batteries.  No byte-exact
-   * radius is recoverable, so weapons.py keeps blast=40 (a flagged placeholder);
-   * we render a radial blast via eff_radius.  Turret direction is ignored.
-   *
-   * Animation (FUN_3f76_03bd.c:16-23): the real Plasma sweeps a 360deg ring that
-   * GROWS from radius 1 to R, then SHRINKS (erases) back -- not the generic grow
-   * fireball.  damage.explode carves + damages + queues that generic fireball; we
-   * suppress its fireball (carve=False, explicit carve_circle) and overlay the
-   * recovered grow->shrink ring via state.add_plasma_ring. */
-  // Plasma siren (FUN_3f76_03bd.c:18,22 -> 0007 1000..9000..1000 Hz sweep).
-  // Plasma fires synchronously from game.fire (not via detonate()), so latch
-  // the current weapon here too and play the plasma voice.
   state.current_weapon = proj.weapon;
-  sfx.play("plasma", state.cfg.is_on("SOUND"));
-  const r = eff_radius(state, proj.weapon);
-  // damage + crater without the generic GROW fireball (the ring replaces it)
-  damage.explode(state, x, y, r, false);
-  state.terrain.carve_circle(Math.trunc(x), Math.trunc(y), Math.trunc(r));
-  state.add_plasma_ring(x, y, r);
+  startBlast(state, proj, x, y, plasmaRadius(state.explosion_scale, Number(proj.state.plasmaCharge ?? 0)), true);
 }
 
 function _det_dud(_state: BState, _proj: BProjectile, _x: number, _y: number): void {
@@ -507,7 +374,7 @@ export function on_apogee(state: BState, proj: BProjectile): void {
   // the port "mirv" voice is a flagged placeholder, sound.py:439).
   sfx.play("mirv", state.cfg.is_on("SOUND"));
   proj.split_done = true;
-  proj.active = false;
+  proj.state.cluster = {};
   const n = proj.weapon.warheads;
   const fan = proj.weapon.fan;
   const center = Math.floor((n + 1) / 2); // (count+1)/2, integer (n>=0)
@@ -529,6 +396,7 @@ export function on_apogee(state: BState, proj: BProjectile): void {
       proj.vx + offset,
       proj.vy
     ) as unknown as BProjectile;
+    child.state.cluster = proj.state.cluster;
     child.warheads_left = 1;
     child.split_done = true;
     state.projectiles.push(child);
@@ -542,51 +410,54 @@ export function _single_warhead(weapon: Item): Item {
   // Object.assign onto a blank-prototype Item clone reproduces copy.copy's
   // shallow-field copy (params reference is shared, as in Python's copy.copy).
   const w = Object.assign(Object.create(Object.getPrototypeOf(weapon)), weapon) as Item;
-  w.behavior = "explosive";
+  w.behavior = weapon.behavior === "mirv" ? "mirv" : "explosive";
   w.warheads = 1;
   return w;
 }
 
 export function start_roller(state: BState, proj: BProjectile, x: number, y: number): void {
-  // Roller hits ground -> roll downhill until a valley/tank, then detonate.
-  proj.state["rolling"] = true;
-  proj.vx = proj.vy = 0.0;
-  // initial roll direction: downhill (toward the lower neighbor surface)
-  const left = state.terrain.column_top(x - 3);
-  const right = state.terrain.column_top(x + 3);
-  proj.state["dir"] = right > left ? 1 : -1;
-  proj.px = x;
-  proj.py = state.terrain.column_top(x) - 1;
+  // 3fbd:0003: momentum decides wide flat areas; scan both sides for a drop.
+  let dir = proj.vx > 0 ? 1 : -1;
+  const surface = Math.min(y - 1, state.terrain.column_top(x) - 1);
+  const scan = (d: number) => {
+    let n = 0;
+    for (let xx = x + d; xx > 0 && xx < state.terrain.w - 1; xx += d) {
+      if (state.terrain.is_solid(xx, surface)) return { drop: false, n };
+      if (!state.terrain.is_solid(xx, surface + 1)) return { drop: true, n };
+      n++;
+    }
+    return { drop: false, n };
+  };
+  const left = scan(-1), right = scan(1);
+  if (!(left.n + right.n > 6 && left.n > 2 && right.n > 2) && left.drop !== right.drop) dir = left.drop ? -1 : 1;
+  proj.state.rolling = true; proj.state.dir = dir;
+  proj.px = proj.sx = x; proj.py = proj.sy = surface;
+  proj.vx = proj.vy = 0;
 }
 
 export function step_roller(state: BState, proj: BProjectile): boolean {
-  const t = state.terrain;
-  const d = proj.state["dir"] as number;
-  const nx = Math.trunc(proj.px) + d;
-  if (nx <= 1 || nx >= t.w - 1) {
-    return _resolve_roller(state, proj);
-  }
-  const surf = t.column_top(nx);
-  const here = t.column_top(Math.trunc(proj.px));
-  // tank in the way?
-  for (const tk of state.tanks) {
-    if (tk.alive && Math.abs(tk.x - nx) <= tk.half_width) {
+  // 3fbd:027b: descend one pixel until supported, then move horizontally.
+  // It cannot climb a one-pixel uphill step and does not snap down a cliff.
+  let x = Math.trunc(proj.px), y = Math.trunc(proj.py);
+  let dir = Number(proj.state.dir);
+  if (y < state.terrain.h - 2 && !state.terrain.is_solid(x, y + 1)) y++;
+  else {
+    x += dir;
+    if (x < 1 || x > state.terrain.w - 2) {
+      const cfg = state.cfg as BState["cfg"] & { live_elastic?: number; elastic?: number };
+      const wall = cfg.live_elastic ?? cfg.elastic ?? 5;
+      if (wall === 0) { proj.active = false; return false; }
+      if (wall === 5) return _resolve_roller(state, proj);
+      if (wall === 1) x = x < 1 ? state.terrain.w - 2 : 1;
+      else { dir = -dir; x = Math.trunc(proj.px); proj.state.dir = dir; }
+    }
+    const tank = state.tanks.some((t) => t.alive && Math.abs(t.x - x) <= t.half_width && y >= t.y - 10 && y <= t.y);
+    if (state.terrain.is_solid(x, y) || tank) {
+      proj.px = x; proj.py = y;
       return _resolve_roller(state, proj);
     }
   }
-  if (surf > here + 6) {
-    // steep drop ahead -> keep rolling (falls)
-    proj.px = nx;
-    proj.py = surf - 1;
-  } else if (surf < here - 1) {
-    // uphill ahead -> this is a valley
-    return _resolve_roller(state, proj);
-  } else {
-    proj.px = nx;
-    proj.py = surf - 1;
-  }
-  proj.sx = Math.trunc(proj.px);
-  proj.sy = Math.trunc(proj.py);
+  proj.px = proj.sx = x; proj.py = proj.sy = y;
   return true;
 }
 
@@ -597,19 +468,7 @@ function _resolve_roller(state: BState, proj: BProjectile): boolean {
 }
 
 export function start_digger(state: BState, proj: BProjectile, x: number, y: number): void {
-  proj.state["tunneling"] = true;
-  proj.state["depth"] = 0;
-  proj.state["max_depth"] = Math.abs(proj.weapon.blast); // tier depth (10/20/35)
-  // Bore half-width.  RECONSTRUCTED: the real bore geometry lives in the
-  // un-decompiled 0x99c stepper (BLOCKED -- see _stamp_digger_trail), so the
-  // width is not byte-sourced.  The prior FIXED 7px channel (half=3) removed too
-  // little dirt (user-reported); scale the width with the tier's effective radius
-  // (abs(blast)) so Baby < Digger < Heavy and the tunnel is tier-appropriate.
-  const r = Math.abs(proj.weapon.blast);
-  proj.state["bore_half"] = Math.max(5, Math.trunc(r / 2)); // Baby 5 / Digger 10 / Heavy 17
-  proj.px = x;
-  proj.py = y;
-  proj.vx = proj.vy = 0.0;
+  startSandhog(state, proj, x, y, true);
 }
 
 function _stamp_digger_trail(state: BState, x: number, y: number, half: number): void {
@@ -702,19 +561,9 @@ export function step_sandhog(state: BState, proj: BProjectile): boolean {
 export const LASER_BLEED = 0x28; // FUN_3319_01fe:96 energy bleed per beam pixel (40)
 
 export function fire_laser(state: BState, proj: BProjectile): void {
-  /* Laser (FUN_3319_0516 -> FUN_271b_0733 -> FUN_3319_01fe).
-   *
-   * Straight Bresenham beam from the muzzle along the turret direction.  Energy
-   * d506 = battery-field * 10 (FUN_3319_0516:14).  Per pixel: cut dirt to sky
-   * and bleed energy by 0x28 (FUN_3319_01fe:53,96); on a tank apply damage
-   * local_6 = d506/5 through the standard applier (so a shield ABSORBS the hit
-   * but does NOT stop the beam -- it keeps cutting through terrain, shields and
-   * tanks); write beam colour 0xe6.  The beam stops ONLY when energy < 1
-   * (FUN_3319_01fe:97), never on a hit.  Range ~= energy/0x28 pixels minus
-   * per-hit bleed.  Super Mag laserproof shields are the one stop case. */
-  // Laser fire tone (FUN_3581_00d4.c:67-72 -> a281 rising chirp 1000->cap).
-  // The laser fires synchronously from game.fire (not via detonate()), so
-  // latch the current weapon here for any laser kill's death-blast radius.
+  // 3319:01fe: 40 energy/pixel, another 40 when cutting dirt. A tank
+  // stops the beam: energy/5 is discharged in <=10 HP pulses, subtracting
+  // 50 from the pulse budget each time. Super Mag recharges by energy/100.
   state.current_weapon = proj.weapon;
   sfx.play("laser", state.cfg.is_on("SOUND"));
   let energy = (proj.state["energy"] as number | undefined) ?? 50;
@@ -730,7 +579,8 @@ export function fire_laser(state: BState, proj: BProjectile): void {
     const iy = Math.trunc(y);
     pts.push([ix, iy]);
     if (state.terrain.is_dirt(ix, iy)) {
-      state.terrain.write(ix, iy, C.COL_SKY); // cut dirt
+      state.terrain.carve_circle(ix, iy, 3);
+      energy -= LASER_BLEED;
     }
     for (const tk of state.tanks) {
       if (
@@ -740,15 +590,24 @@ export function fire_laser(state: BState, proj: BProjectile): void {
         Math.abs(tk.y - 4 - iy) <= 6
       ) {
         if (tk.shield_laserproof && tk.shield_hp > 0) {
-          energy = 0; // Super Mag stops the beam
+          tk.shield_hp = Math.min(200, tk.shield_hp + Math.trunc(energy / 100));
+          energy = 0; // Super Mag stops and absorbs the beam
           break;
         }
-        damage.apply_tank_damage(state, tk, Math.max(1, Math.floor(energy / 5))); // d506/5
+        for (let remaining = Math.trunc(energy / 5); remaining > 0; remaining -= 50)
+          damage.apply_tank_damage(state, tk, Math.min(10, remaining));
         hit.add(tk);
+        energy = 0;
+        break;
       }
     }
     x += dx;
     y += dy;
+    const cfg = state.cfg as BState["cfg"] & { live_elastic?: number; elastic?: number };
+    if ((cfg.live_elastic ?? cfg.elastic) === 1) {
+      if (x < 1) x += state.terrain.w - 2;
+      else if (x >= state.terrain.w - 1) x -= state.terrain.w - 2;
+    }
     energy -= LASER_BLEED; // bleed 0x28 per pixel
   }
   proj.trail = pts;

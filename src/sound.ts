@@ -31,11 +31,11 @@
  *   | event           | original tone (freq Hz, dur PIT-tick unit)          | cite (decompile)              |
  *   |-----------------|-----------------------------------------------------|-------------------------------|
  *   | ui_beep         | 0007(200, 0x28)  steady 200 Hz                      | FUN_1a69_0002.c:58 (+~25 more)|
- *   | fire/launch     | a281 stepped UP for(i=0;i<100;i+=0xf): 0,15..90 Hz  | FUN_2a4a_02f2.c:39-43         |
+ *   | fire/launch     | a281(1000 + i*100), i=0,15,...90                    | 2a4a:03d2 (binary)           |
  *   | explosion(big)  | a281 ALTERNATING 100/200 Hz (grow + flash loop)     | FUN_4d1e_03e3.c:30,44-49      |
  *   | explosion(std)  | a281() -- freq arg DROPPED (BLOCKED); 100/200 x-ref | FUN_4d1e_015a.c:34,46,60,63   |
- *   | nuke            | a281() -- freq arg DROPPED (BLOCKED); 100/200 x-ref | FUN_3770_041d.c:39,48,51      |
- *   | plasma          | 0007(i*1000,10) UP then 0007((10-i)*1000,10) DOWN   | FUN_3f76_03bd.c:18,22         |
+ *   | plasma          | a281() -- freq arg DROPPED (BLOCKED); 100/200 x-ref | FUN_3770_041d.c:39,48,51      |
+ *   | riot            | 0007(i*1000,10) UP then 0007((10-i)*1000,10) DOWN   | FUN_3f76_03bd.c:18,22         |
  *   | shield_collapse | 51x 0007(f,0x14) f=6000 step -100 then 0007(1000,10)| FUN_4191_0034.c:41-46         |
  *   | shield_deploy   | 51x 0007(f,0x14) f=1000 step +100 -> ~6000  (UP)    | FUN_4191_0455.c:58-62         |
  *   | battery         | 0007(100,0xf),0007(200,10),0007(100,0x14) arpeggio  | FUN_3a16_0f44.c:17-21         |
@@ -477,15 +477,14 @@ export class Sfx {
     if (!gate) return;
 
     if (event === "fire") {
-      // FUN_2a4a_02f2.c:39-43 -- a281 stepped UP for(i=0;i<100;i+=0xf):
-      // 0,15,30,45,60,75,90 Hz (0 and 15 are sub-19, silent in a281).  FACT for
-      // the frequencies; ms per step RECON (~14 ms ~= one 9af6 tick).
+      // 2a4a:03d2: the decompile dropped the multiply/add before a281.
+      // Frequencies are binary-derived; milliseconds per step are calibrated.
       const steps: Tone[] = [];
-      for (let f = 0; f < 100; f += 0xf) steps.push([f, 14]); // 0,15,30,45,60,75,90
+      for (let i = 0; i < 100; i += 15) steps.push([1000 + i * 100, 14]);
       return this._play_tones(steps, gate);
     }
 
-    if (event === "explosion" || event === "nuke") {
+    if (event === "explosion" || event === "nuke" || event === "plasma") {
       // FUN_4d1e_03e3.c:30,44-49 (large) -- a281 ALTERNATING 100/200 Hz over the
       // grow + flash loop.  Standard blast FUN_4d1e_015a.c uses the same loop
       // shape with the freq args DROPPED by Ghidra (BLOCKED); 100/200 is the
@@ -499,7 +498,7 @@ export class Sfx {
       return this._play_tones(seq, gate);
     }
 
-    if (event === "plasma") {
+    if (event === "riot") {
       // FUN_3f76_03bd.c:18,22 -- 0007(i*1000,10) rising for i=1..9 then
       // 0007((10-i)*1000,10) falling: a 1000->9000->1000 Hz siren.  FACT freqs;
       // 10-ms RECON per blip.

@@ -36,6 +36,8 @@ import * as pygame from "./pygame";
 import * as C from "./constants";
 import * as weapons from "./weapons";
 import { FUNKY_RGB, type WeaponEffect } from "./weapon_effects";
+import { chargeLayout } from "./energy_controls";
+import { blastPixel, flameColor } from "./combat_effects";
 import * as widgets from "./widgets";
 import * as _pal from "./palette";
 import { build_palette, LiveLUT } from "./palette";
@@ -549,21 +551,23 @@ export function compositeTerrainRgb(
   }
   // Overlay dirt + digger-trail indices through the LUT (tank/object band is NOT
   // composited here -- _draw_tank draws those; matches the mask in render.py).
-  const dlo = C.DIRT_SHADE_LO;
-  const dhi = C.DIRT_SHADE_HI;
   const glo = _pal.DIGGER_BAND_LO;
   const ghi = _pal.DIGGER_BAND_HI;
   for (let x = 0; x < w; x++) {
     for (let y = 0; y < h; y++) {
       const g = gridAt(grid, w, h, x, y);
       let src = -1;
-      if (g === C.COL_DIRT || (g >= dlo && g <= dhi)) {
+      if (C.is_dirt(g)) {
         src = g;
       } else if (g >= glo && g <= ghi) {
         src = g;
       }
       if (src >= 0) {
-        const row = tbl[src];
+        // 2d4f:0073: scorched dirt uses five dark fractions of the round's
+        // soil color. These pixels remain terrain after the flames disappear.
+        const row = src >= 81 && src <= 85
+          ? tbl[C.COL_DIRT].map((c) => Math.trunc(Math.trunc(c / 4) * (src - 80) / 6) * 4)
+          : tbl[src];
         const d = (x * h + y) * 3;
         out[d] = row[0];
         out[d + 1] = row[1];
@@ -726,6 +730,16 @@ export class Renderer {
     this._active = this._lut !== null ? this._lut : this.pal;
     this.sync_sky(state);
     this._composite_terrain(surf, state);
+    const disruption = state.projectiles.map((p) => p.weaponEffect).find((e) => e?.kind === "soil" && e.mode === "disrupt");
+    if (disruption?.kind === "soil") {
+      const frame = surf.ctx.getImageData(0, 0, this.w, this.h), brightness = disruption.flash ?? 0;
+      for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) {
+        if (!C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x, y))) continue;
+        const i = (y * this.w + x) * 4;
+        for (let c = 0; c < 3; c++) frame.data[i + c] += Math.trunc((252 - frame.data[i + c]) * brightness);
+      }
+      surf.ctx.putImageData(frame, 0, 0);
+    }
     this._draw_trace_marks(surf, state);
     this._draw_bolts(surf, state);
     for (const ring of getList<{ x: number; y: number; r: number }>(state, "plasma_rings")) {
@@ -739,13 +753,23 @@ export class Renderer {
     }
     for (const t of state.tanks) {
       if (t.alive) {
+        const x0 = Math.max(0, t.x - t.half_width - 2), y0 = Math.max(0, t.y - 12);
+        const w = Math.min(this.w - x0, 2 * t.half_width + 5), h = Math.min(this.h - y0, 14);
+        const before = surf.ctx.getImageData(x0, y0, w, h);
         this._draw_tank(surf, t, state);
+        const after = surf.ctx.getImageData(x0, y0, w, h);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          if (!C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x0 + x, y0 + y))) continue;
+          const i = (y * w + x) * 4;
+          after.data.set(before.data.subarray(i, i + 4), i);
+        }
+        surf.ctx.putImageData(after, x0, y0);
       } else {
         this._draw_wreck(surf, t);
       }
     }
     for (const p of state.projectiles) {
-      this._draw_projectile(surf, p);
+      this._draw_projectile(surf, p, state);
     }
     for (const e of state.explosions) {
       this._draw_explosion(surf, e);
@@ -758,6 +782,21 @@ export class Renderer {
     this._draw_info_box(surf, state);
     for (const f of getList<FlashLike>(state, "flashes")) {
       this._draw_flash(surf, f);
+    }
+    const charge = state.plasma_charge as { value: number; max: number } | null | undefined;
+    if (charge) {
+      const layout = chargeLayout(this.w, this.h);
+      pygame.draw.rect(surf, [192, 192, 192], new pygame.Rect(layout.x, layout.y, layout.width, layout.height));
+      pygame.draw.rect(surf, [255, 255, 255], new pygame.Rect(layout.x, layout.y, layout.width, layout.height), 1);
+      surf.blit(this.font.render("Plasma Blast — Batteries", false, [0, 0, 0]), [layout.x + 12, layout.y + 12]);
+      layout.cells.forEach((rect, i) => {
+        pygame.draw.rect(surf, i === charge.value ? [0, 0, 128] : [224, 224, 224], rect);
+        surf.blit(this.font.render(String(i), false, i > charge.max ? [128, 128, 128] : i === charge.value ? [255, 255, 255] : [0, 0, 0]), [rect.x + 3, rect.y + 4]);
+      });
+      for (const [rect, label] of [[layout.fire, "Fire"], [layout.cancel, "Cancel"]] as const) {
+        pygame.draw.rect(surf, [224, 224, 224], rect);
+        surf.blit(this.font.render(label, false, [0, 0, 0]), [rect.x + 8, rect.y + 4]);
+      }
     }
     // software arrow cursor over the playfield while a human is aiming.
     if ((state as { awaiting_human?: boolean }).awaiting_human === true && state.phase === "aim") {
@@ -1099,9 +1138,9 @@ export class Renderer {
   }
 
   // ------------------------------------------------------------ projectiles
-  private _draw_projectile(surf: pygame.Surface, p: ProjectileLike): void {
+  private _draw_projectile(surf: pygame.Surface, p: ProjectileLike, state: GameState): void {
     if (p.weaponEffect) {
-      this._draw_weapon_effect(surf, p.weaponEffect);
+      this._draw_weapon_effect(surf, p.weaponEffect, state);
       return;
     }
     const tp = projTracePath(p);
@@ -1140,7 +1179,7 @@ export class Renderer {
     }
   }
 
-  private _draw_weapon_effect(surf: pygame.Surface, effect: WeaponEffect): void {
+  private _draw_weapon_effect(surf: pygame.Surface, effect: WeaponEffect, state: GameState): void {
     if (effect.kind === "funky") {
       for (const trail of effect.trails) {
         for (const point of trail) surf.set_at(point, [120, 120, 252]);
@@ -1157,10 +1196,57 @@ export class Renderer {
           pygame.draw.circle(surf, color, [burst.x, burst.y], r);
         }
       }
-    } else {
+    } else if (effect.kind === "sandhog") {
       // 251b:0120 paints a sparse red charge disk, then removes those pixels.
       for (const c of effect.charges) {
         for (const point of c.pixels) surf.set_at(point, [240, 40, 40]);
+      }
+    } else if (effect.kind === "blast") {
+      const e = effect;
+      const left = Math.max(0, e.x - e.radius), top = Math.max(0, e.y - e.radius);
+      const w = Math.min(this.w, e.x + e.radius + 1) - left;
+      const h = Math.min(this.h, e.y + e.radius + 1) - top;
+      if (w <= 0 || h <= 0) return;
+      const frame = surf.ctx.getImageData(left, top, w, h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const color = blastPixel(e, left + x - e.x, top + y - e.y);
+        if (!color) continue;
+        const i = (y * w + x) * 4;
+        frame.data[i] = color[0]; frame.data[i + 1] = color[1]; frame.data[i + 2] = color[2];
+      }
+      surf.ctx.putImageData(frame, left, top);
+    } else if (effect.kind === "death") {
+      for (const b of effect.bubbles) {
+        for (let r = b.r; r > 0; r--) {
+          const v = Math.trunc((20 - Math.trunc(r * 20 / b.r)) * 252 / 19);
+          pygame.draw.circle(surf, [v, v, v], [b.x, b.y], r);
+        }
+      }
+      for (const [key, index] of effect.points) {
+        const color: RGB = index === 250 ? [252, 180, 80] : index >= 170 && index < 200
+          ? flameColor(index, effect.clock) : tupRgb(lutGet(this._active, index));
+        surf.set_at([key % this.w, Math.floor(key / this.w)], color);
+      }
+      if (effect.mode === "sink" && effect.tank && effect.y <= effect.target)
+        this._spritesDrawTank(surf, effect.x, effect.y, effect.tank as unknown as Tank,
+          tupRgb(lutGet(this._active, effect.tank.color)));
+    } else if (effect.kind === "fluid" && !effect.dirt) {
+      for (const point of effect.points) surf.set_at(point, [252, 64, 0]);
+      for (const flame of effect.flames ?? []) {
+        const color = flameColor(flame.color, effect.phase === "burn" ? effect.clock : 0);
+        for (let dy = -flame.r; dy <= flame.r; dy++) for (let dx = -flame.r; dx <= flame.r; dx++) {
+          const x = flame.x + dx, y = flame.y + dy;
+          if (dx * dx + dy * dy <= flame.r * flame.r && !C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x, y)))
+            surf.set_at([x, y], color);
+        }
+      }
+    } else if (effect.kind === "soil" && effect.mode === "riot") {
+      const e = effect;
+      for (let r = Math.max(1, e.clock - e.radius); r <= e.grown; r++) {
+        for (let a = e.aim - e.half; a <= e.aim + e.half; a++) {
+          const rad = a * Math.PI / 180;
+          surf.set_at([Math.trunc(e.x + Math.cos(rad) * r), Math.trunc(e.y - Math.sin(rad) * r)], [160, 60, 60]);
+        }
       }
     }
   }
@@ -1269,10 +1355,16 @@ export class Renderer {
 
   private _draw_beam(surf: pygame.Surface, b: { pts: Array<[number, number]> }): void {
     const pts = b.pts;
-    if (pts.length >= 2) {
-      const col = tupRgb(lutGet(this._active, C.COL_LASER));
-      pygame.draw.lines(surf, col, false, pts, 2);
-    }
+    if (pts.length < 2) return;
+    const angle = Math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]) + 1.570795;
+    // 3319:0016: 15-sample sinusoid, amplitude 3, perpendicular to the beam.
+    pts.forEach(([x, y], i) => {
+      const wave = Math.sin((i % 15) * 6.28318 / 15) * 3;
+      const dx = pyRound(Math.cos(angle) * wave), dy = pyRound(Math.sin(angle) * wave);
+      surf.set_at([x, y], [80, 240, 240]);
+      surf.set_at([x + dx, y + dy], [80, 240, 80]);
+      surf.set_at([x - dx, y - dy], [80, 80, 240]);
+    });
   }
 
   // Plasma ring colour: FUN_3f76_03bd.c:15 -> 6-bit (0x28,0x0f,0x0f) -> (162,60,60).

@@ -61,6 +61,10 @@ export class RemoteAdapter {
     const code = keyCodes[name];
     if (!code) return;
     const gs = this.app.gs as unknown as GameState;
+    if (gs?.plasma_charge) {
+      this.app.handleRemote({ type: down ? pg.KEYDOWN : pg.KEYUP, key: code, mod: 0 });
+      return;
+    }
     // Remote Escape must never open the host's system menu.
     if (this.app.onlineScreen === "battle" && name === "Escape") {
       if (down) {
@@ -145,7 +149,7 @@ export class RemoteAdapter {
     this.owner = owner?.ai === 0 ? owner.id : undefined;
     this.enabled = !!this.owner && !!owner?.connected && !this.app.transitioning &&
       (kind === "player" || (kind === "battle" && gs?.phase === "aim"));
-    const identity = [top, panel, gs?.phase, gs?.current_shooter, this.owner, this.enabled];
+    const identity = [top, panel, gs?.plasma_charge, gs?.phase, gs?.current_shooter, this.owner, this.enabled];
     if (identity.some((v, i) => v !== this.identity[i])) {
       this.identity = identity;
       this.context++;
@@ -155,6 +159,14 @@ export class RemoteAdapter {
     this.actions.clear();
     if (!gs || !this.enabled) return;
     if (kind === "battle") {
+      if (gs.plasma_charge) {
+        const charge = gs.plasma_charge;
+        this.add({ id: "plasma-charge", label: "Batteries for Plasma", kind: "number", value: charge.value,
+          min: 0, max: charge.max, step: 1 }, (v) => { if (typeof v === "number") gs.set_plasma_charge(v); });
+        this.add({ id: "plasma-fire", label: "Fire Plasma", kind: "button" }, () => gs.confirm_plasma_charge());
+        this.add({ id: "plasma-cancel", label: "Cancel", kind: "button" }, () => gs.cancel_plasma_charge());
+        return;
+      }
       for (const [id, label, key] of [
         ["inventory", "Inventory", "KeyI"], ["tank", "Tank controls", "KeyT"],
         ["move", "Move / stop moving", "KeyF"], ["retreat", "Retreat", "KeyR"],

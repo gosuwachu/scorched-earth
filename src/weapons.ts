@@ -124,20 +124,11 @@ export const ITEMS: Item[] = [
   new Item(25, "Dirt Clod",      5000,  10, 0, "dirt",      { blast: 20, behavior: "dirt_sphere" }),
   new Item(26, "Dirt Ball",      5000,   5, 0, "dirt",      { blast: 35, behavior: "dirt_sphere" }),
   new Item(27, "Ton of Dirt",    6750,   2, 1, "dirt",      { blast: 70, behavior: "dirt_sphere" }),
-  new Item(28, "Liquid Dirt",    5000,   5, 2, "dirt",      { blast: 25, behavior: "dirt_slump" }),
+  new Item(28, "Liquid Dirt",    5000,   5, 2, "dirt",      { blast: -20, behavior: "dirt_slump" }),
   new Item(29, "Dirt Charge",    5000,  10, 1, "dirt",      { blast: 30, behavior: "dirt_wedge" }),
   new Item(30, "Earth Disrupter", 5000, 10, 0, "dirt",      { blast: 0, behavior: "dirt_settle" }),
-  // Plasma Blast radius is NOT byte-exact recoverable. RECOVERED_BATTERY.md:
-  // the real Plasma handler is rec 31 -> {IP=0x9,SEG=0x2770} = FUN_3770_0009
-  // (synchronous charge-and-fire), radius = 1242 + (12aa-1242)*tier/10 where
-  // tier in [0,min(ammo,10)]; both endpoints 5f38:1242/12aa are BSS, 00 00 on
-  // disk, no initializer in the corpus -> unrecoverable. Static base word +0x04
-  // is 0 (file 0x575d0). NOTE: RECOVERED_FP.md T2 mislabeled handler
-  // {0x3bd,0x2f76}=FUN_3f76_03bd "Plasma"; that handler is records 17/18 =
-  // Riot Bomb / Heavy Riot Bomb (base 30/45), already correct above. blast=40
-  // is a FLAGGED placeholder inside the manual's documented 10..75 Plasma
-  // envelope (RECOVERED_FP.md:280), not a recovered constant.
-  new Item(31, "Plasma Blast",   9000,   5, 3, "energy",    { blast: 40, behavior: "plasma" }),
+  // 3770:0009: zero-to-ten Battery charge interpolates Missile/Nuke radii.
+  new Item(31, "Plasma Blast",   9000,   5, 3, "energy",    { blast: 20, behavior: "plasma" }),
   new Item(32, "Laser",          5000,   5, 2, "energy",    { blast: 0, behavior: "laser" }),
   // ---- equipment (non-projectile) ----
   new Item(33, "Heat Guidance", 10000,   6, 2, "guidance",  { behavior: "equip" }),

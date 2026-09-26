@@ -153,6 +153,7 @@ export interface HumanState {
   current_shooter: Tank | null;
   cfg?: { is_on(key: string): boolean };
   _aim_hold?: AimHold;
+  plasma_charge?: unknown;
   fire(): void;
 }
 
@@ -446,7 +447,7 @@ export class HumanController {
    *  original ramps from a slow tap-rate up to a faster hold-rate). */
   static update_continuous(state: HumanState, keys: KeyState, dt = 1 / 60.0): void {
     const t = state.current_shooter;
-    if (!t) {
+    if (!t || state.plasma_charge) {
       return;
     }
     let hold = state._aim_hold;

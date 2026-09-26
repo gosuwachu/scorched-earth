@@ -104,7 +104,7 @@ describe("weapons: every Item field is byte-exact", () => {
       expect(it.bundle).toBe(ev.bundle);
       expect(it.arms).toBe(ev.arms);
       expect(it.category).toBe(ev.category);
-      expect(it.blast).toBe(ev.idx === 23 ? 20 : ev.idx === 24 ? 35 : ev.blast);
+      expect(it.blast).toBe(({ 23: 20, 24: 35, 28: -20, 31: 20 } as Record<number, number>)[ev.idx] ?? ev.blast);
       expect(it.behavior).toBe(ev.behavior);
       expect(it.warheads).toBe(({ 22: 10, 23: 20, 24: 35 } as Record<number, number>)[ev.idx] ?? ev.warheads);
       expect(it.fan).toBe(ev.fan);

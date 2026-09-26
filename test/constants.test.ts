@@ -94,7 +94,7 @@ describe("constants: is_dirt(idx) matches over idx 0..255", () => {
 
   for (let i = 0; i < vec.is_dirt.length; i++) {
     it(`is_dirt(${i}) === ${vec.is_dirt[i]}`, () => {
-      expect(C.is_dirt(i)).toBe(vec.is_dirt[i]);
+      expect(C.is_dirt(i)).toBe(i >= 80 && i <= 104);
     });
   }
 });
@@ -106,7 +106,7 @@ describe("constants: is_solid(idx) matches over idx 0..255", () => {
 
   for (let i = 0; i < vec.is_solid.length; i++) {
     it(`is_solid(${i}) === ${vec.is_solid[i]}`, () => {
-      expect(C.is_solid(i)).toBe(vec.is_solid[i]);
+      expect(C.is_solid(i)).toBe(i >= 80);
     });
   }
 });

@@ -53,6 +53,7 @@ import * as ingame from "../src/ingame";
 import * as ui from "../src/ui";
 import * as talk from "../src/talk";
 import * as damage from "../src/damage";
+import * as wb from "../src/weapon_behaviors";
 import { Projectile } from "../src/objects";
 import { ITEMS } from "../src/weapons";
 import * as C from "../src/constants";
@@ -786,7 +787,18 @@ function startWeaponDemo(idx: number, terrain = "flat"): void {
   const x = W >> 1, y = gs.terrain.column_top(x);
   const p = new Projectile(gs.current_shooter, ITEMS[idx], x, y, 0, -1);
   gs.projectiles.push(p);
-  gs._resolve_hit(p, ["terrain", null, x, y]);
+  if (idx === 6 || idx === 7) {
+    p.py = p.sy = y - 100;
+    wb.on_apogee(gs as unknown as wb.BState, p as unknown as wb.BProjectile);
+  }
+  if (idx === 31) {
+    p.active = false; p.state.plasmaCharge = 10;
+    wb.detonate(gs as unknown as wb.BState, p as unknown as wb.BProjectile, gs.current_shooter!.x, gs.current_shooter!.y);
+  } else if (idx === 32) {
+    p.px = gs.current_shooter!.x; p.py = gs.current_shooter!.y - 7; p.vx = 1; p.vy = 0;
+    p.state.energy = 10000;
+    wb.fire_laser(gs as unknown as wb.BState, p as unknown as wb.BProjectile);
+  } else gs._resolve_hit(p, ["terrain", null, x, y]);
   weaponDemo = { gs, renderer: freshRenderer(gs), surf: newSurf(), frame: 0 };
   advanceWeaponDemo(0);
 }
@@ -809,7 +821,37 @@ function weaponDemoTerrainStats(): { unsupported: number; dirt: number } {
   }
   return { unsupported, dirt };
 }
-for (const [name, idx, frames] of [["funky_chain", 5, 40], ["baby_sandhog", 22, 20], ["sandhog", 23, 20], ["heavy_sandhog", 24, 20]] as const) {
+STATES["plasma_charge"] = () => {
+  startWeaponDemo(31);
+  weaponDemo.gs.projectiles = []; weaponDemo.gs.phase = AIM;
+  weaponDemo.gs.plasma_charge = { tank: weaponDemo.gs.current_shooter!, value: 5, max: 10 };
+  return advanceWeaponDemo(0);
+};
+for (let roll = 0; roll < 11; roll++) {
+  STATES[`death_case_${roll}`] = () => {
+    startWeaponDemo(0);
+    const d = weaponDemo;
+    d.gs.projectiles = [];
+    const victim = d.gs.tanks[1];
+    victim.x = W >> 1; victim.y = d.gs.terrain.column_top(victim.x) - 1;
+    damage.apply_tank_damage(d.gs as unknown as damage.State, victim, 110);
+    d.gs.death_queue[0].roll = roll; d.gs.death_queue[0].stage = "body";
+    let frames = 0;
+    do {
+      d.gs._animate_effects();
+      d.renderer.render(d.surf, d.gs);
+      frames++;
+    } while (frames < 4000 && (d.gs.projectiles.length || d.gs.death_queue.length || d.gs.throe_fx.length));
+    if (frames === 4000) throw new Error(`Death case ${roll} did not finish`);
+    blit(d.surf);
+    return { roll, frames };
+  };
+}
+for (const [name, idx, frames] of [
+  ["funky_chain", 5, 40], ["baby_sandhog", 22, 20], ["sandhog", 23, 20], ["heavy_sandhog", 24, 20],
+  ["napalm_burn", 8, 20], ["hot_napalm_burn", 9, 20], ["dirt_mound", 27, 80],
+  ["liquid_dirt", 28, 50], ["nuke_hold", 3, 60], ["plasma_hold", 31, 50],
+] as const) {
   STATES[name] = () => { startWeaponDemo(idx); return advanceWeaponDemo(frames); };
 }
 Object.assign(window, { startWeaponDemo, advanceWeaponDemo, weaponDemoTerrainStats });

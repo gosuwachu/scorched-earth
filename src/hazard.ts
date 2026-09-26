@@ -1,67 +1,10 @@
-/**
- * Hostile-sky hazards: the recursive fractal LIGHTNING bolt and the per-turn
- * strike hook (segment 480f; sky weather tick FUN_42c2_1789 / FUN_42c2_1733).
- *
- * A faithful TypeScript port of scorch-py/scorch/hazard.py (the fidelity oracle,
- * itself verified against 1.5/SCORCH.EXE). Every FUN_<seg>_<off> / DAT_ provenance
- * comment from the Python source is preserved so the lineage survives.
- *
- * Ground truth (primary-source decompiles + catalog 06 section 2.2):
- *   - SKY enum (catalog 03 / 06 s.2.1): PLAIN STORMY STARS SHADED SUNSET CAVERN
- *     BLACK RANDOM.  RANDOM picks any type EXCEPT BLACK at round start
- *     (06_messages_world.md:93, SCORCH.DOC:L1968-1974).
- *   - The ONLY documented hostile-sky attack in v1.5 is LIGHTNING, emitted by the
- *     STORMY sky (06_messages_world.md:104,131; SCORCH.DOC:L1972-1974).  There are
- *     NO meteor showers in v1.5 (06_messages_world.md:133 flags the task term as
- *     having zero binary/manual evidence); this module implements lightning only.
- *   - HOSTILE_ENVIRONMENT=OFF neutralises the damage but keeps the visual
- *     (06_messages_world.md:131, SCORCH.DOC:L1985-1990).
- *
- * Lightning generator (FUN_480f_0390, FACT):
- *   Recursive bolt from a start point down to the ground row DAT_5f38_ef38 (the
- *   bottom clip extent; 16_video.md:49).  Each call (decompile lines cited):
- *     - draw one segment via the laser tracer FUN_271b_0733 from (x, y) to
- *       (x + rng(dy+1) - dy//2, target_y), where dy = target_y - y     (:14-18)
- *     - terminate when y == target_y                                    (:13)
- *     - branch gate: rng(10) > 7  (values {8,9} -> 2/10 = 20%) AND
- *       depth DAT_5f38_ee42 < 0xd (13).  TWO nested branch chances per node,
- *       each incrementing the depth counter.                            (:21-30)
- *
- * Strike cadence (FUN_42c2_1789.c:15-19, FUN_42c2_1733.c:13-17, FACT):
- *   The weather tick acts only when the sky style is STORMY (DAT_5f38_5110 == 3).
- *   On a tick: rng(4) == 1  -> spawn lightning (FUN_480f_0219, the 1-in-4 gate);
- *   else rng(2) == 0 -> spawn the thunder/cloud SFX (FUN_480f_0148).  This module
- *   fires lightning on the 1-in-4 gate.
- *
- * RECONSTRUCTED (flagged): the lightning STRIKE DAMAGE.  The decompiled strike
- * path (FUN_480f_0219 -> FUN_480f_0390) traces and flashes the bolt; the
- * tank-damage application from a lightning hit is not byte-pinned in the recovered
- * code (the strike's damage call site was not isolated), and the manual gives no
- * number.  LIGHTNING_DAMAGE below is reconstructed; it is applied through the
- * documented radial-damage hook (damage.apply_tank_damage), so a shield absorbs it
- * exactly as it would a shell hit (catalog 11 s.3).
- *
- * ============================================================================
- * NUMERIC NOTES (load-bearing for the differential gate, test/hazard.test.ts):
- *
- *  - Python `int(x)` truncates TOWARD ZERO -> Math.trunc(x).  Used for the bolt's
- *    (int(x), int(y)) point coercion.
- *
- *  - Python `a // b` is FLOOR division (rounds toward NEGATIVE infinity), NOT JS
- *    `Math.trunc(a/b)`.  The bolt's horizontal damping `(jit * step) // max(1,
- *    span)` has a NEGATIVE numerator whenever the jitter pushes left, and floor vs
- *    truncate disagree by 1 on every non-exact negative quotient (e.g. -12 // 10
- *    == -2 in Python, Math.trunc(-12/10) == -1).  So this module implements
- *    pyFloorDiv() and uses it where the Python uses `//`.  `span >> 1` is on a
- *    non-negative span (abs), so the JS `>>` matches Python `>>` there.
- *
- *  - lightning_bolt / bolt_segments / maybe_strike / _thunder_flicker draw from
- *    rng via pick/chance ONLY (integer draws), so every coordinate, branch
- *    decision, target index, and flicker count is an EXACT integer/boolean.  The
- *    differential test asserts them with toBe(); there is no transcendental math
- *    anywhere in this module.
- * ============================================================================
+/** Storm cadence and rendering bridge (42c2:1789, 480f:0219).
+ * Live strikes use stormBolt's raster collision path: random sky origin,
+ * dirt scorch, and ten-point damage only on direct hostile tank contact.
+ * Historical Python geometry helpers below remain for oracle compatibility;
+ * they do not choose the live strike or damage its target.
  */
+import { stormBolt } from "./storm";
 import * as C from "./constants";
 import * as damage from "./damage";
 import { sfx } from "./sound";
@@ -312,15 +255,7 @@ export function maybe_strike(state: State): Array<Array<[number, number]>> | nul
     return null;
   }
 
-  const targets = state.tanks.filter((t) => t.alive);
-  if (targets.length === 0) {
-    return null;
-  }
-  const target = targets[state.rng.pick(targets.length)];
-  const aim_x = target.x;
-  const aim_y = target.y - 4;
-
-  const bolt = bolt_segments(state, aim_x, aim_y);
+  const bolt = stormBolt(state);
   _register_bolt(state, bolt);
   // FUN_480f_0219.c:20 -- a281(2000): the ground-strike emits a steady 2000 Hz
   // tone (the "lightning" event).  Fired on the strike, gated on SOUND.
@@ -331,10 +266,6 @@ export function maybe_strike(state: State): Array<Array<[number, number]>> | nul
     state.add_flash(STRIKE_FLASH_UP, STRIKE_FLASH_DOWN, STRIKE_FLASH_RGB);
   }
 
-  // HOSTILE_ENVIRONMENT gate (catalog 03:170 / 06:131): OFF = visual only.
-  if (state.cfg.is_on("HOSTILE_ENVIRONMENT")) {
-    _strike_damage(state, aim_x, aim_y);
-  }
   return bolt;
 }
 

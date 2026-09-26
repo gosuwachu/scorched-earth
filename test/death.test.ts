@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, it, expect } from "vitest";
 import * as death from "../src/death";
+import * as damage from "../src/damage";
 import type { DState, DTank } from "../src/death";
 import { Rng } from "../src/rng";
 import * as C from "../src/constants";
@@ -403,23 +404,24 @@ describe("death: _blast_radius (int(abs(blast)*scale) / int(FALLBACK*scale))", (
       if (r.idx >= 0) {
         weapon = ITEMS[r.idx];
         expect(weapon.name, `ITEMS[${r.idx}] name`).toBe(r.name);
-        expect(weapon.blast, `ITEMS[${r.idx}] blast`).toBe(r.idx === 23 ? 20 : r.idx === 24 ? 35 : r.blast);
+        expect(weapon.blast, `ITEMS[${r.idx}] blast`).toBe(({ 23: 20, 24: 35, 28: -20, 31: 20 } as Record<number, number>)[r.idx] ?? r.blast);
       }
       expect(
         death._blast_radius(st, weapon),
         `blast_radius idx=${r.idx} (${r.name}) scale=${r.scale}`
-      ).toBe(r.idx === 23 ? Math.trunc(20 * r.scale) : r.idx === 24 ? Math.trunc(35 * r.scale) : r.out);
+      ).toBe(weapon && weapon.blast ? damage.pyRound(Math.abs(weapon.blast) * ([0, 1, 2, 3, 4, 6, 7, 12, 13, 14, 17, 18].includes(r.idx) ? r.scale : 1)) : r.out);
     }
   });
 });
 
-describe("death: _roll_throe (rand(11) + the Suspend-Dirt case-8 reroll)", () => {
+describe("death: _roll_throe (rand(11) + the Cavern case-8 reroll)", () => {
   for (const { seed, suspend, out } of vec.roll_throe) {
     it(`seed ${seed} suspend=${suspend}: ${out.length} rolls match`, () => {
       const st = new MockState({
         cfg: new MockCfg({ suspend_dirt: suspend }),
         rng: new Rng(seed),
       });
+      (st as MockState & { live_sky: string }).live_sky = suspend ? "CAVERN" : "PLAIN";
       for (let i = 0; i < out.length; i++) {
         const got = death._roll_throe(st);
         expect(got, `roll #${i} seed ${seed} suspend ${suspend}`).toBe(out[i]);

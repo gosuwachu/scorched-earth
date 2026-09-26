@@ -36,7 +36,9 @@
 import * as C from "./constants";
 import * as physics from "./physics";
 import * as wb from "./weapon_behaviors";
-import { stepWeaponEffect } from "./weapon_effects";
+import { startBlast, startSoil, startDeathFlames } from "./combat_effects";
+import { startDeathEffect } from "./death_effects";
+import { startFunky, stepWeaponEffect } from "./weapon_effects";
 import * as damage from "./damage";
 import * as ai from "./ai";
 import * as scoring from "./scoring";
@@ -240,6 +242,12 @@ export class GameState {
   _data_dir: string;
 
   // round/settle/sim scratch (created lazily in the Python via attribute set)
+  plasma_charge: { tank: Tank; value: number; max: number } | null = null;
+  private plasmaChoices = new Map<Tank, number>();
+  private deathCredit = new WeakMap<Tank, Tank | null>();
+  private soilMoving = false;
+  private soilDirty = true;
+  private forceSoil = false;
   _settle_done = false;
   _sync_locks: { [playerIndex: number]: [number, number, number] } = {};
   _sync_queue: number[] = [];
@@ -342,9 +350,8 @@ export class GameState {
   }
 
   _scale_factor(): number {
-    // EXPLOSION_SCALE resolution compensation (catalog 09): reconstructed for
-    // the 640-wide port: NORMAL 1.0 / MEDIUM 1.5 / LARGE 2.0.
-    return { 0: 1.0, 1: 1.5, 2: 2.0 }[this.cfg.explosion_scale as 0 | 1 | 2];
+    // 33a1:1061: 320-wide mode has its own radius scale.
+    return (this.w === 320 ? [0.5, 0.75, 1] : [1, 2, 3])[this.cfg.explosion_scale];
   }
 
   /** CPython random.shuffle(x) in place: Fisher-Yates with j = _randbelow(i+1),
@@ -441,6 +448,8 @@ export class GameState {
     this._place_tanks();
     this._reset_round_tanks();
     this._build_firing_order();
+    this.soilDirty = false; this.soilMoving = false; this.forceSoil = false;
+    this.plasma_charge = null; this.plasmaChoices.clear();
     this.projectiles.length = 0;
     this.explosions.length = 0;
     this.beams.length = 0;
@@ -832,12 +841,32 @@ export class GameState {
     return true;
   }
 
+  set_plasma_charge(value: number): void {
+    if (this.plasma_charge) this.plasma_charge.value = Math.max(0, Math.min(this.plasma_charge.max, Math.trunc(value)));
+  }
+
+  confirm_plasma_charge(): void {
+    const charge = this.plasma_charge;
+    if (!charge) return;
+    this.plasmaChoices.set(charge.tank, charge.value);
+    this.plasma_charge = null;
+    this.fire();
+  }
+
+  cancel_plasma_charge(): void { this.plasma_charge = null; }
+
   // ------------------------------------------------------------------- fire
   fire(shooter: Tank | null = null): Projectile[] {
     // Launch `shooter`'s selected weapon (FUN_2a4a_02f2 entry).  Defaults to
     // current_shooter so every SEQUENTIAL caller is unchanged; SYNC/SIM pass a tank.
     const t = shooter !== null ? shooter : this.current_shooter;
     if (t === null) {
+      return [];
+    }
+    if (this.plasma_charge) return [];
+    if (t.ai_class === C.AI_HUMAN && t.selected_weapon === 31 && t.has_ammo(31) && t.batteries > 0 &&
+        !this.plasmaChoices.has(t) && (this.phase === AIM || this.phase === SIM_LIVE)) {
+      this.plasma_charge = { tank: t, value: 0, max: Math.min(10, t.batteries) };
       return [];
     }
     // Mode-aware human entry: external callers reach fire() with no shooter on a
@@ -907,26 +936,20 @@ export class GameState {
       return [proj];
     }
     if (beh === "plasma") {
-      // Plasma is synchronous charge-and-fire (FUN_3770_0009), consuming its OWN
-      // ammo, NOT batteries.  Radius is unrecoverable; _det_plasma keeps the
-      // eff_radius placeholder.
-      const proj = physics.launch(
-        t,
-        this.cfg as unknown as physics.PhysicsCfg,
-        weapon,
-      );
-      // Python's fire() calls wb._det_plasma directly; that helper is module-
-      // private in weapon_behaviors.ts.  The exported wb.detonate dispatches a
-      // plasma-behavior projectile through the SAME _DETONATORS["plasma"] =
-      // _det_plasma path with identical observable state (current_weapon latch,
-      // damage.explode(carve=false), carve_circle, add_plasma_ring) -- the only
-      // difference is which sfx event fires, and sfx is a no-op in the test.
-      wb.detonate(
-        this as unknown as wb.BState,
-        proj as unknown as wb.BProjectile,
-        t.x,
-        t.y - 4,
-      );
+      const proj = physics.launch(t, this.cfg as unknown as physics.PhysicsCfg, weapon);
+      const choice = this.plasmaChoices.get(t) ?? (t.ai_class === C.AI_HUMAN ? 0 : Math.min(10, t.batteries));
+      this.plasmaChoices.delete(t);
+      const charge = Math.max(0, Math.min(choice, t.batteries, 10));
+      t.inventory[weapons.SLOT_BATTERY] -= charge;
+      proj.state.plasmaCharge = charge;
+      wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, t.x, t.y);
+      this._enter_firing();
+      return [proj];
+    }
+
+    if (beh === "riot_wedge") {
+      const proj = physics.launch(t, this.cfg as unknown as physics.PhysicsCfg, weapon);
+      wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, t.x, t.y);
       this._enter_firing();
       return [proj];
     }
@@ -943,6 +966,8 @@ export class GameState {
         null,
         ang,
       );
+      proj.state.launchVx = proj.vx;
+      proj.state.launchVy = proj.vy;
       if (t.contact_trigger) {
         // detonate on first contact, disabling tunnelling for this shot
         proj.contact = true;
@@ -1062,6 +1087,7 @@ export class GameState {
       // SETTLE and drive the effect tick here (it is otherwise only driven
       // by FIRING/SYNC/SIM); re-settle afterwards for the new crater.
       if (
+        this.projectiles.length > 0 ||
         this.death_queue.length > 0 ||
         this.death_fountains.length > 0 ||
         this.throe_fx.length > 0 ||
@@ -1072,7 +1098,8 @@ export class GameState {
         return;
       }
       if (!this._settle_done) {
-        this._do_settle();
+        if (!this.soilMoving) this.soilDirty = true;
+        if (!this._advance_settle()) return;
         this._settle_done = true;
       }
       this._step_chute_anims(dt); // animate parachute descents (#33)
@@ -1244,7 +1271,9 @@ export class GameState {
       this.timer -= dt;
       return;
     }
-    this._do_settle();
+    if (!this._advance_settle()) return;
+    this._step_chute_anims(dt);
+    if (this.tanks.some((t) => (t as Tank & { chute_descent?: unknown }).chute_descent)) return;
     if (this._win_check()) {
       this._end_round();
     } else {
@@ -1304,8 +1333,10 @@ export class GameState {
     }
     this._animate_effects();
     // Settle only when no shell is mid-flight so tanks are not yanked mid-salvo.
-    if (this.projectiles.length === 0) {
-      this._do_settle();
+    if (this.projectiles.length === 0 && this.death_queue.length === 0 && this.explosions.length === 0) {
+      if (!this._advance_settle()) return;
+      this._step_chute_anims(dt);
+      if (this.tanks.some((t) => (t as Tank & { chute_descent?: unknown }).chute_descent)) return;
     }
     // SIMULTANEOUS battery auto-trigger (catalog 02 s.D, DOC L2254).
     for (const t of this.tanks) {
@@ -1365,6 +1396,7 @@ export class GameState {
     // No-op when the keymap is empty (the headless/browser default), matching the
     // Python headless path; the renderer/main drive this when a keymap exists.
     const t = this._sim_human;
+    if (this.plasma_charge) return;
     if (
       t === null ||
       !t.alive ||
@@ -1535,20 +1567,7 @@ export class GameState {
     if (beh === "tracer") {
       return; // tracers never detonate
     }
-    if (beh === "digger" || beh === "sandhog") {
-      // a tunneller that reaches the edge without ever entering terrain has no
-      // warhead.  Detonate as a surface explosive only if it carries positive blast.
-      if (Math.abs(proj.weapon.blast) <= 0) {
-        return;
-      }
-      damage.explode(
-        this as unknown as damage.State,
-        dx,
-        dy,
-        wb.eff_radius(this as unknown as wb.BState, proj.weapon),
-      );
-      return;
-    }
+    if (beh === "digger" || beh === "sandhog") return;
     wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, dx, dy); // per-type handler at the edge
   }
 
@@ -1571,7 +1590,7 @@ export class GameState {
   _collect_trace(proj: Projectile): void {
     // Record the projectile's persistent ballistic trail, gated by TRACE
     // (FUN_2a4a_0763.c:90-97).  TRACE OFF + non-tracer leaves NO lasting mark.
-    const persist = this.cfg.is_on("TRACE") || proj.weapon.behavior === "tracer";
+    const persist = this.cfg.is_on("TRACE") || (proj.weapon.behavior === "tracer" && proj.weapon.params.smoke === true);
     if (!persist) {
       return;
     }
@@ -1717,6 +1736,14 @@ export class GameState {
   }
 
   _resolve_hit(proj: Projectile, hit: Hit): void {
+    const previous = this.current_shooter;
+    this.current_shooter = proj.owner;
+    this.current_weapon = proj.weapon;
+    try { this._resolve_hit_scoped(proj, hit); }
+    finally { this.current_shooter = previous; }
+  }
+
+  private _resolve_hit_scoped(proj: Projectile, hit: Hit): void {
     const kind = hit[0];
     const tank = hit[1];
     const x = hit[2];
@@ -1727,7 +1754,7 @@ export class GameState {
       // Actual handlers: 251b:000a (Sandhog) and 2dce:0000 (Funky).
       // Sandhog contact chips 10 HP; a Funky intercepted by a shield chips
       // 10 and fizzles. Neither shield interception spills into the hull.
-      if (beh === "sandhog" || (beh === "funky" && tank.shield_hp > 0)) {
+      if (beh === "sandhog" || beh === "digger" || (beh === "funky" && tank.shield_hp > 0)) {
         const previousShooter = this.current_shooter;
         const previousWeapon = this.current_weapon;
         this.current_shooter = proj.owner;
@@ -1742,11 +1769,33 @@ export class GameState {
         proj.active = false;
         return;
       }
+      if (
+        beh === "dirt_sphere" ||
+        beh === "dirt_slump" ||
+        beh === "dirt_wedge" ||
+        beh === "dirt_settle" ||
+        beh === "riot_sphere" ||
+        beh === "riot_wedge" ||
+        beh === "tracer"
+      ) {
+        wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y); // no tank damage by design
+        proj.active = false;
+        return;
+      }
+      if (beh === "napalm") {
+        wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
+        proj.active = false;
+        return;
+      }
+      if (beh === "roller" && tank.shield_hp > 0) {
+        wb.start_roller(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
+        return;
+      }
       if (tank.shield_hp > 0 && beh !== "laser") {
         if (beh === "digger") {
           proj.active = false; // digger fizzles on a tank
         } else {
-          damage.shield_chip(tank as unknown as damage.Tank); // no detonation (catalog 11 s.3.2)
+          damage.apply_tank_damage(this as unknown as damage.State, tank as unknown as damage.Tank, Math.min(10, tank.shield_hp));
           // a direct hit is a shield event: a non-failproof shield may fail
           damage.shield_failure_check(
             this as unknown as damage.State,
@@ -1760,19 +1809,6 @@ export class GameState {
       if (beh === "digger") {
         proj.active = false; // fizzle (no damage)
         sfx.play("fizzle", this.cfg.is_on("SOUND"));
-        return;
-      }
-      if (
-        beh === "dirt_sphere" ||
-        beh === "dirt_slump" ||
-        beh === "dirt_wedge" ||
-        beh === "dirt_settle" ||
-        beh === "riot_sphere" ||
-        beh === "riot_wedge" ||
-        beh === "tracer"
-      ) {
-        wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y); // no tank damage by design
-        proj.active = false;
         return;
       }
       // Latch the directly-hit tank (DAT_5f38_e1e4/e1e6, set during the
@@ -1822,9 +1858,7 @@ export class GameState {
         return;
       }
       wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
-      if (beh === "leapfrog" && proj.warheads_left > 1) {
-        this._leapfrog_hop(proj, x, y);
-      }
+      // LeapFrog relaunches only after its blast has cleared (3382:0006).
       proj.active = false;
     }
   }
@@ -1858,6 +1892,39 @@ export class GameState {
   }
 
   // ---- settle: dirt collapse + tank fall (catalog 11 sections 2.5, 5) ----
+  combat_blast(x: number, y: number, radius: number): void {
+    const shot = new Projectile(this.current_shooter, this.current_weapon ?? weapons.ITEMS[0], x, y, 0, 0);
+    startBlast(this as unknown as wb.BState, shot as unknown as wb.BProjectile, x, y, radius);
+  }
+
+  combat_throe(kind: string, x: number, y: number, tank?: Tank): void {
+    const shot = new Projectile(this.current_shooter, weapons.ITEMS[kind === "funky" ? 5 : 29], x, y, 0, 0);
+    if (kind === "funky") {
+      startFunky(this as unknown as wb.BState, shot as unknown as wb.BProjectile, x, y);
+      this.projectiles.push(shot);
+    } else if (kind === "spiral" || kind === "ring" || kind === "sink" || kind === "debris") {
+      startDeathEffect(this as unknown as wb.BState, shot as unknown as wb.BProjectile, kind, tank);
+    } else if (kind === "spray") startSoil(this as unknown as wb.BState, shot as unknown as wb.BProjectile,
+      x, y, "spray", Math.trunc(this.h / 3));
+    else startDeathFlames(this as unknown as wb.BState, shot as unknown as wb.BProjectile, x, y);
+  }
+
+  request_terrain_settle(force = false): void { this.soilDirty = true; this.forceSoil ||= force; }
+
+  _advance_settle(): boolean {
+    if (!this.soilDirty && !this.soilMoving) return true;
+    if (!this.soilMoving) {
+      this.terrain.begin_settle(this.cfg, this.rng, this.forceSoil, this.live_sky === "CAVERN");
+      this.forceSoil = false;
+      this.soilMoving = true;
+    }
+    if (!this.terrain.step_settle()) return false;
+    this.soilMoving = false;
+    this.soilDirty = false;
+    for (const t of this.tanks) if (t.alive) this._settle_tank(t);
+    return this.death_queue.length === 0;
+  }
+
   _do_settle(): void {
     this.terrain.settle(
       this.cfg as unknown as Parameters<Terrain["settle"]>[0],
@@ -1876,7 +1943,8 @@ export class GameState {
     // squash-faller damage uses the health-direct path (no shield absorb); the
     // squash VICTIM goes through the shield gate.
     if (!this.cfg.is_on("FALLING_TANKS")) {
-      t.y = Math.max(2, this.terrain.column_top(t.x) - 1);
+      // Dirt deposited over a tank buries it; never lift it onto the new mound.
+      t.y = Math.max(t.y, this.terrain.column_top(t.x) - 1);
       return;
     }
     const floor = this.h - 2;
@@ -2215,6 +2283,7 @@ export class GameState {
   }
 
   _animate_effects(): void {
+    if (this.projectiles.length || this.explosions.length || this.death_queue.length) this.soilDirty = true;
     for (const proj of this.projectiles.slice()) {
       if (proj.weaponEffect) stepWeaponEffect(this as unknown as wb.BState, proj as unknown as wb.BProjectile);
     }
@@ -2244,7 +2313,7 @@ export class GameState {
       if (sig === "award") {
         scoring.award_kill(
           this as unknown as scoring.State,
-          this.current_shooter as unknown as Parameters<typeof scoring.award_kill>[1],
+          (this.deathCredit.has(payload as Tank) ? this.deathCredit.get(payload as Tank)! : this.current_shooter) as unknown as Parameters<typeof scoring.award_kill>[1],
           payload as Parameters<typeof scoring.award_kill>[2],
         );
         const _line = talk.die_taunt(
@@ -2514,6 +2583,7 @@ export class GameState {
   }
 
   on_tank_destroyed(victim: Tank, weapon: weapons.Item | null = null): void {
+    this.deathCredit.set(victim, this.current_shooter);
     // Enqueue ONLY: the kill roulette (award, taunt, roll, case FX) runs when
     // the queue PROCESSES this corpse -- the binary's dead-tank-sweep order
     // (FUN_2a4a_23f8 -> FUN_271b_0005; notes_death_throe_roulette.md s.2-3).

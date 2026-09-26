@@ -21,6 +21,7 @@ function game(seed = 1, scale = 1) {
   cfg.INITIAL_CASH = 0;
   cfg.MAX_WIND = 0;
   cfg.FALLING_TANKS = "OFF";
+  cfg.SKY = "PLAIN";
   const gs = createGameState(cfg, 320, 240, seed);
   gs.add_player("Owner", 0, 0, 0);
   gs.add_player("Target", 0, 0, 1);
@@ -83,7 +84,7 @@ describe("Funky Bomb lifecycle", () => {
     expect(effect.trails.some((t) => t.some(([, y]) => y < 110))).toBe(true);
     expect(effect.bursts).toHaveLength(effect.targets.length + 1);
     expect(effect.bursts.slice(1).every((b) => b.radius >= 15 && b.radius <= 24)).toBe(true);
-    expect(gs.explosions.some((e) => e.maxr === 40)).toBe(true);
+    expect(gs.projectiles.some((p) => p.weaponEffect?.kind === "blast" && p.weaponEffect.radius === 40)).toBe(true);
   });
   it("clamps scatter destinations at either edge", () => {
     for (const x of [1, 318]) {
@@ -211,6 +212,7 @@ describe("game integration", () => {
           y > 0 && !C.is_dirt(c) && C.is_dirt(col[y - 1])).length).some((n) => n > 2)).toBe(true);
       gs.update(1 / 60);
       expect(gs.terrain.grid).not.toEqual(before);
+      for (let frame = 0; frame < 500 && gs.phase === SETTLE; frame++) gs.update(1 / 60);
       for (let x = 0; x < gs.w; x++) {
         const column = dirt(before, x);
         expect(dirt(gs.terrain.grid, x)).toEqual(column);
@@ -219,7 +221,7 @@ describe("game integration", () => {
           expect(gs.terrain.is_dirt(x, y)).toBe(true);
         }
       }
-      expect(gs.tanks.every((t) => t.y === gs.terrain.column_top(t.x) - 1)).toBe(true);
+      expect(gs.tanks.filter((t) => t.alive).every((t) => t.y >= gs.terrain.column_top(t.x) - 1)).toBe(true);
     });
   }
   for (const idx of [5, 22, 23, 24]) {

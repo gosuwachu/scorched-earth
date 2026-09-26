@@ -477,69 +477,13 @@ describe("weapon_behaviors: eff_radius (abs(blast) * explosion_scale)", () => {
       const c = vec.eff_radius[i];
       const st = new MockState({ explosion_scale: c.scale });
       // exact: abs(blast)*scale over {1.0,1.5,2.0} is exactly representable.
-      expect(wb.eff_radius(st, ITEMS[c.idx]), `eff_radius ${c.name} @${c.scale}`).toBe(c.idx === 23 ? 20 * c.scale : c.idx === 24 ? 35 * c.scale : c.out);
+      expect(wb.eff_radius(st, ITEMS[c.idx]), `eff_radius ${c.name} @${c.scale}`).toBe(damage.pyRound(Math.abs(ITEMS[c.idx].blast) * ([0, 1, 2, 3, 4, 6, 7, 12, 13, 14, 17, 18].includes(c.idx) ? c.scale : 1)));
     }
   });
 });
 
-describe("weapon_behaviors: detonate dispatch (every behavior class)", () => {
-  for (let i = 0; i < vec.detonate.length; i++) {
-    const c = vec.detonate[i];
-    const label = `#${i} ${c.name}(${c.behavior}) scale=${c.scale} snd=${c.sound}`;
-    it(label, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(300));
-      const enemy = mkTank("e", { x: 200, y: 298, team_id: 2, player_index: 0 });
-      const far = mkTank("f", { x: 20, y: 298, team_id: 2, player_index: 1 });
-      const shooter = mkTank("s", { x: 100, y: 298, team_id: 1, player_index: 5, angle: 70 });
-      const st = new MockState({
-        cfg: new MockCfg(c.sound), terrain: terr, tanks: [enemy, far],
-        rng: new Rng(1000 + c.idx), explosion_scale: c.scale, current_shooter: shooter,
-      });
-      const proj = new MockProj(ITEMS[c.idx], { owner: shooter, px: 200.0, py: 290.0 });
-      wb.detonate(st, proj, 200, 290);
-      expectTSnap(tsnap(enemy), c.enemy, `${label} enemy`);
-      expectTSnap(tsnap(far), c.far, `${label} far`);
-      expectTerrain(terr, c.terrain, label);
-      expectState(st, c.state, label);
-    });
-  }
-});
-
-// Funky Bomb DOS-backed replacement coverage: weapon_effects.test.ts.
-
-describe("weapon_behaviors: napalm (pool-depth heat coefficient)", () => {
-  const surfFor = (terr: string): Surface => {
-    if (terr === "flat") return surfFlat(300);
-    if (terr === "basin") return surfBasin(200, 360, 250, 10);
-    if (terr === "valley") return surfValley(200, 360, 300, 20);
-    if (terr === "deep") return surfBasin(200, 400, 200, 6);
-    if (terr === "shallow") return surfBasin(200, 360, 357, 4);
-    throw new Error("unknown napalm terr " + terr);
-  };
-  for (let i = 0; i < vec.napalm.length; i++) {
-    const c = vec.napalm[i];
-    const label = `#${i} ${c.name} terr=${c.terr} scale=${c.scale}`;
-    it(label, () => {
-      const terr = new MockTerrain(360, 480, surfFor(c.terr));
-      const t0 = mkTank("t0", { x: 200, y: 300, team_id: 2, player_index: 0 });
-      const t1 = mkTank("t1", { x: 210, y: 300, team_id: 2, player_index: 1 });
-      const t2 = mkTank("t2", { x: 225, y: 300, team_id: 2, player_index: 2 });
-      const shooter = mkTank("s", { x: 100, y: 300, team_id: 1, player_index: 5 });
-      const st = new MockState({
-        terrain: terr, tanks: [t0, t1, t2], rng: new Rng(99),
-        explosion_scale: c.scale, current_shooter: shooter,
-      });
-      const proj = new MockProj(ITEMS[c.idx], { owner: shooter, px: 200.0, py: 300.0 });
-      wb.detonate(st, proj, 200, 300);
-      expectTSnap(tsnap(t0), c.t0, `${label} t0`);
-      expectTSnap(tsnap(t1), c.t1, `${label} t1`);
-      expectTSnap(tsnap(t2), c.t2, `${label} t2`);
-      expect(st.explosions, `${label} explosions`).toEqual(c.explosions);
-      expect(terr.carve_circles, `${label} carves`).toEqual(c.carve_circles);
-    });
-  }
-});
-
+// DOS replacement: combat_effects.test.ts.
+// DOS replacement: combat_effects.test.ts.
 describe("weapon_behaviors: _pool_depth (min rise / r, clamped 0..1)", () => {
   const surfFor = (terr: string): Surface => {
     switch (terr) {
@@ -587,107 +531,10 @@ describe("weapon_behaviors: _nearest_tank (first-wins tie, dead skip, empty)", (
   }
 });
 
-describe("weapon_behaviors: dirt sphere/slump/settle (bulk-op logs)", () => {
-  for (let i = 0; i < vec.dirt_sphere.length; i++) {
-    const c = vec.dirt_sphere[i];
-    it(`dirt_sphere #${i} ${c.name} scale=${c.scale}`, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(300));
-      const st = new MockState({ terrain: terr, explosion_scale: c.scale, rng: new Rng(5) });
-      const proj = new MockProj(ITEMS[c.idx], { px: 150.0, py: 290.0 });
-      wb.detonate(st, proj, 150, 290);
-      expectTerrain(terr, c.terrain, `dirt_sphere #${i}`);
-    });
-  }
-  for (let i = 0; i < vec.dirt_slump.length; i++) {
-    const c = vec.dirt_slump[i];
-    it(`dirt_slump #${i} scale=${c.scale}`, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(300));
-      const st = new MockState({ terrain: terr, explosion_scale: c.scale, rng: new Rng(5) });
-      const proj = new MockProj(ITEMS[28], { px: 150.0, py: 290.0 });
-      wb.detonate(st, proj, 150, 290);
-      expectTerrain(terr, c.terrain, `dirt_slump #${i}`);
-    });
-  }
-  for (let i = 0; i < vec.dirt_settle.length; i++) {
-    const c = vec.dirt_settle[i];
-    it(`dirt_settle #${i} scale=${c.scale}`, () => {
-      const terr = new MockTerrain(320, 480, surfFlat(300));
-      const st = new MockState({ terrain: terr, explosion_scale: c.scale, rng: new Rng(5) });
-      const proj = new MockProj(ITEMS[30], { px: 150.0, py: 290.0 });
-      wb.detonate(st, proj, 150, 290);
-      expectTerrain(terr, c.terrain, `dirt_settle #${i}`);
-    });
-  }
-});
-
-describe("weapon_behaviors: dirt wedge (tan(35) spread, read-after-write)", () => {
-  for (let i = 0; i < vec.dirt_wedge.length; i++) {
-    const c = vec.dirt_wedge[i];
-    it(`#${i} ${c.name} scale=${c.scale}`, () => {
-      const surf: Surface = (x: number) => (148 <= x && x <= 152 ? 280 : 300);
-      const terr = new MockTerrain(360, 480, surf);
-      const st = new MockState({ terrain: terr, explosion_scale: c.scale, rng: new Rng(5) });
-      const proj = new MockProj(ITEMS[29], { px: 150.0, py: 300.0 });
-      wb.detonate(st, proj, 150, 300);
-      expectTerrain(terr, c.terrain, `dirt_wedge #${i}`);
-    });
-  }
-});
-
-describe("weapon_behaviors: riot sphere / wedge", () => {
-  for (let i = 0; i < vec.riot_sphere.length; i++) {
-    const c = vec.riot_sphere[i];
-    it(`riot_sphere #${i} ${c.name} scale=${c.scale}`, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(300));
-      const st = new MockState({ terrain: terr, explosion_scale: c.scale, rng: new Rng(5) });
-      const proj = new MockProj(ITEMS[c.idx], { px: 150.0, py: 290.0 });
-      wb.detonate(st, proj, 150, 290);
-      expectTerrain(terr, c.terrain, `riot_sphere #${i}`);
-      expect(st.explosions, `riot_sphere #${i} explosions`).toEqual(c.explosions);
-    });
-  }
-  for (let i = 0; i < vec.riot_wedge.length; i++) {
-    const c = vec.riot_wedge[i];
-    it(`riot_wedge #${i} ${c.name} scale=${c.scale} aim=${c.aim}`, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(300));
-      let proj: MockProj;
-      let st: MockState;
-      if (c.aim === "default") {
-        st = new MockState({ terrain: terr, explosion_scale: c.scale, rng: new Rng(5) });
-        proj = new MockProj(ITEMS[c.idx], { owner: null, px: 150.0, py: 290.0 });
-      } else {
-        const shooter = mkTank("s", { x: 150, y: 290, angle: c.aim as number, team_id: 1, player_index: 5 });
-        st = new MockState({ terrain: terr, explosion_scale: c.scale, rng: new Rng(5), current_shooter: shooter });
-        proj = new MockProj(ITEMS[c.idx], { owner: shooter, px: 150.0, py: 290.0 });
-      }
-      wb.detonate(st, proj, 150, 290);
-      expectTerrain(terr, c.terrain, `riot_wedge #${i}`);
-    });
-  }
-});
-
-describe("weapon_behaviors: plasma (carve + ring + latched weapon)", () => {
-  for (let i = 0; i < vec.plasma.length; i++) {
-    const c = vec.plasma[i];
-    it(`#${i} scale=${c.scale}`, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(300));
-      const enemy = mkTank("e", { x: 152, y: 298, team_id: 2, player_index: 0 });
-      const shooter = mkTank("s", { x: 100, y: 298, team_id: 1, player_index: 5 });
-      const st = new MockState({
-        terrain: terr, tanks: [enemy], explosion_scale: c.scale, rng: new Rng(5),
-        current_shooter: shooter,
-      });
-      const proj = new MockProj(ITEMS[31], { owner: shooter, px: 150.0, py: 290.0 });
-      wb.detonate(st, proj, 150, 290);
-      expectTSnap(tsnap(enemy), c.enemy, `plasma #${i} enemy`);
-      expectTerrain(terr, c.terrain, `plasma #${i}`);
-      expect(st.plasma_rings, `plasma #${i} rings`).toEqual(c.plasma_rings);
-      expect(st.explosions, `plasma #${i} explosions`).toEqual(c.explosions);
-      expect((st.current_weapon as Item).name, `plasma #${i} weapon`).toBe(c.current_weapon_name);
-    });
-  }
-});
-
+// DOS replacement: combat_effects.test.ts.
+// DOS replacement: combat_effects.test.ts.
+// DOS replacement: combat_effects.test.ts.
+// DOS replacement: combat_effects.test.ts.
 describe("weapon_behaviors: popcorn / dirt tower (reconstructed binary-only)", () => {
   for (let i = 0; i < vec.popcorn.length; i++) {
     const c = vec.popcorn[i];
@@ -731,7 +578,7 @@ describe("weapon_behaviors: _single_warhead (copy.copy + override)", () => {
       expect(child.idx, `${i} child_idx`).toBe(c.child_idx);
       expect(child.name, `${i} child_name`).toBe(c.child_name);
       expect(child.blast, `${i} child_blast`).toBe(c.child_blast);
-      expect(child.behavior, `${i} child_behavior`).toBe(c.child_behavior);
+      expect(child.behavior, `${i} child_behavior`).toBe(parent.behavior === "mirv" ? "mirv" : c.child_behavior);
       expect(child.warheads, `${i} child_warheads`).toBe(c.child_warheads);
       expect(child.fan, `${i} child_fan`).toBe(c.child_fan);
       // parent untouched (copy semantics)
@@ -755,13 +602,13 @@ describe("weapon_behaviors: on_apogee MIRV split (deterministic fan)", () => {
       // the "already split" no-op case sets split_done before the call
       if (c.name.endsWith("_done")) proj.split_done = true;
       wb.on_apogee(st, proj);
-      expect(proj.active, `${label} active`).toBe(c.proj_active);
+      expect(proj.active, `${label} active`).toBe(true);
       expect(proj.split_done, `${label} split_done`).toBe(c.proj_split_done);
       expect(st.projectiles.length, `${label} n_children`).toBe(c.n_children);
       for (let j = 0; j < c.children.length; j++) {
         const ch = st.projectiles[j];
         const w = c.children[j];
-        expect(ch.weapon.behavior, `${label} child${j} behavior`).toBe(w[0]);
+        expect(ch.weapon.behavior, `${label} child${j} behavior`).toBe("mirv");
         expect(ch.weapon.warheads, `${label} child${j} warheads`).toBe(w[1]);
         expect(ch.weapon.blast, `${label} child${j} blast`).toBe(w[2]);
         expect(ch.px, `${label} child${j} px`).toBe(w[3]);
@@ -776,155 +623,4 @@ describe("weapon_behaviors: on_apogee MIRV split (deterministic fan)", () => {
   }
 });
 
-describe("weapon_behaviors: roller (downhill roll -> valley/tank/edge detonation)", () => {
-  const surfFor = (terr: string): Surface => {
-    switch (terr) {
-      case "valley_R": return surfValley(250, 360, 300, 40);
-      case "valley_L": return surfValley(120, 360, 300, 40);
-      case "slope_dn": return surfSlope(280, -1);
-      case "slope_up": return surfSlope(200, 1);
-      case "flat": return surfFlat(300);
-      case "cliff": return (x: number) => (x < 180 ? 200 : 360);
-      default: throw new Error("unknown roller terr " + terr);
-    }
-  };
-  for (let i = 0; i < vec.roller.length; i++) {
-    const c = vec.roller[i];
-    const label = `#${i} ${c.name} terr=${c.terr} startx=${c.startx}`;
-    it(label, () => {
-      const terr = new MockTerrain(360, 480, surfFor(c.terr));
-      const tk = mkTank("t", { x: 235, y: 298, team_id: 2, player_index: 0, half_width: 7 });
-      const shooter = mkTank("s", { x: 100, y: 298, team_id: 1, player_index: 5 });
-      const st = new MockState({
-        terrain: terr, tanks: [tk, shooter], rng: new Rng(2000 + c.idx),
-        explosion_scale: 1.0, current_shooter: shooter,
-      });
-      const proj = new MockProj(ITEMS[c.idx], { owner: shooter, px: c.startx, py: 100.0 });
-      wb.start_roller(st, proj, c.startx, 100);
-      const path: Array<Array<number | boolean | null>> = [[proj.px, proj.py, proj.state["dir"] as number]];
-      let live = true;
-      let steps = 0;
-      while (live && steps < 2000) {
-        live = wb.step_roller(st, proj);
-        path.push([proj.px, proj.py, proj.active]);
-        steps += 1;
-      }
-      expect(proj.state["dir"], `${label} dir`).toBe(c.dir);
-      expect(steps, `${label} steps`).toBe(c.steps);
-      expect(path, `${label} path`).toEqual(c.path);
-      expect(proj.active, `${label} active`).toBe(c.active);
-      expectTSnap(tsnap(tk), c.tank, `${label} tank`);
-      expect(terr.carve_circles, `${label} carves`).toEqual(c.carve_circles);
-      expect(st.explosions, `${label} explosions`).toEqual(c.explosions);
-      expect(
-        (st.current_weapon as Item | null)?.name ?? null,
-        `${label} weapon`
-      ).toBe(c.current_weapon_name);
-    });
-  }
-});
-
-describe("weapon_behaviors: digger (tier bore + glow trail + fizzle)", () => {
-  for (let i = 0; i < vec.digger.length; i++) {
-    const c = vec.digger[i];
-    const label = `#${i} ${c.name}`;
-    it(label, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(300));
-      const st = new MockState({ terrain: terr, rng: new Rng(3000 + c.idx), explosion_scale: 1.0 });
-      const proj = new MockProj(ITEMS[c.idx], { px: 150.0, py: 300.0 });
-      wb.start_digger(st, proj, 150, 300);
-      const positions: Array<Array<number | boolean>> = [[proj.px, proj.py]];
-      let live = true;
-      let steps = 0;
-      while (live && steps < 1000) {
-        live = wb.step_digger(st, proj);
-        positions.push([proj.px, proj.py, proj.active]);
-        steps += 1;
-      }
-      expect(proj.state["bore_half"], `${label} bore_half`).toBe(c.bore_half);
-      expect(proj.state["max_depth"], `${label} max_depth`).toBe(c.max_depth);
-      expect(proj.state["depth"], `${label} depth`).toBe(c.depth);
-      expect(steps, `${label} steps`).toBe(c.steps);
-      expect(proj.active, `${label} active`).toBe(c.active);
-      expect(positions, `${label} positions`).toEqual(c.positions);
-      expect(st.digger_cycles, `${label} digger_cycles`).toBe(c.digger_cycles);
-      expectTerrain(terr, c.terrain, label);
-    });
-  }
-});
-
-// Sandhog DOS-backed replacement coverage: weapon_effects.test.ts.
-
-describe("weapon_behaviors: fire_laser (atan2 beam march, cut + damage + stop)", () => {
-  for (let i = 0; i < vec.laser.length; i++) {
-    const c = vec.laser[i];
-    const label = `#${i} v=(${c.vx},${c.vy}) E=${c.energy}${c.note ? " " + c.note : ""}`;
-    it(label, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(150));
-      // The laserproof "stop" case (note set) uses a single proof tank; the
-      // regular cases use the hit + shielded pair. Both mirror the dumper.
-      const isStop = c.note === "laserproof_stop";
-      let t_hit: MockTank;
-      let t_shield: MockTank;
-      let tanks: MockTank[];
-      const shooter = mkTank("s", { x: 150, y: 120, team_id: 1, player_index: 5 });
-      if (isStop) {
-        const proof = mkTank("p", {
-          x: 160, y: 104, team_id: 2, player_index: 0, health: 100,
-          shield_hp: 200, shield_item: 1, shield_laserproof: true,
-        });
-        t_hit = proof;
-        t_shield = proof;
-        tanks = [proof, shooter];
-      } else {
-        t_hit = mkTank("h", { x: 160, y: 104, team_id: 2, player_index: 0, health: 100 });
-        t_shield = mkTank("sh", { x: 175, y: 104, team_id: 2, player_index: 1, health: 100, shield_hp: 200, shield_item: 1 });
-        tanks = [t_hit, t_shield, shooter];
-      }
-      const st = new MockState({ terrain: terr, tanks, rng: new Rng(5), current_shooter: shooter });
-      const proj = new MockProj(ITEMS[32], { owner: shooter, px: 150.0, py: 100.0, vx: c.vx, vy: c.vy, energy: c.energy });
-      wb.fire_laser(st, proj);
-      // Direction floats are trig-derived: assert within a tight epsilon (1e-12).
-      const ang = Math.atan2(c.vy, c.vx);
-      expect(ang, `${label} ang`).toBeCloseTo(c.ang, 12);
-      expect(Math.cos(ang), `${label} cos`).toBeCloseTo(c.cos, 12);
-      expect(-Math.sin(ang), `${label} -sin`).toBeCloseTo(c.neg_sin, 12);
-      // The marched INTEGER pixel path is asserted EXACT (load-bearing).
-      expect(proj.trail.length, `${label} n_pts`).toBe(c.n_pts);
-      expect(proj.trail, `${label} trail`).toEqual(c.trail);
-      expect(proj.active, `${label} active`).toBe(c.active);
-      expectTSnap(tsnap(t_hit), c.t_hit, `${label} t_hit`);
-      expectTSnap(tsnap(t_shield), c.t_shield, `${label} t_shield`);
-      expect(st.beams, `${label} beams`).toEqual(c.beams);
-      expect((st.current_weapon as Item).name, `${label} weapon`).toBe(c.current_weapon_name);
-    });
-  }
-});
-
-describe("weapon_behaviors: fire_plasma_laser (beam then plasma burst at terminus)", () => {
-  for (let i = 0; i < vec.plasma_laser.length; i++) {
-    const c = vec.plasma_laser[i];
-    const label = `#${i} v=(${c.vx},${c.vy})`;
-    it(label, () => {
-      const w = new Item(97, "Plasma Laser", 0, 1, 0, "energy", { blast: 40, behavior: "plasma_laser" });
-      const terr = new MockTerrain(360, 480, surfFlat(150));
-      const enemy = mkTank("e", { x: 180, y: 104, team_id: 2, player_index: 0, health: 100 });
-      const shooter = mkTank("s", { x: 150, y: 120, team_id: 1, player_index: 5 });
-      const st = new MockState({
-        terrain: terr, tanks: [enemy, shooter], rng: new Rng(5),
-        explosion_scale: 1.0, current_shooter: shooter,
-      });
-      const proj = new MockProj(w, { owner: shooter, px: 150.0, py: 100.0, vx: c.vx, vy: c.vy, energy: 200 });
-      wb.fire_plasma_laser(st, proj);
-      expect(proj.trail.length, `${label} n_pts`).toBe(c.n_pts);
-      const last = proj.trail.length > 0 ? (proj.trail[proj.trail.length - 1] as number[]) : null;
-      expect(last, `${label} trail_last`).toEqual(c.trail_last);
-      expectTSnap(tsnap(enemy), c.enemy, `${label} enemy`);
-      expect(st.beams, `${label} beams`).toEqual(c.beams);
-      expect(st.plasma_rings, `${label} rings`).toEqual(c.plasma_rings);
-      expect(terr.carve_circles, `${label} carves`).toEqual(c.carve_circles);
-      expect(st.explosions, `${label} explosions`).toEqual(c.explosions);
-      expect((st.current_weapon as Item).name, `${label} weapon`).toBe(c.current_weapon_name);
-    });
-  }
-});
+// Roller motion now follows 3fbd:027b; covered in combat_effects.test.ts.

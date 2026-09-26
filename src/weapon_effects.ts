@@ -1,5 +1,7 @@
 /** DOS 1.5 effects recovered from the actual dispatch table, not the Python
  * approximations. See oracle/WEAPON_FIDELITY.md for addresses and limitations. */
+import { startBlast, stepCombatEffect, type CombatEffect } from "./combat_effects";
+import { stepDeathEffect, type DeathEffect } from "./death_effects";
 import * as C from "./constants";
 import * as damage from "./damage";
 import { pyRound } from "./damage";
@@ -38,6 +40,7 @@ export interface Tunnel {
 }
 export interface SandhogEffect {
   kind: "sandhog";
+  digger?: boolean;
   tunnels: Tunnel[];
   remaining: number;
   branchClock: number;
@@ -45,7 +48,7 @@ export interface SandhogEffect {
   // Short-lived charge stipple, separate from the terrain collision plane.
   charges: Array<{ x: number; y: number; radius: number; age: number; pixels: Point[] }>;
 }
-export type WeaponEffect = FunkyEffect | SandhogEffect;
+export type WeaponEffect = FunkyEffect | SandhogEffect | CombatEffect | DeathEffect;
 
 // DS:0ad6 and DS:0af6, in original direction order (N, NE, E, ...).
 export const TUNNEL_DIRECTIONS: readonly Point[] = [
@@ -68,14 +71,15 @@ export function stepWeaponEffect(state: BState, proj: BProjectile): void {
   state.current_shooter = proj.owner;
   state.current_weapon = proj.weapon;
   try {
-    if (effect.kind === "funky") stepFunky(state, proj, effect);
-    else {
+    if (effect.kind === "death") stepDeathEffect(state, proj, effect);
+    else if (effect.kind === "funky") stepFunky(state, proj, effect);
+    else if (effect.kind === "sandhog") {
       // Fixed visual cadence, independent of ballistic substeps and CPU speed.
       for (let i = 0; i < 16 && effect.tunnels.length; i++) stepSandhogTick(state, proj, effect);
       effect.charges.forEach((c) => c.age++);
       effect.charges = effect.charges.filter((c) => c.age < 6);
       proj.active = effect.tunnels.length > 0 || effect.charges.length > 0;
-    }
+    } else stepCombatEffect(state, proj, effect);
   } finally {
     state.current_shooter = shooter;
     state.current_weapon = weapon;
@@ -167,29 +171,18 @@ function stepFunky(state: BState, proj: BProjectile, e: FunkyEffect): void {
   } else if (e.phase === "hold" && ++e.hold >= 39) {
     // 2dce:05c5: final ordinary blast, radius from Baby Nuke's effective entry.
     const radius = pyRound(40 * state.explosion_scale);
-    state.terrain.carve_circle(e.x, e.y, radius);
-    state.add_explosion(e.x, e.y, radius);
-    // Standard blast's weapon-index multiplier and >100 -> 110 cap,
-    // 4d1e:0352..0367. Keep this correction local to the recovered weapon.
-    for (const tank of state.tanks) {
-      if (!tank.alive) continue;
-      const d = Math.sqrt((tank.x - e.x) ** 2 + (tank.y - e.y) ** 2);
-      if (d < radius) {
-        const amount = pyRound((radius - d) * 100 / radius) * (proj.weapon.idx + 1);
-        damage.apply_tank_damage(state, tank, amount > 100 ? 110 : amount);
-      }
-    }
+    startBlast(state, proj, e.x, e.y, radius);
     proj.active = false;
   }
 }
 
-export function startSandhog(state: BState, proj: BProjectile, x: number, y: number): void {
+export function startSandhog(state: BState, proj: BProjectile, x: number, y: number, digger = false): void {
   const tunnel: Tunnel = { x, y, next: null, direction: 0, straight: 20 };
   const effect: SandhogEffect = {
-    kind: "sandhog", tunnels: [tunnel], remaining: proj.weapon.warheads - 1,
+    kind: "sandhog", digger, tunnels: [tunnel], remaining: (digger ? Math.abs(proj.weapon.blast) * 2 : proj.weapon.warheads) - 1,
     branchClock: 0, spawned: 1, charges: [],
   };
-  chooseTunnelStep(state, tunnel);
+  chooseTunnelStep(state, tunnel, digger);
   proj.weaponEffect = effect;
   proj.px = proj.sx = x;
   proj.py = proj.sy = y;
@@ -206,7 +199,7 @@ function wrapX(state: BState, x: number): number {
   return x;
 }
 
-function chooseTunnelStep(state: BState, t: Tunnel): void {
+function chooseTunnelStep(state: BState, t: Tunnel, digger = false): void {
   const choices: number[] = [];
   TUNNEL_DIRECTIONS.forEach(([dx, dy], i) => {
     const x = wrapX(state, t.x + dx), y = t.y + dy;
@@ -215,7 +208,7 @@ function chooseTunnelStep(state: BState, t: Tunnel): void {
   if (!choices.length) { t.next = null; return; }
   let direction = choices[state.rng.pick(choices.length)];
   // RNG is still consumed when the persistence rule overrides the choice.
-  if (choices.includes(t.direction)) {
+  if (!digger && choices.includes(t.direction)) {
     if (--t.straight < 1) t.straight = 20;
     else direction = t.direction;
   }
@@ -237,9 +230,10 @@ export function stepSandhogTick(state: BState, proj: BProjectile, e: SandhogEffe
   for (let i = 0; i < e.tunnels.length; i++) {
     const t = e.tunnels[i];
     if (t.next) [t.x, t.y] = t.next;
-    chooseTunnelStep(state, t);
+    chooseTunnelStep(state, t, e.digger);
     state.terrain.write(t.x, t.y, C.COL_SKY);
     if (!t.next) {
+      if (!e.digger) {
       const radius = Math.max(1, pyRound(10 * state.explosion_scale));
       const pixels: Point[] = [];
       const marked = new Set<number>();
@@ -278,6 +272,7 @@ export function stepSandhogTick(state: BState, proj: BProjectile, e: SandhogEffe
           pyRound((radius - d) * 100 / radius) * (proj.weapon.idx + 1));
       }
       e.charges.push({ x: t.x, y: t.y, radius, age: 0, pixels });
+      }
       // Removal swaps in the last record; preserve DOS iteration/RNG order.
       e.tunnels[i] = e.tunnels[e.tunnels.length - 1];
       e.tunnels.pop();
@@ -289,7 +284,7 @@ export function stepSandhogTick(state: BState, proj: BProjectile, e: SandhogEffe
     const child: Tunnel = {
       x: parent.x, y: parent.y, next: null, direction: (parent.direction + 1) % 8, straight: 20,
     };
-    chooseTunnelStep(state, child);
+    chooseTunnelStep(state, child, e.digger);
     if (child.next) {
       e.tunnels.push(child); e.remaining--; e.spawned++; e.branchClock = 0;
     }
