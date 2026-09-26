@@ -23,10 +23,14 @@ export interface SoilEffect {
 }
 export interface FluidEffect {
   kind: "fluid";
-  dirt: boolean; hot: boolean; phase: "flow" | "burn";
+  dirt: boolean; hot: boolean; phase: "flow" | "ignite" | "burn" | "cleanup";
   frontier: Point[]; points: Point[]; occupied: Set<number>;
   samples: Point[]; limit: number; clock: number;
   flames: Array<{ x: number; y: number; r: number; color: number }>;
+  emitter: number; row: number; height: number; flameX: number; cycle: number;
+  death?: boolean;
+  dirtColors?: number[];
+  flowCycle: [number, number]; flowColor: [number, number, number];
 }
 export type CombatEffect = BlastEffect | SoilEffect | FluidEffect;
 
@@ -180,75 +184,110 @@ export function startFluid(state: BState, shot: BProjectile, x: number, y: numbe
   while (y > 2 && state.terrain.is_solid(x, y)) y--;
   const effect: FluidEffect = { kind: "fluid", dirt, hot: shot.weapon.idx === 9, phase: "flow",
     frontier: [[x, y]], points: [[x, y]], occupied: new Set([y * state.terrain.w + x]), samples: [[x, y]],
-    limit: dirt || shot.weapon.idx === 9 ? 20 : 15, clock: 0, flames: [] };
-  if (dirt) state.terrain.write(x, y, C.DIRT_SHADE_LO);
+    limit: dirt || shot.weapon.idx === 9 ? 20 : 15, clock: 0, flames: [],
+    emitter: 0, row: 0, height: 0, flameX: x, cycle: 0, flowCycle: [0, 0], flowColor: [240, 80, 80] };
+  if (dirt) {
+    // 323a:0bcb/0c20 chooses from the active terrain shades 88..103 (or 80
+    // for unshaded dirt). The browser terrain owns pixels rather than a DOS
+    // color bitmask, so derive the same ascending table from its used shades.
+    const grid = (state.terrain as BState["terrain"] & { grid?: Uint8Array }).grid;
+    effect.dirtColors = grid ? [...new Set(grid)].filter((c) => c >= 88 && c < 104).sort((a, b) => a - b) : [];
+    if (!effect.dirtColors.length) effect.dirtColors = [80];
+    state.terrain.write(x, y, effect.dirtColors[state.rng.pick(effect.dirtColors.length)]);
+  }
   controller(state, shot, effect);
 }
 
 /** 2d4f:0258: six tall flame plumes, not ballistic fireworks. */
 export function startDeathFlames(state: BState, shot: BProjectile, x: number, y: number): void {
-  const e: FluidEffect = { kind: "fluid", dirt: false, hot: false, phase: "burn", frontier: [], points: [],
-    occupied: new Set(), samples: [], limit: 0, clock: 0, flames: [] };
-  for (let n = 0; n < 6; n++) {
-    let xx = x + state.rng.pick(11) - 5;
-    const height = state.rng.pick(10) + 10;
-    for (let row = 0; row < height; row++) {
-      for (let band = 0; band < 3 && height - row > band * 2; band++) {
-        e.flames.push({ x: xx, y: y - 2 * row, r: (height - row - 2 * band) >> 1, color: 199 - band * 10 });
-        state.rng.pick(50);
-      }
-      xx += state.rng.pick(5) - 2;
-    }
-  }
+  const e: FluidEffect = { kind: "fluid", dirt: false, hot: false, phase: "ignite", frontier: [], points: [],
+    occupied: new Set(), samples: Array.from({ length: 6 }, () => [x, y]), limit: 0, clock: 0, flames: [],
+    emitter: 0, row: 0, height: 0, flameX: x, cycle: 0, death: true, flowCycle: [0, 0], flowColor: [240, 80, 80] };
   controller(state, shot, e);
 }
 
 function stepFluid(state: BState, shot: BProjectile, e: FluidEffect): void {
+  if (e.phase === "cleanup") { shot.active = false; return; }
   if (e.phase === "burn") {
     sfx.beep(state.rng.pick(50), 8, state.cfg.is_on("SOUND"));
-    if (++e.clock >= 50) shot.active = false;
+    e.cycle++;
+    if (++e.clock >= 50) e.phase = "cleanup";
     return;
   }
+  if (e.phase === "ignite") { growFlame(state, e); return; }
   const w = state.terrain.w, h = state.terrain.h;
+  const cfg = state.cfg as BState["cfg"] & { wind?: number; live_elastic?: number; elastic?: number };
+  const wrap = (cfg.live_elastic ?? cfg.elastic) === 5;
+  const sideX = (x: number) => wrap ? (x < 1 ? w - 2 : x > w - 2 ? 1 : x) : x;
   const free = (x: number, y: number) => x > 0 && x < w - 1 && y > 1 && y < h - 1 &&
     !state.terrain.is_solid(x, y) && !e.occupied.has(y * w + x);
+  const nextPoint = (x: number, y: number): Point | undefined => {
+    const side = (cfg.wind ?? 0) > 0 ? 1 : -1;
+    return ([[x, y + 1], [sideX(x + side), y], [sideX(x - side), y], [x, y - 1]] as Point[])
+      .find(([xx, yy]) => free(xx, yy));
+  };
+  let full = false;
   for (let step = 0; step < 8 && e.frontier.length && e.samples.length < e.limit && e.clock++ < 1000; step++) {
     e.frontier.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
-    const [x, y] = e.frontier[0];
-    const wind = (state.cfg as BState["cfg"] & { wind?: number }).wind ?? 0;
-    const side = wind > 0 ? 1 : -1;
-    const next = [[x, y + 1], [x + side, y], [x - side, y], [x, y - 1]].find(([xx, yy]) => free(xx, yy)) as Point | undefined;
-    if (!next) { e.frontier.shift(); continue; }
-    e.frontier.push(next); e.points.push(next); e.occupied.add(next[1] * w + next[0]);
-    if (e.dirt) state.terrain.write(next[0], next[1], C.DIRT_SHADE_LO);
-    if ((e.points.length - 1) % 20 === 0) e.samples.push(next);
-    if (e.frontier.length >= 100) break;
-  }
-  if (e.frontier.length && e.frontier.length < 100 && e.samples.length < e.limit && e.clock < 1000) return;
-  if (e.dirt) { shot.active = false; return; }
-  // 2d4f:014e: rising, narrowing disks in bands 199, 189, 179.
-  for (const [sx, sy] of e.samples) {
-    const height = 5 + state.rng.pick(10);
-    let x = sx;
-    for (let row = 0; row < height; row++) {
-      for (let band = 0; band < 3 && height - row > band * 2; band++) {
-        const r = (height - row - band * 2) >> 1, y = sy - 2 * row;
-        e.flames.push({ x, y, r, color: 199 - band * 10 });
-        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-          if (dx * dx + dy * dy <= r * r && state.terrain.is_dirt(x + dx, y + dy))
-            state.terrain.write(x + dx, y + dy, 81 + state.rng.pick(5));
-        }
-        state.rng.pick(50); // PC speaker pitch draw, even when sound is disabled
-      }
-      x += state.rng.pick(5) - 2;
+    const parent = e.frontier[0], [x, y] = parent;
+    const next = nextPoint(x, y);
+    if (next) {
+      // 36e6:03ac..0407 deposits before attempting allocation. The 100 slots
+      // bound the live queue, not the number of pixels ever deposited.
+      full = e.frontier.length === 100;
+      if (!full) e.frontier.push(next);
+      e.points.push(next); e.occupied.add(next[1] * w + next[0]);
+      if (e.dirt) state.terrain.write(next[0], next[1], e.dirtColors![state.rng.pick(e.dirtColors!.length)]);
+      if ((e.points.length - 1) % 20 === 0) e.samples.push(next);
     }
+    // 36e6:013e/0437 cycles the flowing fuel palette on odd deposits,
+    // consuming two draws even when sound is disabled.
+    if (!e.dirt && (e.points.length - 1) % 2 === 1) {
+      e.flowCycle[0] = (e.flowCycle[0] + 2 + state.rng.pick(18)) % 40;
+      e.flowCycle[1] = (e.flowCycle[1] + 2 + state.rng.pick(8)) % 10;
+      e.flowColor = [252, 4 * (10 + e.flowCycle[0]), 4 * (10 + e.flowCycle[1])];
+    }
+    // 36e6:0448..04c2 retires the OLD parent immediately, even if the new
+    // pixel sorts ahead of it. Delaying this check strands reusable slots.
+    if (!nextPoint(x, y)) e.frontier.splice(e.frontier.indexOf(parent), 1);
+    if (full) break;
   }
+  if (!full && e.frontier.length && e.samples.length < e.limit && e.clock < 1000) return;
+  if (e.dirt) { shot.active = false; return; }
+  e.phase = "ignite"; e.clock = 0;
+}
+
+/** 2d4f:014e / 36e6:04eb: finish each emitter before damaging nearby tanks.
+ * One row per 60 Hz simulation tick is the browser's visible timing adapter. */
+function growFlame(state: BState, e: FluidEffect): void {
+  const [sx, sy] = e.samples[e.emitter];
+  if (e.height === 0) {
+    e.flameX = sx + (e.death ? state.rng.pick(11) - 5 : 0);
+    e.height = (e.death ? 10 : 5) + state.rng.pick(10);
+  }
+  const x = e.flameX, y = sy - 2 * e.row;
+  for (let band = 0; band < 3 && e.height - e.row > band * 2; band++) {
+    const r = (e.height - e.row - band * 2) >> 1;
+    e.flames.push({ x, y, r, color: 199 - band * 10 });
+    if (!e.death) {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy <= r * r && state.terrain.is_dirt(x + dx, y + dy))
+          state.terrain.write(x + dx, y + dy, 81 + state.rng.pick(5));
+      }
+    }
+    sfx.beep(state.rng.pick(50), 8, state.cfg.is_on("SOUND"));
+  }
+  e.flameX += state.rng.pick(5) - 2;
+  if (++e.row < e.height) return;
+  e.cycle++;
+  if (!e.death) sfx.beep(state.rng.pick(50), 8, state.cfg.is_on("SOUND"));
   // Each sample is a heat source, not a generic circular explosion.
-  for (const [x, y] of e.samples) for (const t of state.tanks) {
-    const d = Math.sqrt((t.x - x) ** 2 + (t.y - y) ** 2);
+  if (!e.death) for (const t of state.tanks) {
+    const d = Math.sqrt((t.x - sx) ** 2 + (t.y - sy) ** 2);
     if (d < (e.hot ? 40 : 25)) damage.apply_tank_damage(state, t, damage.pyRound((e.hot ? 50 : 30) - d));
   }
-  e.phase = "burn"; e.clock = 0;
+  e.row = 0; e.height = 0;
+  if (++e.emitter === e.samples.length) { e.phase = "burn"; e.clock = 0; }
 }
 
 /** 2d4f:00cc: three ten-entry VGA ramps, rotated during the fifty burn ticks. */

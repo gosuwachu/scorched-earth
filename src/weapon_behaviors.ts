@@ -150,9 +150,18 @@ export function eff_radius(state: BState, weapon: Item): number {
 // ---------------------------------------------------------------------------
 export function detonate(state: BState, proj: BProjectile, x: number, y: number): void {
   state.current_weapon = proj.weapon;
+  if (fizzleUnsplit(state, proj)) return;
   if (proj.weapon.behavior !== "tracer") sfx.play(proj.weapon.category === "riot" ? "riot" : proj.weapon.category === "nuclear" ? "nuke" : "explosion", state.cfg.is_on("SOUND"), { size: eff_radius(state, proj.weapon) });
   const fn = _DETONATORS[proj.weapon.behavior] ?? _det_explosive;
   fn(state, proj, x, y);
+}
+
+/** 35d5:024a..026d: a live split callback makes any early impact a dud. */
+export function fizzleUnsplit(state: BState, proj: BProjectile): boolean {
+  if (proj.weapon.behavior !== "mirv" || proj.split_done) return false;
+  sfx.beep(200, 40, state.cfg.is_on("SOUND"));
+  proj.active = false;
+  return true;
 }
 
 function _det_explosive(state: BState, proj: BProjectile, x: number, y: number): void {

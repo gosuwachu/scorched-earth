@@ -86,11 +86,13 @@ export function stepWeaponEffect(state: BState, proj: BProjectile): void {
   }
 }
 
-export function startFunky(state: BState, proj: BProjectile, x: number, y: number): void {
+export function startFunky(state: BState, proj: BProjectile, x: number, y: number, spread: "impact" | "field" = "impact"): void {
   const count = 5 + state.rng.pick(6); // 2dce:01c5
   const extent = Math.abs(proj.weapon.blast);
-  const targets = Array.from({ length: count }, () =>
-    Math.max(1, Math.min(state.terrain.w - 2, x + state.rng.pick(2 * extent) - extent)));
+  // 2dce:01e9: death case 271b:01f2 passes -1 for the entire clip width.
+  const targets = Array.from({ length: count }, () => spread === "field"
+    ? 1 + state.rng.pick(state.terrain.w - 3)
+    : Math.max(1, Math.min(state.terrain.w - 2, x + state.rng.pick(2 * extent) - extent)));
   proj.weaponEffect = {
     kind: "funky", age: 0, x, y, targets, index: -1, phase: "grow", hold: 0, arc: null,
     trails: [], bursts: [{ x, y, radius: 20, grown: 0, color: 0 }],

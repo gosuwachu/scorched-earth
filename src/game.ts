@@ -34,6 +34,7 @@
  * j = _randbelow(i+1)) against _pyrandom, where _randbelow(i+1) == _pyrandom.pick(i+1).
  */
 import * as C from "./constants";
+import { shieldContains } from "./shields";
 import * as physics from "./physics";
 import * as wb from "./weapon_behaviors";
 import { startBlast, startSoil, startDeathFlames } from "./combat_effects";
@@ -1516,7 +1517,6 @@ export class GameState {
         continue;
       }
       this._mag_deflect(proj);
-      this._force_deflect(proj);
       this._collect_trace(proj); // TRACE-gated persistent path
       const hit = this._check_collision(proj);
       if (hit) {
@@ -1642,61 +1642,25 @@ export class GameState {
     }
   }
 
-  _force_deflect(proj: Projectile): void {
-    // Force Shield (shield flag & 1): a single MIRROR REFLECTION when the shell
-    // reaches the shield ring, NOT a per-step radial push.  Byte-exact port of
-    // FUN_2a4a_2487, latched per ring-entry.
-    const latched = proj.state["force_reflect_in_ring"] as boolean | undefined;
-    let in_ring_now = false;
-    for (const t of this.tanks) {
-      if (!(t.alive && t.shield_hp > 0 && t.shield_deflect)) {
-        continue;
-      }
-      const ring_r = t.half_width + C.FORCE_SHIELD_RING_PAD; // drawn outer ring
-      // ring-entry test against the DRAWN ring centre (y-4 pivot, render.py)
-      const ddx = proj.sx - t.x;
-      const ddy = proj.sy - (t.y - 4);
-      if (ddx * ddx + ddy * ddy >= ring_r * ring_r) {
-        continue;
-      }
-      in_ring_now = true;
-      if (latched) {
-        // already bounced this entry
-        continue;
-      }
-      // the reflection NORMAL uses the tank base centre +0xe/+0x10 (x, base y).
-      const ndx = proj.sx - t.x;
-      const ndy = t.y - proj.sy;
-      const ev_x = proj.vx;
-      const ev_y = -proj.vy; // engine vy is screen-down; port vy is up
-      // sign-test early-out (:27-75): skip when departing on both axes.
-      if (_sgn(ndx) === _sgn(ev_x) && _sgn(ndy) === _sgn(ev_y)) {
-        proj.state["force_reflect_in_ring"] = true;
-        continue;
-      }
-      // delta = (vel_ang - normal_ang) * 2.0 (ground-truth operand order).
-      const normal_ang = Math.atan2(ndy, ndx);
-      const vel_ang = Math.atan2(ev_y, ev_x);
-      const delta = (vel_ang - normal_ang) * C.FORCE_REFLECT_ANGLE_K;
-      const cos_d = Math.cos(delta); // FUN_1000_13d1 -> ST2
-      const sin_d = Math.sin(delta); // FUN_1000_1204 -> ST3
-      // exact engine rotation (FUN_2a4a_2487.c:82-84, dVar1 = -e4dc):
-      //   e4dc' = -cos*evx - sin*evy ; e4e4' = sin*evx - cos*evy
-      const nevx = (-cos_d * ev_x - sin_d * ev_y) * C.FORCE_REFLECT_RESTITUTION;
-      const nevy = (sin_d * ev_x - cos_d * ev_y) * C.FORCE_REFLECT_RESTITUTION;
-      proj.vx = nevx;
-      proj.vy = -nevy; // engine e4e4 is screen-down; port vy is up
-      damage.shield_chip(t as unknown as damage.Tank); // the ring takes the hit (FUN_4912_04b2)
-      proj.state["force_reflect_in_ring"] = true;
-    }
-    if (!in_ring_now && latched) {
-      // left every ring -> re-arm
-      proj.state["force_reflect_in_ring"] = false;
-    }
+  private _force_deflect(proj: Projectile, t: Tank, x: number, y: number): void {
+    // 2a4a:2487: reflect at the first swept outline pixel, using the tank pivot.
+    const ndx = x - t.x, ndy = t.y - y;
+    const evx = proj.vx, evy = -proj.vy;
+    proj.px = proj.sx = x; proj.py = proj.sy = y;
+    proj.state.forceContact = [t.player_index, x, y];
+    if (_sgn(ndx) === _sgn(evx) && _sgn(ndy) === _sgn(evy)) return;
+    const delta = (Math.atan2(evy, evx) - Math.atan2(ndy, ndx)) * C.FORCE_REFLECT_ANGLE_K;
+    const cos = Math.cos(delta), sin = Math.sin(delta);
+    // 2a4a:26ba..2713: Force reflection costs round(speed / 100), before
+    // multiplying speed by 0.7. It is not the ordinary ten-point impact.
+    const amount = Math.min(t.shield_hp, pyRound(Math.sqrt(evx * evx + evy * evy) / 100));
+    damage.apply_tank_damage(this as unknown as damage.State, t, amount);
+    proj.vx = (-cos * evx - sin * evy) * C.FORCE_REFLECT_RESTITUTION;
+    proj.vy = -(sin * evx - cos * evy) * C.FORCE_REFLECT_RESTITUTION;
   }
 
   _check_collision(proj: Projectile): Hit | null {
-    // Walk the segment prev->current; first tank bbox or dirt pixel.
+    // Walk prev->current so a fast shell cannot skip a one-pixel shield outline.
     const x0 = pyInt(proj.prev_px);
     const y0 = pyInt(proj.prev_py);
     const x1 = proj.sx;
@@ -1706,27 +1670,19 @@ export class GameState {
         return { 0: "terrain", 1: null, 2: x, 3: this.h - 2 };
       }
       for (const t of this.tanks) {
-        if (
-          t.alive &&
-          t !== proj.owner &&
-          Math.abs(t.x - x) <= t.half_width &&
-          0 <= t.y - y &&
-          t.y - y <= 10
-        ) {
-          return { 0: "tank", 1: t, 2: x, 3: y };
+        if (!t.alive) continue;
+        if (t === proj.owner && Math.hypot(x - t.x, y - t.y) > 16) proj.state.ownerCleared = true;
+        if (t !== proj.owner && t.shield_hp > 0 && !(t as Tank & { chute_descent?: unknown }).chute_descent &&
+            shieldContains(t.shield_item, x - t.x, y - t.y) && !this.terrain.is_dirt(x, y)) {
+          // 2a4a:1583: the Mag Deflector's painted arcs do not intercept.
+          const last = proj.state.forceContact as number[] | undefined;
+          if (t.shield_item !== weapons.SLOT_MAG_DEFLECTOR &&
+              !(last && x === x0 && y === y0 && last[0] === t.player_index && last[1] === x && last[2] === y))
+            return { 0: "shield", 1: t, 2: x, 3: y };
         }
-        // a tank can hit itself only after the shell has left the muzzle
-        if (
-          t === proj.owner &&
-          proj.owner !== null &&
-          Math.abs(t.x - x) <= t.half_width &&
-          0 <= t.y - y &&
-          t.y - y <= 10 &&
-          proj.armed &&
-          Math.hypot(x - proj.owner.x, y - (proj.owner.y - 4)) > 16
-        ) {
+        if (Math.abs(t.x - x) <= t.half_width && 0 <= t.y - y && t.y - y <= 10 &&
+            (t !== proj.owner || (proj.armed && proj.state.ownerCleared)))
           return { 0: "tank", 1: t, 2: x, 3: y };
-        }
       }
       if (0 <= x && x < this.w && 0 <= y && y < this.h && this.terrain.is_dirt(x, y)) {
         return { 0: "terrain", 1: null, 2: x, 3: y };
@@ -1750,18 +1706,24 @@ export class GameState {
     const y = hit[3];
     const beh = proj.weapon.behavior;
     this.last_landing = [x, y];
-    if (kind === "tank" && tank !== null) {
+    const shield = kind === "shield" && tank !== null && tank.shield_hp > 0;
+    if (shield && tank.shield_deflect) {
+      this._force_deflect(proj, tank, x, y);
+      return;
+    }
+    if (wb.fizzleUnsplit(this as unknown as wb.BState, proj as unknown as wb.BProjectile)) return;
+    if ((kind === "tank" || kind === "shield") && tank !== null) {
       // Actual handlers: 251b:000a (Sandhog) and 2dce:0000 (Funky).
       // Sandhog contact chips 10 HP; a Funky intercepted by a shield chips
       // 10 and fizzles. Neither shield interception spills into the hull.
-      if (beh === "sandhog" || beh === "digger" || (beh === "funky" && tank.shield_hp > 0)) {
+      if (beh === "sandhog" || beh === "digger" || (beh === "funky" && shield)) {
         const previousShooter = this.current_shooter;
         const previousWeapon = this.current_weapon;
         this.current_shooter = proj.owner;
         this.current_weapon = proj.weapon;
         try {
           damage.apply_tank_damage(this as unknown as damage.State, tank as unknown as damage.Tank,
-            tank.shield_hp > 0 ? Math.min(10, tank.shield_hp) : 10);
+            shield ? Math.min(10, tank.shield_hp) : 10);
         } finally {
           this.current_shooter = previousShooter;
           this.current_weapon = previousWeapon;
@@ -1787,20 +1749,15 @@ export class GameState {
         proj.active = false;
         return;
       }
-      if (beh === "roller" && tank.shield_hp > 0) {
+      if (beh === "roller" && shield) {
         wb.start_roller(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
         return;
       }
-      if (tank.shield_hp > 0 && beh !== "laser") {
+      if (shield && beh !== "laser") {
         if (beh === "digger") {
           proj.active = false; // digger fizzles on a tank
         } else {
           damage.apply_tank_damage(this as unknown as damage.State, tank as unknown as damage.Tank, Math.min(10, tank.shield_hp));
-          // a direct hit is a shield event: a non-failproof shield may fail
-          damage.shield_failure_check(
-            this as unknown as damage.State,
-            tank as unknown as damage.Tank,
-          );
           sfx.play("shield_hit", this.cfg.is_on("SOUND"));
           proj.active = false;
         }
@@ -1900,7 +1857,7 @@ export class GameState {
   combat_throe(kind: string, x: number, y: number, tank?: Tank): void {
     const shot = new Projectile(this.current_shooter, weapons.ITEMS[kind === "funky" ? 5 : 29], x, y, 0, 0);
     if (kind === "funky") {
-      startFunky(this as unknown as wb.BState, shot as unknown as wb.BProjectile, x, y);
+      startFunky(this as unknown as wb.BState, shot as unknown as wb.BProjectile, x, y, "field");
       this.projectiles.push(shot);
     } else if (kind === "spiral" || kind === "ring" || kind === "sink" || kind === "debris") {
       startDeathEffect(this as unknown as wb.BState, shot as unknown as wb.BProjectile, kind, tank);

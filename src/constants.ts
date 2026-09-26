@@ -123,9 +123,9 @@ export const MAG_PUSH_HALF_W = 15;         // |round(px - tank_x)| <= 15  (cmp d
 export const MAG_PUSH_HEIGHT_DIV = 4;      // 0 < round(tank_y - py) <= (screen_h-1)/4 (sar ax,2)
 export const FORCE_REFLECT_ANGLE_K = 2.0;  // DAT_5f38_1d5c f32: mirror-reflection angle doubling
 export const FORCE_REFLECT_RESTITUTION = 0.7;  // DAT_5f38_1d60 f64: post-reflect speed scale
-// The reflect fires on contact with the drawn shield ring; render.py draws the
-// Force ring at half_width+8, so the flight-loop reflect boundary uses the same.
-export const FORCE_SHIELD_RING_PAD = 8;    // ring radius = tank.half_width + 8 (render.py:423)
+// Historical Python API only. Live collision/rendering use shields.ts and
+// the DOS tier radii, not half_width plus this guessed padding.
+export const FORCE_SHIELD_RING_PAD = 8;
 // FACT (RECOVERED_SHIELDS.md T2): v1.5 has NO stochastic shield failure. Every
 // writer of the shield-HP field is deterministic; no RNG call on any shields path.
 // The prior (1,200) was fabricated; damage.shield_failure_check is now a no-op.

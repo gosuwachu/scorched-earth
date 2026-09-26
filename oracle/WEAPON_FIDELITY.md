@@ -39,6 +39,13 @@ from `DS:1f62`; the colored circles remain during the palette cycle. Cleanup end
 with the ordinary scaled radius-40 blast referenced at `2dce:05c5`. A shield
 intercepts the original projectile with a 10-point chip and no chain.
 
+The fired range is exactly `x + random(160) - 80`, clipped to the field, and
+does not scale with resolution or explosion size. The Funky tank-death case
+(`271b:01f2`) instead passes -1 to `2dce:01b4`; its branch at `01e9` picks
+destinations across the entire clip width, with the right endpoint exclusive.
+These two modes now have separate callers. The fixed pixel range naturally
+occupies a smaller fraction of a wider browser battlefield.
+
 Sandhogs follow available neighboring dirt instead of homing on a tank. The
 direction and widening tables are at `DS:0ad6` and `DS:0af6`. `251b:03f1` consumes
 a direction choice, then applies direction persistence with a 20-step counter.

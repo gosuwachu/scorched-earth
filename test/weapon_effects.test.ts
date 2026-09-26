@@ -249,7 +249,7 @@ describe("game integration", () => {
       const target = gs.tanks[1]; target.shield_hp = shield;
       const p = new Projectile(gs.tanks[0], ITEMS[idx], target.x, target.y, 0, -1);
       gs.projectiles.push(p);
-      gs._resolve_hit(p, ["tank", target, target.x, target.y]);
+      gs._resolve_hit(p, [shield ? "shield" : "tank", target, target.x, target.y]);
       expect(target.health).toBe(shield ? 100 : 90);
       expect(target.shield_hp).toBe(Math.max(0, shield - 10));
       expect(p.active).toBe(false);
@@ -261,7 +261,7 @@ describe("game integration", () => {
     const target = gs.tanks[1]; target.shield_hp = 100;
     const p = new Projectile(gs.tanks[0], ITEMS[5], target.x, target.y, 0, -1);
     gs.projectiles.push(p);
-    gs._resolve_hit(p, ["tank", target, target.x, target.y]);
+    gs._resolve_hit(p, ["shield", target, target.x, target.y]);
     expect(target.shield_hp).toBe(90);
     expect(p.active).toBe(false);
     expect(gs.projectiles.some((p) => p.weaponEffect)).toBe(false);

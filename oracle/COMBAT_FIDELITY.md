@@ -45,9 +45,50 @@ and reconnect preserve ammunition and Battery counts.
 Terrain settling now animates all unsupported runs while preserving their
 shade order. Cavern ceilings and Suspend Dirt remain respected. Falling tanks,
 parachutes, collateral deaths, and settling must finish before turn advancement.
-Existing parachute geometry and shield deployment/repulsion are retained;
-shield interception, Laser recharge, terrain burial and delayed damage use the
-corrected weapon paths.
+Existing parachute geometry and shield deployment are retained. Shield outlines
+and swept contact handling now use the original tier geometry; see the feedback
+audit below. Laser recharge, terrain burial and delayed damage use the corrected
+weapon paths.
+
+## Gameplay feedback audit
+
+- Liquid Dirt fills holes and smooths terrain; Earth Disrupter forces suspended
+  earth to settle (manual lines 1184–1195). Disrupter is intentionally ineffective
+  on settled terrain. The fluid routine `36e6:000b/007a/0448` has 100 reusable
+  **active** queue slots, not a 100-pixel lifetime budget. Retire blocked parents
+  immediately after deposition, and attempt allocation before that retirement.
+  A flat surface can still exhaust the pool after 101 pixels. The reference
+  well and narrow shaft instead deposit 381 pixels, reaching the 20-emitter
+  limit with one sample per 20 deposits. Normal Napalm's limit is 15.
+- Fuel color cycles during flow (`36e6:013e`). Flame geometry grows sequentially
+  in `2d4f:014e`, with palette updates and heat damage after each emitter
+  (`36e6:04eb..0699`), then 50 burn cycles. The browser exposes one row per
+  simulation tick; this is a 60 Hz timing adaptation, not a measured DOS speed.
+  Dirt deposition samples the active terrain shades (`323a:0bcb/0c20`); the
+  browser derives that ascending shade table from its terrain pixels rather
+  than carrying the DOS generation bitmask.
+- MIRV and Death's Head impacts before splitting are intentional duds
+  (`35d5:024a..026d`, manual lines 1065–1072). The check must precede direct
+  damage and explosion audio. Force Shield reflection happens earlier in the
+  original flight routine and does not count as a detonating impact.
+- Ordinary shield interception costs exactly 10 points and cannot overflow
+  into hull damage (`4d1e:0068`, `2dce:0047`, `35d5:02e2`). The historical
+  Python shield analysis claiming there is no chip constant is incorrect.
+  Force reflection separately costs rounded incoming speed / 100 and reduces
+  speed to 70% (`2a4a:26ba..2734`).
+- Shield contact is with painted outline pixels (`2a4a:1524..163a`), not the
+  hull bounding box or a filled disk. `4912:09a9` centers outlines at the tank
+  pivot: normal/Force radius 15, Heavy/Super Mag radii 16 and 15. Mag Deflector
+  shows filtered overhead arcs at radii 13/16, and its arcs allow shots through.
+  `shields.ts` shares the `4c70:026f` integer circle raster between collision and
+  drawing. Own shields are bypassed; secondary heat still uses absorption.
+
+`extract_feedback_reference.py` verifies the executable checksum and generates
+`test/fixtures/dos_feedback.json`. It uses independent static transcriptions of
+the queue and circle routines, plus flame-row fixtures for an injected zero
+random stream. These are **not DOS execution recordings**. Regression tests
+cover these pixels, impact behavior, stage timing and deterministic replays;
+the browser harness captures successive flame rows and all shield tiers.
 
 ## Deaths, weather and sound
 

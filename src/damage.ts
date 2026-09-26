@@ -208,10 +208,7 @@ export function apply_tank_damage(state: State, tank: Tank | null, amount: numbe
   }
   if (absorbed > 0) {
     scoring.award_hit(state as unknown as scoring.State, shooter, tank, absorbed, true);
-    // A non-failproof shield that just took a hit may spontaneously fail
-    // (catalog 02 s.9).  Only meaningful while the shield survived the hit
-    // (D < S); a hit that already destroyed the shield (overflow > 0) has
-    // nothing left to fail.
+    // Compatibility hook; v1.5 shield depletion is deterministic.
     if (tank.shield_hp > 0) {
       shield_failure_check(state, tank);
     }
@@ -357,12 +354,8 @@ export function direct_hit(state: State, tank: Tank): void {
 /**
  * Direct hit on a shielded tank: chip the shield, no detonation (s.3.2).
  *
- * The chip is the projectile's OWN damage absorbed by the shield -- there is no
- * separate chip constant (RECOVERED_SHIELDS.md T3c; FUN_4191_0034.c:16-17 does
- * `if (D < HP) HP -= D` else destroy).  `damage` defaults to the point-blank
- * impact value (FALLOFF_NUM=100): at the intercept the distance d -> 0 and the
- * linear law round((R-d)*100/R) gives the full damage for any radius.  Mirrors
- * the gate's absorb-or-destroy on tank+0x96.
+ * 4d1e:0068..0074 passes damage=10 and health-overflow=0 to 4912:04b2.
+ * The old Python recovery incorrectly inferred point-blank blast damage here.
  */
 export function shield_chip(tank: Tank, damage: number = SHIELD_CHIP_FULL): void {
   if (tank.shield_hp > 0) {

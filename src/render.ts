@@ -34,6 +34,7 @@
 
 import * as pygame from "./pygame";
 import * as C from "./constants";
+import { shieldPixels } from "./shields";
 import * as weapons from "./weapons";
 import { FUNKY_RGB, type WeaponEffect } from "./weapon_effects";
 import { chargeLayout } from "./energy_controls";
@@ -885,7 +886,7 @@ export class Renderer {
     }
     this._spritesDrawTank(surf, x, y, t, col);
     if (t.shield_hp > 0) {
-      this._draw_shield_ring(surf, t, x, y, hw);
+      this._draw_shield_ring(surf, t, x, y, state);
     }
     this._health_bar(surf, t);
     if (
@@ -942,24 +943,13 @@ export class Renderer {
     }
   }
 
-  // Static shield ring colour (single fixed colour via the plot callback in
-  // FUN_4912_09a9; no recolor on hit/push).  Cool blue-white outline.
+  // Browser shield color. Geometry uses the recovered DOS outline; the
+  // original per-player, strength-dependent shield palette remains separate.
   static readonly SHIELD_RING_RGB: RGB = [120, 200, 255];
 
-  private _draw_shield_ring(surf: pygame.Surface, t: Tank, x: number, y: number, hw: number): void {
-    const cy = y - 4;
-    const base = hw + 8; // port's *(item+4) stand-in radius
-    const col = Renderer.SHIELD_RING_RGB;
-    if (t.shield_item === weapons.SLOT_MAG_DEFLECTOR) {
-      // two concentric rings (binary r=13 and r=16 -> base and base+3)
-      pygame.draw.circle(surf, col, [x, cy], base, 1);
-      pygame.draw.circle(surf, col, [x, cy], base + 3, 1);
-    } else if (t.shield_item === weapons.SLOT_FORCE_SHIELD || t.shield_item === weapons.SLOT_SUPER_MAG) {
-      // ring + inner ring at radius-1 (binary :36-38)
-      pygame.draw.circle(surf, col, [x, cy], base, 1);
-      pygame.draw.circle(surf, col, [x, cy], Math.max(1, base - 1), 1);
-    } else {
-      pygame.draw.circle(surf, col, [x, cy], base, 1);
+  private _draw_shield_ring(surf: pygame.Surface, t: Tank, x: number, y: number, state: GameState): void {
+    for (const [dx, dy] of shieldPixels(t.shield_item)) {
+      if (!C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x + dx, y + dy))) surf.set_at([x + dx, y + dy], Renderer.SHIELD_RING_RGB);
     }
   }
 
@@ -1231,9 +1221,9 @@ export class Renderer {
         this._spritesDrawTank(surf, effect.x, effect.y, effect.tank as unknown as Tank,
           tupRgb(lutGet(this._active, effect.tank.color)));
     } else if (effect.kind === "fluid" && !effect.dirt) {
-      for (const point of effect.points) surf.set_at(point, [252, 64, 0]);
+      for (const point of effect.points) surf.set_at(point, effect.flowColor);
       for (const flame of effect.flames ?? []) {
-        const color = flameColor(flame.color, effect.phase === "burn" ? effect.clock : 0);
+        const color = flameColor(flame.color, effect.cycle);
         for (let dy = -flame.r; dy <= flame.r; dy++) for (let dx = -flame.r; dx <= flame.r; dx++) {
           const x = flame.x + dx, y = flame.y + dy;
           if (dx * dx + dy * dy <= flame.r * flame.r && !C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x, y)))

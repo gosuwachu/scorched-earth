@@ -808,6 +808,10 @@ function advanceWeaponDemo(frames: number): StateMeta {
   d.renderer.render(d.surf, d.gs);
   blit(d.surf);
   return { frame: d.frame, phase: d.gs.phase, effects: d.gs.projectiles.filter((p) => p.weaponEffect).length,
+    fluid: d.gs.projectiles.flatMap((p) => p.weaponEffect?.kind === "fluid" ? [{
+      phase: p.weaponEffect.phase, disks: p.weaponEffect.flames.length, emitter: p.weaponEffect.emitter,
+      cycle: p.weaponEffect.cycle, pixels: p.weaponEffect.points.length,
+    }] : []),
     bursts: d.gs.projectiles.flatMap((p) => p.weaponEffect?.kind === "funky" ? p.weaponEffect.bursts : []).length,
     tunnels: d.gs.projectiles.flatMap((p) => p.weaponEffect?.kind === "sandhog" ? p.weaponEffect.tunnels : []).length };
 }
@@ -825,6 +829,16 @@ STATES["plasma_charge"] = () => {
   startWeaponDemo(31);
   weaponDemo.gs.projectiles = []; weaponDemo.gs.phase = AIM;
   weaponDemo.gs.plasma_charge = { tank: weaponDemo.gs.current_shooter!, value: 5, max: 10 };
+  return advanceWeaponDemo(0);
+};
+STATES["shield_outlines"] = () => {
+  startWeaponDemo(0);
+  const d = weaponDemo; d.gs.projectiles = []; d.gs.phase = AIM;
+  for (let i = d.gs.tanks.length; i < 5; i++) d.gs.add_player(`Shield ${i}`, 0, 0, i);
+  d.gs.tanks.forEach((t, i) => {
+    t.x = 200 + i * 150; t.y = d.gs.terrain.column_top(t.x) - 1;
+    t.alive = true; t.shield_item = 40 + i; t.shield_hp = 100;
+  });
   return advanceWeaponDemo(0);
 };
 for (let roll = 0; roll < 11; roll++) {

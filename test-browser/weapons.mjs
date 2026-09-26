@@ -16,6 +16,25 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`${base}/test-browser/harness.html`);
   await page.evaluate(() => window.harnessReady);
+  // Verify successive real canvas frames, not just the final flame shape.
+  for (const idx of [8, 9]) {
+    await page.evaluate((i) => window.startWeaponDemo(i), idx);
+    let meta;
+    for (let n = 0; n < 200; n++) {
+      meta = await page.evaluate(() => window.advanceWeaponDemo(1));
+      if (meta.fluid[0]?.phase === "ignite") break;
+    }
+    assert.equal(meta.fluid[0]?.phase, "ignite");
+    let previous = await page.locator("#game").screenshot();
+    let disks = meta.fluid[0].disks;
+    for (let row = 0; row < 4; row++) {
+      meta = await page.evaluate(() => window.advanceWeaponDemo(1));
+      assert.ok(meta.fluid[0].disks > disks, `item ${idx} did not grow a flame row`);
+      const next = await page.locator("#game").screenshot({ path: `${out}/${idx}-ignite-${row}.png` });
+      assert.ok(!next.equals(previous), `item ${idx} rendered a static flame`);
+      previous = next; disks = meta.fluid[0].disks;
+    }
+  }
   const summary = [];
   for (const idx of Array.from({ length: 33 }, (_, i) => i)) for (const terrain of ["flat", "hill"]) {
     await page.evaluate(([i, t]) => window.startWeaponDemo(i, t), [idx, terrain]);
