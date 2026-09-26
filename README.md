@@ -73,6 +73,18 @@ shield) are mouse-driven.
 
 ### Play together on a LAN
 
+Choose **Online** in the new-game dialog to play together using phones or browsers
+as tank controllers. Players scan the host's QR code or open the join link, choose
+a name and tank, and get ready while everyone watches the battlefield on the host
+screen. Each player controls aiming, firing, inventory, and purchases on their own
+device, with controls enabled only on their turn. Reopening the original link in
+the same browser restores their player, provided its storage is intact. Online
+mode requires the LAN service below; the static hosted site supports Local play.
+
+<img src="screenshots/online-mode.png" width="800" alt="New game dialog with Local, Online, and Back buttons over the Scorched Earth main menu">
+
+<img src="screenshots/online-lobby.png" width="800" alt="Online lobby with a QR code, join link, connected players and their tanks, and the Start online game button">
+
 On the host computer, install Node.js 20 or later, then run:
 
 ```bash

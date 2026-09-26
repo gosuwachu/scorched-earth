@@ -168,7 +168,7 @@ try {
   });
   await click(a, "Space / Fire");
   await until(async () => await host.evaluate(() => window.shotCount) > 0, "firing");
-  assert.equal(await enabled(a, "Space / Fire"), false);
+  await until(async () => !await enabled(a, "Space / Fire"), "controller locked after firing");
   // End rounds deterministically through the real engine rather than waiting for random AI hits.
   await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");

@@ -1,40 +1,98 @@
+/* Colors come from the same palette constants used by the canvas widgets. */
 .lan-overlay, .lan-controller, .lan-bar {
-  color: #f4efe5; background: #141922; font: 16px/1.45 system-ui, sans-serif;
-  box-sizing: border-box; color-scheme: dark;
+  color: var(--lan-text); background: var(--lan-panel);
+  font: 16px/1.4 Consolas, "Courier New", monospace; color-scheme: light;
+  border: 2px solid; border-color: var(--lan-hi) var(--lan-lo) var(--lan-lo) var(--lan-hi);
 }
-.lan-overlay { position: fixed; inset: 3vh max(12px, calc((100vw - 880px) / 2)); z-index: 20; overflow: auto; padding: 24px; border: 2px solid #bb7b32; border-radius: 12px; }
-.lan-overlay h1, .lan-controller h1 { font-size: 27px; margin: 0 0 12px; color: #ffd392; }
-.lan-overlay h2, .lan-controller h2 { font-size: 20px; margin: 18px 0 8px; }
-.lan-overlay p, .lan-controller p { margin: 10px 0; }
-.lan-overlay button, .lan-controller button, .lan-bar button,
-.lan-overlay input, .lan-controller input, .lan-overlay select, .lan-controller select {
-  box-sizing: border-box; min-height: 46px; padding: 10px 14px; margin: 4px;
-  font: inherit; border: 1px solid #697184; border-radius: 7px; color: #fff; background: #273043;
+:is(.lan-overlay, .lan-controller, .lan-bar), :is(.lan-overlay, .lan-controller, .lan-bar) * { box-sizing: border-box; }
+:is(.lan-overlay, .lan-controller, .lan-bar) [hidden] { display: none !important; }
+.lan-overlay {
+  position: fixed; inset: 0; margin: auto; padding: 0;
+  width: min(420px, calc(100% - 32px)); max-width: none;
+  max-height: calc(100dvh - 32px); overflow: hidden;
 }
-.lan-overlay button, .lan-controller button, .lan-bar button { cursor: pointer; touch-action: manipulation; }
-.lan-overlay button:hover, .lan-controller button:hover, .lan-bar button:hover { background: #3e4c66; }
-.lan-overlay button:disabled, .lan-controller button:disabled, .lan-bar button:disabled { opacity: .45; cursor: default; }
-.lan-overlay label, .lan-controller label { display: block; margin: 8px 0; }
-.lan-overlay input[type=text] { width: min(95%, 550px); }
-.lan-qr { display: block; margin: 16px auto; width: 220px; height: 220px; image-rendering: pixelated; }
-.lan-roster { padding: 0; list-style: none; }
-.lan-roster li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #343c4a; flex-wrap: wrap; }
-.lan-roster small { color: #c2cbdc; margin-left: auto; }
-.lan-roster canvas { image-rendering: pixelated; }
-.lan-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; padding: 4px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.lan-overlay[open] { display: flex; flex-direction: column; }
+.lan-overlay.lan-wide { width: min(880px, calc(100% - 32px)); }
+.lan-overlay::backdrop { background: rgb(0 0 0 / 55%); }
+.lan-title {
+  margin: 0; padding: 3px 8px; flex: none;
+  background: var(--lan-selection); color: var(--lan-title);
+  text-align: center; font-size: 16px; font-weight: bold; line-height: 1.3;
+}
+.lan-dialog-body { padding: 16px; overflow: auto; min-height: 0; overflow-wrap: anywhere; }
+.lan-dialog-footer { display: flex; flex: none; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 12px 16px; }
+.lan-dialog-footer:empty { display: none; }
+:is(.lan-overlay, .lan-controller) h2 { font-size: 17px; margin: 16px 0 8px; }
+:is(.lan-overlay, .lan-controller) p { margin: 8px 0; }
+:is(.lan-overlay, .lan-controller, .lan-bar) button {
+  min-height: 44px; max-width: 100%; padding: 7px 12px; font: inherit; font-weight: bold;
+  color: var(--lan-text); background: var(--lan-panel); border-radius: 0;
+  border: 2px solid; border-color: var(--lan-hi) var(--lan-lo) var(--lan-lo) var(--lan-hi);
+  box-shadow: 0 0 0 1px var(--lan-text); cursor: pointer; touch-action: manipulation;
+  overflow-wrap: anywhere;
+}
+:is(.lan-overlay, .lan-controller, .lan-bar) button:hover:not(:disabled) { background: var(--lan-hi); }
+:is(.lan-overlay, .lan-controller, .lan-bar) button:active:not(:disabled), .lan-keys button[data-held=true] {
+  border-color: var(--lan-lo) var(--lan-hi) var(--lan-hi) var(--lan-lo);
+  background: var(--lan-hi);
+}
+:is(.lan-overlay, .lan-controller, .lan-bar) button:disabled { color: var(--lan-lo); cursor: default; box-shadow: none; }
+:is(.lan-overlay, .lan-controller, .lan-bar) :focus-visible {
+  outline: 2px solid var(--lan-selection); outline-offset: 2px;
+}
+.lan-accel { color: var(--lan-accel); text-decoration: underline; text-underline-offset: 2px; }
+:is(.lan-overlay, .lan-controller) label { display: block; margin: 10px 0; }
+:is(.lan-overlay, .lan-controller) input, :is(.lan-overlay, .lan-controller) select {
+  min-width: 0; max-width: 100%; min-height: 44px; padding: 6px 8px; font: inherit;
+  color: var(--lan-text); background: var(--lan-field); border-radius: 0;
+  border: 2px solid; border-color: var(--lan-lo) var(--lan-hi) var(--lan-hi) var(--lan-lo);
+}
+:is(.lan-overlay, .lan-controller) select { color: var(--lan-selection); }
+:is(.lan-overlay, .lan-controller) label > :is(input:not([type=checkbox]), select) { display: block; width: 100%; margin-top: 4px; }
+:is(.lan-overlay, .lan-controller) input[type=checkbox] { min-height: 20px; width: 20px; height: 20px; accent-color: var(--lan-selection); margin: 0 8px; vertical-align: middle; }
+.lan-lobby-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.lan-lobby-layout > section { min-width: 0; }
+.lan-qr { display: block; margin: 12px auto; width: 220px; max-width: 100%; height: auto; image-rendering: pixelated; }
+.lan-link { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.lan-link input { flex: 1 1 180px; width: 100%; }
+.lan-roster-scroll {
+  max-height: min(18rem, 35dvh); overflow-y: auto; overflow-x: hidden;
+  scrollbar-gutter: stable; touch-action: pan-y pinch-zoom;
+  border: 2px solid; border-color: var(--lan-lo) var(--lan-hi) var(--lan-hi) var(--lan-lo);
+}
+.lan-roster { margin: 0; padding: 0; list-style: none; }
+.lan-roster li { display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--lan-lo); }
+.lan-roster li:last-child { border-bottom: 0; }
+.lan-roster canvas { flex: none; image-rendering: pixelated; width: 48px; height: auto; }
+.lan-player-details { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.lan-player-name { display: block; font-weight: bold; }
+.lan-roster small { display: block; font-size: 14px; }
+.lan-roster button { flex: none; padding: 6px; font-size: 14px; }
+.lan-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; padding: 8px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .lan-host #game { display: block; margin: 0 auto; width: auto; height: auto; max-width: 100vw; max-height: calc(100dvh - var(--lan-bar-height, 70px)); }
-body.lan-phone { overflow: auto; height: auto; min-height: 100vh; background: #141922; }
-.lan-controller { max-width: 720px; margin: 0 auto; padding: 18px 12px max(24px, env(safe-area-inset-bottom)); }
-.lan-status { border-left: 4px solid #e4ad5a; padding: 10px; background: #202838; }
-.lan-stats { padding: 12px; background: #202838; border-radius: 8px; font-variant-numeric: tabular-nums; }
-.lan-keys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 12px 0; }
-.lan-keys button { margin: 0; min-height: 58px; touch-action: none; user-select: none; -webkit-user-select: none; }
-.lan-keys button[data-held=true] { background: #795720; }
-.lan-controls button { display: block; width: calc(100% - 8px); text-align: left; }
-.lan-controls select { width: calc(100% - 8px); }
+html.lan-phone, body.lan-phone { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; background: var(--lan-bg); }
+body.lan-phone { min-height: 100dvh; }
+.lan-controller { max-width: 720px; margin: 12px auto; padding: 0; }
+.lan-controller-body { padding: 12px 12px max(16px, env(safe-area-inset-bottom)); min-width: 0; overflow-wrap: anywhere; }
+.lan-status, .lan-stats {
+  padding: 10px; background: var(--lan-bg);
+  border: 1px solid; border-color: var(--lan-lo) var(--lan-hi) var(--lan-hi) var(--lan-lo);
+}
+.lan-stats { font-variant-numeric: tabular-nums; }
+.lan-keys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }
+.lan-keys button { min-height: 58px; padding: 6px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.lan-controls button { display: block; width: 100%; text-align: left; margin: 8px 0; }
+.lan-controls select { width: 100%; }
 .lan-controls input[type=number] { width: 130px; }
-.lan-designs { display: flex; flex-wrap: wrap; gap: 6px; }
-.lan-designs button { padding: 5px; border-width: 3px; }
-.lan-designs button[aria-pressed=true] { border-color: #ffd392; }
-.lan-error { color: #ffb4a8; }
-@media (max-width: 500px) { .lan-overlay { inset: 8px; padding: 16px; } .lan-roster li { gap: 6px; } }
+.lan-designs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.lan-designs button { padding: 4px; }
+.lan-designs canvas { display: block; image-rendering: pixelated; }
+.lan-designs button[aria-pressed=true] { outline: 3px solid var(--lan-selection); outline-offset: 1px; border-color: var(--lan-lo) var(--lan-hi) var(--lan-hi) var(--lan-lo); }
+.lan-error { color: #800000; font-weight: bold; }
+.lan-error:empty { display: none; }
+@media (max-width: 600px) {
+  .lan-lobby-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .lan-controller { margin: 8px; }
+  .lan-overlay, .lan-overlay.lan-wide { width: calc(100% - 16px); max-height: calc(100dvh - 16px); }
+  .lan-dialog-body { padding: 12px; }
+}

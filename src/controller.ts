@@ -1,18 +1,22 @@
 import type { ControllerView, Input, RoomView, ServerMessage, Control } from "../shared/online";
 import { REMOTE_KEYS } from "../shared/online";
 import { Connection } from "./online_connection";
-import { button, el, rosterList, tankIcon } from "./online_ui";
+import { button, el, installOnlineTheme, Roster, tankIcon } from "./online_ui";
 import "./online.css";
 
 export function startController(roomId: string): void {
+  installOnlineTheme();
   document.getElementById("game")?.remove();
   document.getElementById("loading")?.remove();
   document.body.classList.add("lan-phone");
+  document.documentElement.classList.add("lan-phone");
   const root = el("main", "", "lan-controller");
   const status = el("p", "Connecting…", "lan-status");
   const error = el("p", "", "lan-error");
   const content = el("div");
-  root.append(el("h1", "Scorched Earth"), status, error, content);
+  const body = el("div", "", "lan-controller-body");
+  body.append(status, error, content);
+  root.append(el("h1", "Scorched Earth", "lan-title"), body);
   document.body.append(root);
   const storageKey = `scorch-player:${roomId}`;
   let token: string | undefined;
@@ -31,7 +35,7 @@ export function startController(roomId: string): void {
   const heldButtons = new Map<string, HTMLButtonElement>();
   let name: HTMLInputElement;
   let readyButton: HTMLButtonElement;
-  let roster: HTMLElement;
+  let roster: Roster;
   let stats: HTMLElement;
   let heading: HTMLElement;
   let controls: HTMLElement;
@@ -105,10 +109,10 @@ export function startController(roomId: string): void {
           connection.send({ type: "profile", name: me?.name ?? "Player", icon, ready: false });
         }
       };
-      roster = el("div");
-      content.append(label, el("h2", "Choose your tank"), designs, readyButton, el("h2", "Players"), roster);
+      roster = new Roster();
+      content.append(label, el("h2", "Choose your tank"), designs, readyButton, el("h2", "Players"), roster.element);
     }
-    roster.replaceChildren(rosterList(room.players));
+    roster.update(room.players);
   }
 
   function buildGame(): void {
