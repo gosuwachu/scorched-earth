@@ -85,14 +85,17 @@ class MockBuffer {
 class MockSource {
   buffer: MockBuffer | null = null;
   loop = false;
+  playbackRate = { value: 1 };
   onended: (() => void) | null = null;
   connectCount = 0;
+  connections: unknown[] = [];
   startCount = 0;
   stopCount = 0;
   failStop = false;
   constructor(private ctx: MockAudioContext, private failStart: boolean) {}
-  connect(_dest: unknown): void {
+  connect(dest: unknown): void {
     this.connectCount++;
+    this.connections.push(dest);
   }
   start(_when?: number): void {
     if (this.failStart) throw new Error("mock start() blocked");
@@ -105,6 +108,14 @@ class MockSource {
   }
 }
 
+class MockGain {
+  gain = { value: 1 };
+  connections: unknown[] = [];
+  connect(dest: unknown): void {
+    this.connections.push(dest);
+  }
+}
+
 class MockAudioContext {
   sampleRate = 44100;
   currentTime = 0;
@@ -114,12 +125,14 @@ class MockAudioContext {
   bufferArgs: Array<{ channels: number; length: number; rate: number }> = [];
   createdBuffers: MockBuffer[] = [];
   createdSources: MockSource[] = [];
+  createdGains: MockGain[] = [];
   started: MockSource[] = [];
   createBufferCalls = 0;
   resumeCalls = 0;
   // failure injection
   failCreateBuffer = false;
   failCreateSource = false;
+  failCreateGain = false;
   failNextStart = false;
   createBuffer(channels: number, length: number, rate: number): MockBuffer {
     this.createBufferCalls++;
@@ -135,6 +148,12 @@ class MockAudioContext {
     this.failNextStart = false;
     this.createdSources.push(s);
     return s;
+  }
+  createGain(): MockGain {
+    if (this.failCreateGain) throw new Error("mock createGain blocked");
+    const gain = new MockGain();
+    this.createdGains.push(gain);
+    return gain;
   }
   resume(): void {
     this.resumeCalls++;
@@ -495,6 +514,39 @@ describe("sound: play() event branches build the oracle-exact buffer", () => {
 });
 
 describe("sound: continuous flight-loop (start_fly / fly_tone / stop_fly)", () => {
+  it.each([
+    { mode: "POS", proj: { sy: 70 } },
+    { mode: "VEL", proj: { vx: 30, vy: 40 } },
+  ])("keeps $mode flight at 30% gain and one octave lower across updates and shots", ({ mode, proj }) => {
+    installMock();
+    const s = new Sfx();
+    s.start_fly(mode, true);
+    const ctx = ctxOf(s);
+    const gain = ctx.createdGains[0];
+    expect(gain.gain.value).toBe(0.3);
+    expect(gain.connections).toEqual([ctx.destination]);
+    const seed = flySourceOf(s)!;
+    expect(seed.playbackRate.value).toBe(0.5);
+    expect(seed.connections).toEqual([gain]);
+
+    s.fly_tone(mode, proj, true);
+    const updated = flySourceOf(s)!;
+    expect(updated).not.toBe(seed);
+    expect(updated.playbackRate.value).toBe(0.5);
+    expect(updated.connections).toEqual([gain]);
+    s.stop_fly();
+    expect(updated.stopCount).toBe(1);
+    s.start_fly(mode, true);
+    expect(flySourceOf(s)!.playbackRate.value).toBe(0.5);
+    expect(flySourceOf(s)!.connections).toEqual([gain]);
+    expect(ctx.createdGains).toEqual([gain]);
+
+    s.beep(200, 64, true);
+    const beep = ctx.started[ctx.started.length - 1];
+    expect(beep.playbackRate.value).toBe(1);
+    expect(beep.connections).toEqual([ctx.destination]);
+  });
+
   it("start_fly seeds a looping 300 Hz source == oracle (300,60)", () => {
     installMock();
     const s = new Sfx();
@@ -609,6 +661,21 @@ describe("sound: continuous flight-loop (start_fly / fly_tone / stop_fly)", () =
 });
 
 describe("sound: degradation when the context throws (never raises)", () => {
+  it("a failing flight gain is silent and can be retried", () => {
+    installMock();
+    const s = new Sfx();
+    expect(s.init()).toBe(true);
+    const ctx = ctxOf(s);
+    ctx.failCreateGain = true;
+    expect(() => s.start_fly("VEL", true)).not.toThrow();
+    expect(flySourceOf(s)).toBeNull();
+    expect(ctx.started.length).toBe(0);
+    ctx.failCreateGain = false;
+    s.start_fly("VEL", true);
+    expect(flySourceOf(s)).not.toBeNull();
+    expect(ctx.createdGains[0].gain.value).toBe(0.3);
+  });
+
   it("a failing createBuffer yields no buffer, no source, no throw", () => {
     installMock();
     const s = new Sfx();

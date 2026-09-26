@@ -87,6 +87,10 @@ export const MAX_FREQ_HZ = 12000; // keep tones in a sane speaker-ish band
 export const UI_BEEP_HZ = 200; // FUN_5571_0007(200, 0x28) -- FACT
 export const UI_BEEP_MS = 64; // 0x28 dur -> RECON ms (see header)
 
+// Browser flight playback tuning; preserve the oracle-derived tone buffers.
+const FLY_GAIN = 0.3;
+const FLY_PLAYBACK_RATE = 0.5; // one octave lower
+
 /** A (freq, ms[, f_end]) blip descriptor -- the faithful analog of the original
  * reprogramming a281/0007 once per step. */
 export type Tone = [number, number] | [number, number, number];
@@ -122,12 +126,18 @@ type AudioCtx = {
   state: string;
   createBuffer(channels: number, length: number, rate: number): AudioBufferLike;
   createBufferSource(): AudioBufferSourceLike;
+  createGain(): AudioGainLike;
   resume?(): Promise<void> | void;
 };
 type AudioBufferLike = { getChannelData(ch: number): Float32Array };
+type AudioGainLike = {
+  gain: { value: number };
+  connect(dest: unknown): void;
+};
 type AudioBufferSourceLike = {
   buffer: AudioBufferLike | null;
   loop: boolean;
+  playbackRate: { value: number };
   connect(dest: unknown): void;
   start(when?: number): void;
   stop(when?: number): void;
@@ -175,6 +185,7 @@ export class Sfx {
 
   // ---- flight-tone state (continuous looped whine) ----
   private _fly_source: AudioBufferSourceLike | null = null;
+  private _fly_gain: AudioGainLike | null = null;
   private _fly_freq = 0; // last freq the loop was set to
   private _fly_launch_y: number | null = null; // launch y for POS pitch (DAT_5f38_ce96)
 
@@ -759,10 +770,17 @@ export class Sfx {
     const ctx = this._ctx;
     if (buf === null || ctx === null) return;
     try {
+      if (this._fly_gain === null) {
+        const gain = ctx.createGain();
+        gain.gain.value = FLY_GAIN;
+        gain.connect(ctx.destination);
+        this._fly_gain = gain;
+      }
       const src = ctx.createBufferSource();
       src.buffer = buf;
       src.loop = true;
-      src.connect(ctx.destination);
+      src.playbackRate.value = FLY_PLAYBACK_RATE;
+      src.connect(this._fly_gain);
       src.start();
       this._fly_source = src;
       this._fly_freq = 300;
@@ -802,7 +820,7 @@ export class Sfx {
     if (freq !== this._fly_freq) {
       const buf = this._tone_buffer(freq, 60);
       const ctx = this._ctx;
-      if (buf !== null && ctx !== null) {
+      if (buf !== null && ctx !== null && this._fly_gain !== null) {
         // AudioBufferSourceNode is single-use; swap the looped source.
         try {
           if (this._fly_source !== null) this._fly_source.stop();
@@ -813,7 +831,8 @@ export class Sfx {
           const src = ctx.createBufferSource();
           src.buffer = buf;
           src.loop = true;
-          src.connect(ctx.destination);
+          src.playbackRate.value = FLY_PLAYBACK_RATE;
+          src.connect(this._fly_gain);
           src.start();
           this._fly_source = src;
           this._fly_freq = freq;
