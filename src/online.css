@@ -1,0 +1,40 @@
+.lan-overlay, .lan-controller, .lan-bar {
+  color: #f4efe5; background: #141922; font: 16px/1.45 system-ui, sans-serif;
+  box-sizing: border-box; color-scheme: dark;
+}
+.lan-overlay { position: fixed; inset: 3vh max(12px, calc((100vw - 880px) / 2)); z-index: 20; overflow: auto; padding: 24px; border: 2px solid #bb7b32; border-radius: 12px; }
+.lan-overlay h1, .lan-controller h1 { font-size: 27px; margin: 0 0 12px; color: #ffd392; }
+.lan-overlay h2, .lan-controller h2 { font-size: 20px; margin: 18px 0 8px; }
+.lan-overlay p, .lan-controller p { margin: 10px 0; }
+.lan-overlay button, .lan-controller button, .lan-bar button,
+.lan-overlay input, .lan-controller input, .lan-overlay select, .lan-controller select {
+  box-sizing: border-box; min-height: 46px; padding: 10px 14px; margin: 4px;
+  font: inherit; border: 1px solid #697184; border-radius: 7px; color: #fff; background: #273043;
+}
+.lan-overlay button, .lan-controller button, .lan-bar button { cursor: pointer; touch-action: manipulation; }
+.lan-overlay button:hover, .lan-controller button:hover, .lan-bar button:hover { background: #3e4c66; }
+.lan-overlay button:disabled, .lan-controller button:disabled, .lan-bar button:disabled { opacity: .45; cursor: default; }
+.lan-overlay label, .lan-controller label { display: block; margin: 8px 0; }
+.lan-overlay input[type=text] { width: min(95%, 550px); }
+.lan-qr { display: block; margin: 16px auto; width: 220px; height: 220px; image-rendering: pixelated; }
+.lan-roster { padding: 0; list-style: none; }
+.lan-roster li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #343c4a; flex-wrap: wrap; }
+.lan-roster small { color: #c2cbdc; margin-left: auto; }
+.lan-roster canvas { image-rendering: pixelated; }
+.lan-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; padding: 4px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.lan-host #game { display: block; margin: 0 auto; width: auto; height: auto; max-width: 100vw; max-height: calc(100dvh - var(--lan-bar-height, 70px)); }
+body.lan-phone { overflow: auto; height: auto; min-height: 100vh; background: #141922; }
+.lan-controller { max-width: 720px; margin: 0 auto; padding: 18px 12px max(24px, env(safe-area-inset-bottom)); }
+.lan-status { border-left: 4px solid #e4ad5a; padding: 10px; background: #202838; }
+.lan-stats { padding: 12px; background: #202838; border-radius: 8px; font-variant-numeric: tabular-nums; }
+.lan-keys { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 12px 0; }
+.lan-keys button { margin: 0; min-height: 58px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.lan-keys button[data-held=true] { background: #795720; }
+.lan-controls button { display: block; width: calc(100% - 8px); text-align: left; }
+.lan-controls select { width: calc(100% - 8px); }
+.lan-controls input[type=number] { width: 130px; }
+.lan-designs { display: flex; flex-wrap: wrap; gap: 6px; }
+.lan-designs button { padding: 5px; border-width: 3px; }
+.lan-designs button[aria-pressed=true] { border-color: #ffd392; }
+.lan-error { color: #ffb4a8; }
+@media (max-width: 500px) { .lan-overlay { inset: 8px; padding: 16px; } .lan-roster li { gap: 6px; } }

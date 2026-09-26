@@ -17,11 +17,11 @@
 // Usage: node test-browser/run.mjs [baseURL]   (default http://localhost:4188)
 
 import { createRequire } from "node:module";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const require = createRequire("/home/user/Scorched Earth/scorch-html5/package.json");
+const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -77,8 +77,7 @@ function moduleOf(url) {
 async function main() {
   mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch({
-    channel: "chrome",
-    executablePath: "/usr/bin/google-chrome",
+    executablePath: process.env.CHROMIUM_PATH || ["/usr/bin/chromium", "/usr/bin/google-chrome"].find(existsSync),
     // headless (playwright default) + GPU OFF so Chrome never touches the host display
     // or GPU; --disable-dev-shm-usage avoids /dev/shm exhaustion (a real headless-crash
     // cause); --disable-software-rasterizer forbids any raster fallback engaging the GPU.

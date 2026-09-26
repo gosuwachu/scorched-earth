@@ -33,3 +33,15 @@ jobs:
 
       - name: Typecheck + build (tsc --noEmit && vite build; vector-free)
         run: npm run build
+
+      - name: LAN protocol tests (vector-free)
+        run: npm run test:online
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: LAN browser flow
+        run: npm run test:online:browser
+
+      - name: LAN production smoke test
+        run: npm run test:online:production

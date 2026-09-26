@@ -87,6 +87,8 @@ import {
 import { setSpritesProvider as setRenderSprites } from "./render";
 import { createGameState, setMtnRanges } from "./game";
 import * as sprites from "./sprites";
+import type { Player } from "../shared/online";
+import type { HostSession } from "./online";
 
 // ===========================================================================
 // dialog zoom-wipe (main.py:33-184)
@@ -570,6 +572,8 @@ const SUBMENUS = new Set([
 ]); // main.py:210
 
 export class App {
+  online: HostSession | null = null;
+  chooseMode: (() => void) | null = null;
   cfg: Config;
   w: number;
   h: number;
@@ -647,6 +651,35 @@ export class App {
   // ---- stack helpers (main.py:388) ----
   get top(): StackScreen {
     return this.stack[this.stack.length - 1];
+  }
+
+  get transitioning(): boolean { return this._wipe !== null; }
+
+  get onlineScreen(): "battle" | "player" | "rankings" | "finished" | "admin" {
+    if (this.top instanceof GameScreen) return "battle";
+    if (this.top instanceof RankingsScreen) return "rankings";
+    if (this.top instanceof GameOverScreen) return "finished";
+    if (this.top instanceof ShopScreen || this.top instanceof InventoryScreen || this.top instanceof SellScreen ||
+      this.top instanceof ingame.ControlPanelScreen || this.top instanceof ingame.RetreatScreen) return "player";
+    return "admin";
+  }
+
+  handleRemote(event: ScreenEvent): void {
+    if (!this._wipe) this._act(this.top.handle(event));
+  }
+
+  startLocal(): void { this._start_setup(); }
+
+  startOnline(players: Player[]): void {
+    // Online settings are per-match; never overwrite the user's saved local preferences.
+    const mayhem = (this.cfg as unknown as { mayhem?: boolean }).mayhem;
+    this.cfg = Config.load(this.cfg.save());
+    (this.cfg as unknown as { mayhem?: boolean }).mayhem = mayhem;
+    this.cfg.PLAY_MODE = "SEQUENTIAL";
+    this.cfg.MAXPLAYERS = players.length;
+    this.renderer = new Renderer(this.cfg, this.w, this.h);
+    this._setup = players.map((p, i) => [p.name, p.ai, this.cfg.team_mode === C.TEAM_NONE ? 0 : i, p.icon]);
+    this._build_game();
   }
 
   /** main.py:393 -- render `stack` (lowest opaque upward) onto a fresh Surface. */
@@ -816,7 +849,8 @@ export class App {
     }
     const gs = this.gs;
     if (action === "start_game") {
-      this._start_setup();
+      if (this.chooseMode) this.chooseMode();
+      else this._start_setup();
     } else if (action === "save_changes") {
       // browser: persist the cfg body to localStorage (main.py writes scorch.cfg).
       _saveConfig(this.cfg);
@@ -928,9 +962,13 @@ export class App {
       diag.log.info("game over: winner=%s", w ?? "?");
       this.push(new GameOverScreen(this) as unknown as StackScreen);
     } else if (action === "to_menu" || action === "quit_game") {
+      this.online?.dispose();
+      this.online = null;
       this.gs = null;
       this.stack = [new MainMenuScreen(this.cfg as unknown as never, this.w, this.h) as unknown as StackScreen];
     } else if (action === "new_game") {
+      this.online?.dispose();
+      this.online = null;
       this.stack = [new MainMenuScreen(this.cfg as unknown as never, this.w, this.h) as unknown as StackScreen];
       this.gs = null;
     } else if (action === "reassign_teams" && gs) {
@@ -977,6 +1015,12 @@ export class App {
     }
     const elapsed = this._lastMs === null ? 0 : (nowMs - this._lastMs) / 1000.0;
     this._lastMs = nowMs;
+    this.online?.beforeFrame(nowMs);
+    if (this.online?.paused) {
+      this._debt = 0;
+      this.online.afterFrame(nowMs);
+      return true;
+    }
     diag.heartbeat(); // no-op in browser
     this.sampler.tick(elapsed);
     this.watchdog.begin_frame();
@@ -990,6 +1034,10 @@ export class App {
             (e.key === pygame.K_RETURN && ((e.mod ?? 0) & pygame.KMOD_ALT) !== 0))
         ) {
           this._toggle_fullscreen();
+        } else if (this.online && this.onlineScreen !== "admin") {
+          // The host administers the match through the LAN bar. Tank/shop input
+          // belongs exclusively to the player who owns the current controller.
+          continue;
         } else if (this._wipe !== null) {
           // A dialog is animating: any key/click COMPLETES it instantly.
           if (e.type === pygame.KEYDOWN || e.type === pygame.MOUSEBUTTONDOWN) {
@@ -1019,6 +1067,7 @@ export class App {
       }
       this._draw();
       _present(this.screen);
+      this.online?.afterFrame(nowMs);
     } catch (e) {
       diag.log_exception(e, this.gs); // boundary: log + RE-RAISE
       this.watchdog.end_frame(this.top.constructor.name);
@@ -1112,7 +1161,8 @@ class GameScreen extends Screen {
         dt,
       );
     } else if (this._is_human_turn()) {
-      ingame.update_game_input(gs as never, dt, _keyGetPressed() as never);
+      if (this.app.online) ui.HumanController.update_continuous(gs as never, this.app.online.keys, dt);
+      else ingame.update_game_input(gs as never, dt, _keyGetPressed() as never);
     }
     (gs as unknown as { update(dt: number): void }).update(dt);
     if (gs.phase === ROUND_END) {
@@ -1352,6 +1402,8 @@ let _mousePos: [number, number] = [0, 0];
 /** Wire the DOM listeners onto `canvas` + window.  Called once during boot. */
 function _installInput(canvas: HTMLCanvasElement): void {
   window.addEventListener("keydown", (e) => {
+    if (e.target instanceof Element && e.target.closest(".lan-overlay, .lan-bar")) return;
+    if (document.querySelector(".lan-overlay")) return;
     const key = pygame.keyToPygame(e);
     if (key !== 0) {
       _keysHeld[key] = true;
@@ -1379,9 +1431,12 @@ function _installInput(canvas: HTMLCanvasElement): void {
     if (key !== 0) {
       _keysHeld[key] = false;
     }
+    if (e.target instanceof Element && e.target.closest(".lan-overlay, .lan-bar")) return;
+    if (document.querySelector(".lan-overlay")) return;
     _eventQueue.push({ type: pygame.KEYUP, key, mod: pygame.modsToPygame(e) });
   });
   canvas.addEventListener("mousedown", (e) => {
+    if (document.querySelector(".lan-overlay")) return;
     const pos = _logicalPos(canvas, e.clientX, e.clientY);
     _mousePos = pos;
     const btn = pygame.mouseButtonToPygame(e.button);
@@ -1406,6 +1461,7 @@ function _installInput(canvas: HTMLCanvasElement): void {
     } else if (btn === 3) {
       _mousePressed[2] = false;
     }
+    if (document.querySelector(".lan-overlay")) return;
     _eventQueue.push({ type: pygame.MOUSEBUTTONUP, button: btn, pos });
   });
   canvas.addEventListener("mousemove", (e) => {
@@ -1462,7 +1518,7 @@ function _hideLoader(): void {
   document.getElementById("loading")?.classList.add("done");
 }
 
-export async function boot(): Promise<void> {
+export async function boot(): Promise<App> {
   diag.setup_logging();
   // 1. query params (the browser's argv).
   const params = new URLSearchParams(typeof location !== "undefined" ? location.search : "");
@@ -1561,6 +1617,8 @@ export async function boot(): Promise<void> {
   const backbuffer = new pygame.Surface([rw, rh]);
   (backbuffer as unknown as { _cfg: Config })._cfg = cfg;
   const app = new App(backbuffer, fullscreen, mayhem, fpsSecs);
+  const { installOnline } = await import("./online");
+  installOnline(app);
 
   diag.log.info(
     "boot complete: menu up (%dx%d, fullscreen=%s, mayhem=%s, saves=%d)",
@@ -1590,6 +1648,7 @@ export async function boot(): Promise<void> {
     }
   };
   requestAnimationFrame(frame);
+  return app;
 }
 
 /** The talk pools loaded at boot, exposed for the engine integrator to build the

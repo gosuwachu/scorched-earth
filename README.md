@@ -71,6 +71,50 @@ Space or Enter fires, number keys select a tank, F11 toggles fullscreen, Esc bac
 out. The menus, the weapon shop, and the in-game control panel (battery, parachute,
 shield) are mouse-driven.
 
+### Play together on a LAN
+
+On the host computer, install Node.js 20 or later, then run:
+
+```bash
+npm ci
+npm run lan
+```
+
+Open one of the printed host URLs, select **Start Game → Online**, and share the
+lobby's QR code or join link. Everyone must be on a network that can reach the host
+computer's port (3000 by default). If several network addresses are listed, choose
+the address on the same LAN as the players; the lobby also accepts a manual address.
+Set `PORT` before starting the server to use another port.
+
+Players choose a name and tank on their phones or browsers and press **Ready**.
+The host can add computer tanks, choose their difficulty, and start with 2–10 tanks
+once all human players are connected and ready. The host can play using the same
+join link on a separate controller page. **Local** retains the existing game setup.
+
+Watch the battlefield on the host screen. Each controller shows its tank's status,
+aiming and firing buttons, inventory, equipment, and purchasing controls. Online
+matches use sequential turns: only the active player can act. Purchasing also takes
+turns; each player presses **Done**, and the host advances the shared round results
+with **Continue to purchasing**. The existing round and match-ending rules apply.
+
+Reopen the original join link in the **same browser, with its storage intact**, to
+resume your tank, including during a round or shopping. Refreshing a controller is
+safe. A second tab for the same player replaces the first. Disconnected players
+keep their tank and their turn waits for them; new players cannot join after Start.
+
+Keep the host game page **open and visible**. It runs the game; the Node server
+relays controls and serves the pages. A temporary network interruption reconnects
+automatically, but refreshing/closing the host page or restarting the server does
+not recover the match. Rooms without a host expire after five minutes. Keeping a
+stable host address and port also keeps controller browser storage on the same origin.
+
+For development, `npm run dev:lan` runs the LAN server with Vite on the same port.
+`npm run start:lan` serves an existing build. `npm run test:online` runs the standalone
+protocol tests; `npm run test:online:browser` runs the multiplayer browser checks
+(install Chromium with `npx playwright install chromium`, or set `CHROMIUM_PATH`).
+After building, `npm run test:online:production` checks the shipped pages and server.
+The static hosted site supports Local play; Online requires this LAN service.
+
 ## Building from source (developers only)
 
 The game is written in TypeScript and compiled **once** to the browser JavaScript that
