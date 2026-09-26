@@ -76,6 +76,8 @@ try {
   await host.keyboard.press("o");
   const link = host.getByRole("textbox", { name: "Join link", exact: true });
   await link.waitFor();
+  assert.equal(await host.getByLabel("LAN address", { exact: true }).count(), 0);
+  assert.equal(await host.getByLabel("Custom LAN address", { exact: true }).count(), 0);
   const join = await link.inputValue();
   if (externalBase) assert.equal(new URL(join).origin, new URL(base).origin, "Join link must use the public proxy origin");
   const phoneContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, ignoreHTTPSErrors });
@@ -112,9 +114,8 @@ try {
   const hostScroll = await hostRoster.evaluate((r) => r.scrollTop);
   await host.getByLabel("Computer difficulty", { exact: true }).selectOption("2");
   await host.getByLabel("Computer tank design", { exact: true }).selectOption("5");
-  const manual = host.getByLabel("Custom LAN address", { exact: true });
-  const originalAddress = await manual.inputValue();
-  await manual.fill("http://unfinished-address");
+  const design = host.getByLabel("Computer tank design", { exact: true });
+  await design.focus();
   await phone.evaluate(() => {
     window.rosterBefore = document.querySelector(".lan-roster-scroll");
     window.lastRowBefore = document.querySelector(".lan-roster li:last-child");
@@ -124,12 +125,10 @@ try {
   assert.equal(await guestRoster.evaluate((r) => r.scrollTop), guestScroll);
   assert.equal(await hostRoster.evaluate((r) => r.scrollTop), hostScroll);
   assert.ok(await phone.evaluate(() => window.rosterBefore === document.querySelector(".lan-roster-scroll") && window.lastRowBefore === document.querySelector(".lan-roster li:last-child")));
-  assert.equal(await manual.inputValue(), "http://unfinished-address");
-  assert.ok(await manual.evaluate((n) => document.activeElement === n));
+  assert.equal(await link.inputValue(), join);
+  assert.ok(await design.evaluate((n) => document.activeElement === n));
   assert.equal(await host.getByLabel("Computer difficulty", { exact: true }).inputValue(), "2");
   assert.equal(await host.getByLabel("Computer tank design", { exact: true }).inputValue(), "5");
-  await manual.fill(originalAddress);
-  await manual.press("Tab");
   guestPeers[0].socket.close();
   await until(async () => (await guestRoster.innerText()).includes("Disconnected"), "disconnected roster row");
   assert.equal(await guestRoster.evaluate((r) => r.scrollTop), guestScroll);
@@ -176,6 +175,15 @@ try {
   for (let i = 0; i < 8; i++) await host.getByRole("button", { name: `Remove Guest${i + 1}`, exact: true }).click();
   await until(async () => await phone.locator(".lan-roster li").count() === 2, "temporary participants removed");
   await host.getByRole("button", { name: "Start online game", exact: true }).click();
+  await host.getByRole("button", { name: "Join link", exact: true }).click();
+  await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor();
+  assert.equal(await link.inputValue(), join);
+  assert.ok(await link.evaluate((n) => n.readOnly));
+  assert.ok(await host.getByRole("button", { name: "Copy link", exact: true }).isVisible());
+  assert.equal(await host.getByLabel("LAN address", { exact: true }).count(), 0);
+  assert.equal(await host.getByLabel("Custom LAN address", { exact: true }).count(), 0);
+  await until(async () => await host.locator("canvas.lan-qr").evaluate((c) => !c.hidden && c.width === 220 && c.height === 220), "reopened join QR code");
+  await host.getByRole("button", { name: "Close join link", exact: true }).click();
   await phone.getByRole("button", { name: "Done", exact: true }).click();
   await phone.getByRole("button", { name: "Tank controls", exact: true }).waitFor();
   const before = await phone.locator(".lan-stats").textContent();

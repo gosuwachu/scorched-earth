@@ -94,8 +94,10 @@ npm run lan
 
 Open one of the printed host URLs, select **Start Game → Online**, and share the
 lobby's QR code or join link. Everyone must be on a network that can reach the host
-computer's port (3000 by default). If several network addresses are listed, choose
-the address on the same LAN as the players; the lobby also accepts a manual address.
+computer's port (3000 by default). The lobby generates its join link and QR code
+automatically using the URL you opened, including a public VPS URL. When opened
+through localhost, it uses the first detected LAN address. If the server prints
+several LAN URLs, open the one on the same network as the players.
 Set `PORT` before starting the server to use another port.
 
 Players choose a name and tank on their phones or browsers and press **Ready**.

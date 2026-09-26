@@ -27,16 +27,15 @@ export class HostSession {
   private status = el("span", "Creating room…");
   private lastPublish = -Infinity;
   private disposed = false;
-  private origin: string;
+  private readonly origin: string;
   private localConfig: Config;
   private shareOpen = false;
   private barSize: ResizeObserver;
   private pending: Extract<ServerMessage, { type: "input" }>[] = [];
 
-  constructor(private app: App, private urls: string[]) {
+  constructor(private app: App, urls: string[]) {
     this.localConfig = app.cfg;
     this.origin = joinOrigin(location.href, urls);
-    this.urls = [...new Set([this.origin, ...urls].filter(Boolean))];
     this.box = dialog("Online lobby", { wide: true, cancel: () => app._act("to_menu") });
     this.box.body.append(el("p", "Creating room…"));
     this.bar.append(this.status);
@@ -148,7 +147,7 @@ export class HostSession {
       this.roster = undefined;
     }
     // Presence updates only touch the roster and button availability. Preserve
-    // the host's address draft, AI choices, keyboard focus, and scroll position.
+    // the host's AI choices, keyboard focus, and scroll position.
     if (this.roster && this.lobbyStarted === this.room.started) {
       this.updateLobbyState();
       return;
@@ -176,42 +175,19 @@ export class HostSession {
       else { link.focus(); link.select(); document.execCommand("copy"); }
     });
     linkRow.append(link, copy);
-    const updateLink = (): void => {
-      qr.hidden = !this.origin;
-      linkRow.hidden = !this.origin;
-      qrMessage.textContent = this.origin ? "" : "Enter a LAN address to generate the join link and QR code.";
-      if (!this.origin) return;
+    qr.hidden = !this.origin;
+    linkRow.hidden = !this.origin;
+    qrMessage.textContent = this.origin ? "" : "No reachable join address found. Open this game using its public or LAN URL.";
+    if (this.origin) {
       const url = new URL("/", this.origin);
-      url.searchParams.set("join", this.room!.id);
+      url.searchParams.set("join", this.room.id);
       link.value = url.href;
       void QRCode.toCanvas(qr, url.href, { width: 220, margin: 2 }).catch(() => {
         qr.hidden = true;
         qrMessage.textContent = "Use the join link below.";
       });
-    };
+    }
     sharing.append(qr, qrMessage, linkRow);
-    const addressLabel = el("label", "LAN address");
-    const addresses = el("select");
-    for (const url of this.urls) { const option = el("option", url); option.value = url; addresses.append(option); }
-    addresses.value = this.origin;
-    const manualLabel = el("label", "Custom LAN address");
-    const manual = el("input");
-    manual.type = "text"; manual.value = this.origin; manual.placeholder = "http://192.168.1.10:3000";
-    const addressError = el("p", "", "lan-error");
-    addressError.setAttribute("role", "status");
-    addresses.onchange = () => {
-      this.origin = addresses.value; manual.value = this.origin; addressError.textContent = ""; updateLink();
-    };
-    manual.onchange = () => {
-      try {
-        const url = new URL(manual.value);
-        if (!["http:", "https:"].includes(url.protocol) || ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"].includes(url.hostname)) throw new Error();
-        this.origin = url.origin; addresses.value = this.origin; addressError.textContent = ""; updateLink();
-      } catch { addressError.textContent = "Enter the host's reachable LAN address, including http:// and the port."; }
-    };
-    addressLabel.append(addresses); manualLabel.append(manual);
-    sharing.append(addressLabel, manualLabel, addressError);
-    updateLink();
 
     this.roster = new Roster(this.room.started ? undefined : (id) => this.connection.send({ type: "remove", player: id }));
     players.append(el("h2", "Players"), this.roster.element);
