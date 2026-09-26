@@ -2,8 +2,8 @@
  * Terrain: the destructible dirt layer as a pixel framebuffer -- a faithful
  * TypeScript port of scorch-py/scorch/terrain.py (the fidelity oracle, itself
  * verified against the DOS binary). Control flow, RNG draw order, and numeric
- * behavior are identical to the Python; the differential gate
- * (test/terrain.test.ts) asserts every result against Python-dumped vectors.
+ * behavior follow the Python except for the corrected multi-layer collapse
+ * (DOS 2a1e:0107). See oracle/WEAPON_FIDELITY.md and terrain_collapse.test.ts.
  *
  * Key architectural finding (catalog 11 section 2.1): there is NO height array.
  * Terrain lives as pixels; "dirt" is any pixel whose palette index is in the dirt
@@ -628,68 +628,26 @@ export class Terrain {
   }
 
   _settle_column(x: number): void {
-    /* Drop the single topmost SUSPENDED dirt run in column x onto the solid below
-       it, preserving every other void (caves, tunnels, overhangs) and any dirt
-       already resting on dirt/floor.
-
-       Model (FACT, catalog 11 section 2.5 lines 284-286): FUN_2a1e_0007 starts the
-       scan at the top, FUN_2a1e_0059 detects one contiguous dirt run (0x50..0x68)
-       sitting ABOVE a `<0x50` gap = "suspended dirt" and records its top + landing
-       row; the animate loop drops THAT run one pixel per pass until it rests on
-       solid. Only ONE record exists per column per settle; it does NOT rescan for
-       runs that become suspended after a lower run lands. The terminal state is the
-       run translated down to rest on the next solid; a deeper second gap is left
-       untouched, which keeps a bored channel / cave standing.
-
-       Encoding (catalog 11 line 243): `<0x50` = sky/gap, `0x50..0x68` = dirt,
-       `>=0x69` = object; here the bottom boundary (self.h) is the solid floor. */
+    /* DOS 2a1e:01e6 scans through dirt below a falling run, merging layers;
+       0234..024a calls 0059 again to find the next suspended run. Stopping after
+       the first gap leaves Sandhog tunnels floating indefinitely. Compact from
+       the floor upwards to reach the same resting geometry in one pass while
+       preserving shade order. Non-dirt solid pixels remain fixed supports. */
     const h = this.h;
     const colBase = x * h;
     const grid = this.grid;
-    const isDirtAt = (y: number): boolean => {
-      const v = grid[colBase + y];
-      return v === C.COL_DIRT || (v >= C.DIRT_SHADE_LO && v <= C.DIRT_SHADE_HI);
-    };
-    // Scan DOWN from the top for the first dirt run; record it iff a gap sits
-    // directly below it.
-    let y = 0;
-    while (y < h) {
-      if (!isDirtAt(y)) {
-        // skip sky/gap above the run
-        y += 1;
-        continue;
+    let landing = h - 1;
+    for (let y = h - 1; y >= 0; y--) {
+      const color = grid[colBase + y];
+      if (C.is_dirt(color)) {
+        if (landing !== y) {
+          grid[colBase + landing] = color;
+          grid[colBase + y] = C.COL_SKY;
+        }
+        landing--;
+      } else if (C.is_solid(color)) {
+        landing = y - 1;
       }
-      const top = y; // run start (dirt)
-      while (y < h && isDirtAt(y)) {
-        // walk through the dirt body
-        y += 1;
-      }
-      const run_bottom = y; // first non-dirt row below the run
-      if (run_bottom >= h) {
-        return; // run rests on the floor: not suspended
-      }
-      // run_bottom is a gap (sky). Find the landing: the next solid below the gap;
-      // the floor (h) is solid.
-      const gap = run_bottom;
-      let land = gap;
-      while (land < h && !isDirtAt(land)) {
-        // descend the gap to the next dirt
-        land += 1;
-      }
-      const drop = land - run_bottom; // rows of empty gap to fall through
-      /* v8 ignore next 3 -- unreachable: L665 guarantees run_bottom<h and the inner-while exit guarantees run_bottom is non-dirt, so the L672 descent advances land by >=1 before the next dirt; drop = land-run_bottom >= 1 always. */
-      if (drop <= 0) {
-        return; // no gap (defensive): not suspended
-      }
-      // vals = col[top:run_bottom].copy(); preserve the per-pixel shades
-      const runLen = run_bottom - top;
-      const vals = new Uint8Array(runLen);
-      for (let i = 0; i < runLen; i++) vals[i] = grid[colBase + top + i];
-      // col[top:run_bottom] = COL_SKY (erase the old run, gap opens above)
-      for (let i = top; i < run_bottom; i++) grid[colBase + i] = C.COL_SKY;
-      // col[top+drop:run_bottom+drop] = vals (re-plot it `drop` rows lower)
-      for (let i = 0; i < runLen; i++) grid[colBase + top + drop + i] = vals[i];
-      return; // ONE run per column per settle
     }
   }
 

@@ -199,7 +199,7 @@ describe("objects: Projectile construction is field-exact", () => {
       expect(rec.bounce_energy, "bounce_energy").toBe(ev.bounce_energy);
       expect(rec.bounce_count, "bounce_count").toBe(ev.bounce_count);
       expect(rec.spring_armed, "spring_armed").toBe(ev.spring_armed);
-      expect(rec.warheads_left, "warheads_left").toBe(ev.warheads_left);
+      expect(rec.warheads_left, "warheads_left").toBe(({ 22: 10, 23: 20, 24: 35 } as Record<number, number>)[ev.weapon_idx] ?? ev.warheads_left);
       expect(rec.guidance_is_none, "guidance_is_none").toBe(ev.guidance_is_none);
       expect(rec.target_is_none, "target_is_none").toBe(ev.target_is_none);
       expect(rec.state_empty, "state_empty").toBe(ev.state_empty);

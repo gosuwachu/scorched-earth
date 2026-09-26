@@ -33,6 +33,7 @@ import {
   createGameState,
   setMtnRanges,
   AIM,
+  FIRING,
   GAME_OVER,
   type GameState,
 } from "../src/game";
@@ -52,6 +53,9 @@ import * as ingame from "../src/ingame";
 import * as ui from "../src/ui";
 import * as talk from "../src/talk";
 import * as damage from "../src/damage";
+import { Projectile } from "../src/objects";
+import { ITEMS } from "../src/weapons";
+import * as C from "../src/constants";
 import * as sprites from "../src/sprites";
 import * as pygame from "../src/pygame";
 import * as widgets from "../src/widgets";
@@ -764,3 +768,48 @@ const ready = boot();
     return { name, ok: false, error: String(err && err.message ? err.message : err), stack: String(err && err.stack ? err.stack : "") };
   }
 };
+
+// Reproducible weapon sequences for visual review and the browser gate.
+let weaponDemo: { gs: GameState; renderer: Renderer; surf: pygame.Surface; frame: number };
+function startWeaponDemo(idx: number, terrain = "flat"): void {
+  const gs = buildState(42, { SKY: "PLAIN", FALLING_TANKS: "OFF", MTN_PERCENT: 0, SUSPEND_DIRT: 0 });
+  driveToAim(gs);
+  gs.terrain.grid.fill(C.COL_SKY);
+  for (let x = 0; x < W; x++) {
+    const surface = terrain === "hill" ? Math.round(H * 0.62 - 100 * Math.sin(x / W * Math.PI)) : Math.round(H * 0.55);
+    for (let y = surface; y < H - 1; y++) gs.terrain.write(x, y, C.DIRT_SHADE_LO + 8);
+  }
+  gs.tanks.forEach((t, i) => { t.x = i ? W - 100 : 100; t.y = gs.terrain.column_top(t.x) - 1; });
+  gs.phase = FIRING;
+  gs.current_shooter!.selected_weapon = idx;
+  gs.current_shooter!.inventory[idx] = 99;
+  const x = W >> 1, y = gs.terrain.column_top(x);
+  const p = new Projectile(gs.current_shooter, ITEMS[idx], x, y, 0, -1);
+  gs.projectiles.push(p);
+  gs._resolve_hit(p, ["terrain", null, x, y]);
+  weaponDemo = { gs, renderer: freshRenderer(gs), surf: newSurf(), frame: 0 };
+  advanceWeaponDemo(0);
+}
+function advanceWeaponDemo(frames: number): StateMeta {
+  const d = weaponDemo;
+  for (let i = 0; i < frames; i++) { d.gs.update(1 / 60); d.frame++; }
+  d.renderer.render(d.surf, d.gs);
+  blit(d.surf);
+  return { frame: d.frame, phase: d.gs.phase, effects: d.gs.projectiles.filter((p) => p.weaponEffect).length,
+    bursts: d.gs.projectiles.flatMap((p) => p.weaponEffect?.kind === "funky" ? p.weaponEffect.bursts : []).length,
+    tunnels: d.gs.projectiles.flatMap((p) => p.weaponEffect?.kind === "sandhog" ? p.weaponEffect.tunnels : []).length };
+}
+function weaponDemoTerrainStats(): { unsupported: number; dirt: number } {
+  const t = weaponDemo.gs.terrain;
+  let unsupported = 0, dirt = 0;
+  for (let x = 0; x < t.w; x++) for (let y = 0; y < t.h; y++) {
+    if (!t.is_dirt(x, y)) continue;
+    dirt++;
+    if (y < t.h - 1 && !t.is_solid(x, y + 1)) unsupported++;
+  }
+  return { unsupported, dirt };
+}
+for (const [name, idx, frames] of [["funky_chain", 5, 40], ["baby_sandhog", 22, 20], ["sandhog", 23, 20], ["heavy_sandhog", 24, 20]] as const) {
+  STATES[name] = () => { startWeaponDemo(idx); return advanceWeaponDemo(frames); };
+}
+Object.assign(window, { startWeaponDemo, advanceWeaponDemo, weaponDemoTerrainStats });

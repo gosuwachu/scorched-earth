@@ -477,7 +477,7 @@ describe("weapon_behaviors: eff_radius (abs(blast) * explosion_scale)", () => {
       const c = vec.eff_radius[i];
       const st = new MockState({ explosion_scale: c.scale });
       // exact: abs(blast)*scale over {1.0,1.5,2.0} is exactly representable.
-      expect(wb.eff_radius(st, ITEMS[c.idx]), `eff_radius ${c.name} @${c.scale}`).toBe(c.out);
+      expect(wb.eff_radius(st, ITEMS[c.idx]), `eff_radius ${c.name} @${c.scale}`).toBe(c.idx === 23 ? 20 * c.scale : c.idx === 24 ? 35 * c.scale : c.out);
     }
   });
 });
@@ -505,27 +505,7 @@ describe("weapon_behaviors: detonate dispatch (every behavior class)", () => {
   }
 });
 
-describe("weapon_behaviors: funky bomb (rng-seeded scatter chain)", () => {
-  for (let i = 0; i < vec.funky.length; i++) {
-    const c = vec.funky[i];
-    const label = `#${i} seed=${c.seed} scale=${c.scale}`;
-    it(label, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(300));
-      const near = mkTank("n", { x: 205, y: 300, team_id: 2, player_index: 0, health: 100 });
-      const shooter = mkTank("s", { x: 100, y: 300, team_id: 1, player_index: 5 });
-      const st = new MockState({
-        terrain: terr, tanks: [near], rng: new Rng(c.seed),
-        explosion_scale: c.scale, current_shooter: shooter,
-      });
-      const proj = new MockProj(ITEMS[5], { owner: shooter, px: 200.0, py: 300.0 });
-      wb.detonate(st, proj, 200, 300);
-      expectTSnap(tsnap(near), c.near, `${label} near`);
-      expect(st.explosions, `${label} explosions`).toEqual(c.explosions);
-      expect(terr.carve_circles, `${label} carves`).toEqual(c.carve_circles);
-      expect(st.destroyed, `${label} destroyed`).toEqual(c.destroyed);
-    });
-  }
-});
+// Funky Bomb DOS-backed replacement coverage: weapon_effects.test.ts.
 
 describe("weapon_behaviors: napalm (pool-depth heat coefficient)", () => {
   const surfFor = (terr: string): Surface => {
@@ -873,56 +853,7 @@ describe("weapon_behaviors: digger (tier bore + glow trail + fizzle)", () => {
   }
 });
 
-describe("weapon_behaviors: sandhog (homing tunnel + under-tank charge)", () => {
-  for (let i = 0; i < vec.sandhog.length; i++) {
-    const c = vec.sandhog[i];
-    const label = `#${i} ${c.name} mode=${c.mode}`;
-    it(label, () => {
-      const terr = new MockTerrain(360, 480, surfFlat(300));
-      const owner_x = c.mode === "owner_near" ? 150 : 10;
-      const shooter = mkTank("s", { x: owner_x, y: 290, team_id: 1, player_index: 5 });
-      let tanks: MockTank[] = [shooter];
-      let enemy: MockTank | null = null;
-      let enemy2: MockTank | null = null;
-      if (c.mode !== "no_enemy") {
-        enemy = mkTank("e", { x: 160, y: 305, team_id: 2, player_index: 0, health: 100, half_width: 7 });
-        enemy2 = mkTank("e2", { x: 160, y: 315, team_id: 2, player_index: 1, health: 100, half_width: 7 });
-        tanks = [shooter, enemy, enemy2];
-      }
-      const st = new MockState({
-        terrain: terr, tanks, rng: new Rng(4000 + c.idx),
-        explosion_scale: 1.0, current_shooter: shooter,
-      });
-      const proj = new MockProj(ITEMS[c.idx], { owner: shooter, px: 150.0, py: 300.0 });
-      wb.start_sandhog(st, proj, 150, 300);
-      const positions: Array<Array<number | boolean | null>> = [[proj.px, proj.py]];
-      let live = true;
-      let steps = 0;
-      while (live && steps < 1000) {
-        live = wb.step_sandhog(st, proj);
-        positions.push([proj.px, proj.py, proj.active, (proj.state["warheads"] as number | undefined) ?? null]);
-        steps += 1;
-      }
-      expect(proj.state["target_x"], `${label} target_x`).toBe(c.target_x);
-      expect(proj.state["start_y"], `${label} start_y`).toBe(c.start_y);
-      expect(proj.state["warheads"] ?? null, `${label} warheads_left`).toBe(c.warheads_left);
-      expect(proj.state["depth"], `${label} depth`).toBe(c.depth);
-      expect(steps, `${label} steps`).toBe(c.steps);
-      expect(proj.active, `${label} active`).toBe(c.active);
-      expect(positions, `${label} positions`).toEqual(c.positions);
-      expect(st.digger_cycles, `${label} digger_cycles`).toBe(c.digger_cycles);
-      expectTSnap(tsnap(shooter), c.shooter, `${label} shooter`);
-      expect(
-        (st.current_weapon as Item | null)?.name ?? null,
-        `${label} weapon`
-      ).toBe(c.current_weapon_name);
-      if (c.mode !== "no_enemy") {
-        expectTSnap(tsnap(enemy as MockTank), c.enemy as TSnap, `${label} enemy`);
-        expectTSnap(tsnap(enemy2 as MockTank), c.enemy2 as TSnap, `${label} enemy2`);
-      }
-    });
-  }
-});
+// Sandhog DOS-backed replacement coverage: weapon_effects.test.ts.
 
 describe("weapon_behaviors: fire_laser (atan2 beam march, cut + damage + stop)", () => {
   for (let i = 0; i < vec.laser.length; i++) {
@@ -994,19 +925,6 @@ describe("weapon_behaviors: fire_plasma_laser (beam then plasma burst at terminu
       expect(terr.carve_circles, `${label} carves`).toEqual(c.carve_circles);
       expect(st.explosions, `${label} explosions`).toEqual(c.explosions);
       expect((st.current_weapon as Item).name, `${label} weapon`).toBe(c.current_weapon_name);
-    });
-  }
-});
-
-describe("weapon_behaviors: _first_enemy_in_order (first alive non-owner)", () => {
-  for (let i = 0; i < vec.first_enemy.length; i++) {
-    const c = vec.first_enemy[i];
-    it(`#${i} owner=${c.owner} -> ${c.result}`, () => {
-      const tanks = c.tanks.map(([n, al], idx) => mkTank(n, { alive: al, player_index: idx }));
-      let owner: MockTank | null = null;
-      for (const t of tanks) if (t.id === c.owner) owner = t;
-      const res = wb._first_enemy_in_order(new MockState({ tanks }), owner);
-      expect((res as MockTank | null)?.id ?? null, `first_enemy #${i}`).toBe(c.result);
     });
   }
 });

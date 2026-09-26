@@ -54,6 +54,7 @@ export function pyRound(x: number): number {
 
 /** Object array DAT_5f38_ceb8 entry (stride 0x6c). */
 export class Projectile {
+  weaponEffect?: import("./weapon_effects").WeaponEffect;
   vx: number;
   vy: number;
   px: number;

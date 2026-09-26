@@ -1,14 +1,15 @@
 /**
  * Per-weapon detonation and special flight behaviors -- a faithful TypeScript
  * port of scorch-py/scorch/weapon_behaviors.py (the fidelity oracle, itself
- * byte-verified against 1.5/SCORCH.EXE).
+ * derived from 1.5/SCORCH.EXE). Funky Bomb and Sandhogs supersede that
+ * oracle with directly recovered DOS handlers in weapon_effects.ts.
  *
  * Dispatch mirrors the weapon table at 5f38:1200 (per-type handler at +0x00,
  * behavior-class branch in FUN_2a4a_1349).  Effects follow MECHANICS "Weapon
  * behaviors" and catalog 11/12.  Where the exact geometry is FP-BLOCKED (riot
  * wedge trig, plasma battery multiplier) the documented effect is reconstructed
- * and flagged.  Every FUN_<seg>_<off> / DAT_ provenance comment from the Python
- * source is preserved verbatim so the lineage survives.
+ * and flagged. FUN_<seg>_<off> / DAT_ comments preserve the source addresses;
+ * the directly recovered handlers supersede the old Python interpretations.
  *
  * ============================================================================
  * NUMERIC NOTES (load-bearing for the differential gate, test/weapon_behaviors.test.ts):
@@ -19,10 +20,9 @@
  *  - Python `//` (floor division) on the non-negative integer operands this
  *    module uses (bore_half = r // 2, budget // 5, span offsets) -> Math.floor.
  *
- *  - Python `round(...)` is BANKER'S rounding (round-half-to-even).  The two
- *    round() sites here are the napalm heat amount round(coeff*(1 - d/pool_r))
- *    and the sandhog charge round((depth - tank_depth)*100/depth).  Both are
- *    rendered with pyRound() (imported from ./damage), NOT Math.round, which
+ *  - Python `round(...)` is BANKER'S rounding (round-half-to-even). Napalm's
+ *    heat amount round(coeff*(1 - d/pool_r)) uses pyRound() from ./damage,
+ *    not Math.round, which
  *    rounds .5 toward +Inf and would diverge on every half-integer sample.
  *
  *  - TRANSCENDENTAL sites (asserted within a tight epsilon, see the test):
@@ -36,7 +36,7 @@
  *        the angles in the battery (MEASURED 0 pixel-path mismatches); the test
  *        asserts the raw direction floats within 1e-12 AND the integer pixel
  *        paths exactly.
- *      * math.hypot(dx,dy) (in _det_funky / _det_napalm / _nearest_tank): the
+ *      * math.hypot(dx,dy) (in _det_napalm / _nearest_tank): the
  *        engine measures between INTEGER pixel/tank coordinates, so dx,dy are
  *        integers and Math.sqrt(dx*dx+dy*dy) reproduces CPython math.hypot
  *        bit-for-bit (the damage.ts NUMERIC NOTES result; Math.hypot is NOT used).
@@ -49,6 +49,7 @@ import * as _pal from "./palette";
 import { Projectile } from "./objects";
 import { sfx } from "./sound";
 import type { Item } from "./weapons";
+import { startFunky, startSandhog, stepWeaponEffect, type WeaponEffect } from "./weapon_effects";
 
 // ---------------------------------------------------------------------------
 // Duck-typed structural shapes weapon_behaviors reads/mutates.  These mirror
@@ -102,6 +103,7 @@ export interface BProjectile {
   sy: number;
   active: boolean;
   split_done: boolean;
+  weaponEffect?: WeaponEffect;
   warheads_left: number;
   state: { [k: string]: unknown };
   trail: unknown[];
@@ -199,50 +201,11 @@ function _det_nuclear(state: BState, proj: BProjectile, x: number, y: number): v
 }
 
 function _det_funky(state: BState, proj: BProjectile, x: number, y: number): void {
-  /* Funky Bomb (FUN_3319_0516 + chain FUN_3319_01fe).
-   *
-   * Energy budget = blast*10 (FUN_3319_0516:14, DAT_5f38_d506).  15 random
-   * scatter offsets are precomputed (FUN_3319_0016, DAT_5f38_d508/d526) and
-   * cycled 0..14.  The bounded chain spawns multi-colour flame sub-explosions
-   * and applies damage min(local_6,10) per step, where local_6 = budget/5 steps
-   * down by 0x32 (FUN_3319_01fe:59,75-83).  Confined to the scatter box. */
-  const r = eff_radius(state, proj.weapon);
-  const budget = Math.trunc(Math.abs(proj.weapon.blast)) * 10; // d506 = blast*10 (FUN_3319_0516:14)
-  // 15 random scatter offsets (cycled 0..14), within the blast box (d508/d526)
-  const n = (proj.weapon.params["scatter"] as number | undefined) ?? 15;
-  const offsets: Array<[number, number]> = [];
-  for (let _i = 0; _i < n; _i++) {
-    offsets.push([
-      state.rng.pick(Math.trunc(2 * r) + 1) - Math.trunc(r),
-      state.rng.pick(Math.trunc(2 * r) + 1) - Math.trunc(r),
-    ]);
-  }
-  // NO central blast: FUN_3319_0516 goes straight to the scatter chain.  All
-  // damage comes from the bounded flame chain.  The chain SEEDS at the bomb's
-  // own impact point (DAT_5f38_e1e4/e1e6) then cycles the scatter offsets, so
-  // the first flame lands where the bomb hit and subsequent flames scatter.
-  const flame_r = Math.max(8, r * 0.3);
-  const chain: Array<[number, number]> = [[0, 0], ...offsets];
-  let i = 0;
-  let local_6 = Math.floor(budget / 5); // FUN_3319_01fe:59
-  while (local_6 > 0) {
-    const [ox, oy] = chain[((i % chain.length) + chain.length) % chain.length];
-    const sx = Math.trunc(x + ox);
-    const sy = Math.trunc(y + oy);
-    // multi-colour flame sub-explosion (carves crater + radial damage)
-    damage.explode(state, sx, sy, flame_r);
-    // plus the per-step flat charge dmg = min(local_6, 10) applied AT the
-    // flame point (FUN_4912_04b2 at DAT_5f38_e1e4/e1e6 = the sub-explosion
-    // coordinate, :82), gated to a tank standing on that flame cell -- not
-    // the global nearest, which would reach across the map.
-    const tk = _nearest_tank(state, sx, sy);
-    if (tk !== null && hypot(tk.x - sx, tk.y - sy) <= flame_r) {
-      const dmg = local_6 <= 10 ? local_6 : 10; // min(local_6, 10)
-      damage.apply_tank_damage(state, tk, dmg);
-    }
-    local_6 -= 0x32; // :75 step -50
-    i += 1;
-  }
+  // DOS dispatch entry 5 -> 2dce:0000. Keep a live controller after the
+  // impacting shell is retired by _resolve_hit / _resolve_off_field.
+  const controller = new Projectile(proj.owner as never, proj.weapon, x, y, 0, 0);
+  startFunky(state, controller as unknown as BProjectile, x, y);
+  state.projectiles.push(controller as unknown as BProjectile);
 }
 
 export function _nearest_tank(state: BState, x: number, y: number): BTank | null {
@@ -728,64 +691,12 @@ export function step_digger(state: BState, proj: BProjectile): boolean {
 }
 
 export function start_sandhog(state: BState, proj: BProjectile, x: number, y: number): void {
-  proj.state["tunneling"] = true;
-  proj.state["depth"] = 0;
-  proj.state["start_y"] = y;
-  proj.state["warheads"] = proj.weapon.warheads;
-  // Homing target = the FIRST alive enemy in ARRAY (tank-index) order, not the
-  // nearest.  FUN_2e50_0001.c:14-28 walks iVar3 = 0.. upward over the tank
-  // array and `break`s on the first record that is (a) not the firing tank's
-  // own coord (the +0x2a/+0x2c self guard, :22), (b) alive (d580[iVar3*0x65]
-  // != 0, :23), and (c) within range (FUN_2fa0_000f(...d576,d578) <
-  // DAT_5f38_5186, :24-25).  It does NOT minimise distance.  The range
-  // threshold DAT_5f38_5186 is BSS/unrecovered in the corpus, so the port
-  // cannot gate on it byte-faithfully; it takes the first alive enemy in
-  // index order (RECONSTRUCTED range gate -- the binary additionally requires
-  // the in-range test).  No live enemy -> tunnel straight down (target = x).
-  const target = _first_enemy_in_order(state, proj.owner);
-  proj.state["target_x"] = target ? target.x : x;
-  proj.px = x;
-  proj.py = y;
-  proj.vx = proj.vy = 0.0;
+  startSandhog(state, proj, x, y);
 }
 
 export function step_sandhog(state: BState, proj: BProjectile): boolean {
-  const t = state.terrain;
-  const x = Math.trunc(proj.px);
-  const y = Math.trunc(proj.py);
-  _stamp_digger_trail(state, x, y, 2); // bore + 0xAF trail glow cycle
-  const tgt = proj.state["target_x"] as number;
-  proj.px += tgt > x ? 1 : tgt < x ? -1 : 0;
-  proj.py += 1;
-  proj.state["depth"] = (proj.state["depth"] as number) + 1;
-  proj.sx = Math.trunc(proj.px);
-  proj.sy = Math.trunc(proj.py);
-  // under a tank? fire the under-tank charge (FUN_35d5_0009): linear in
-  // remaining depth, dmg = (tunnel_depth - tank_depth)*100/tunnel_depth,
-  // through the standard applier (shield gate applies).  No floor.
-  for (const tk of state.tanks) {
-    if (tk.alive && Math.abs(tk.x - Math.trunc(proj.px)) <= tk.half_width && proj.py >= tk.y) {
-      const depth = Math.max(1, proj.state["depth"] as number);
-      const tank_depth = Math.max(0, tk.y - (proj.state["start_y"] as number));
-      if (tank_depth < depth) {
-        // latch the sandhog as the current weapon so a lethal under-tank
-        // charge sizes its death blast by the sandhog's radius
-        state.current_weapon = proj.weapon;
-        const dmg = pyRound(((depth - tank_depth) * C.FALLOFF_NUM) / depth);
-        damage.apply_tank_damage(state, tk, dmg);
-      }
-      proj.state["warheads"] = (proj.state["warheads"] as number) - 1;
-      if ((proj.state["warheads"] as number) <= 0) {
-        proj.active = false;
-        return false;
-      }
-    }
-  }
-  if (proj.py >= t.h - 2 || (proj.state["depth"] as number) > 200) {
-    proj.active = false;
-    return false;
-  }
-  return true;
+  stepWeaponEffect(state, proj);
+  return proj.active;
 }
 
 export const LASER_BLEED = 0x28; // FUN_3319_01fe:96 energy bleed per beam pixel (40)
@@ -866,21 +777,4 @@ export function fire_plasma_laser(state: BState, proj: BProjectile): void {
     ey = Math.trunc(proj.py);
   }
   _det_plasma(state, proj, ex, ey);
-}
-
-export function _first_enemy_in_order(state: BState, owner: BTank | null): BTank | null {
-  /* First alive enemy in tank-array (index) order -- the sandhog homing pick.
-   *
-   * FUN_2e50_0001.c:14-28 iterates the tank array by index and returns the FIRST
-   * record that is alive (:23) and is not the firing tank (:22); it does not pick
-   * the nearest.  state.tanks is in tank-record order, so the first qualifying
-   * element here matches the binary's `break`.  The binary's additional in-range
-   * gate (`< DAT_5f38_5186`, :24-25) is omitted -- that threshold is unrecovered
-   * (BSS, not in the corpus); see start_sandhog. */
-  for (const t of state.tanks) {
-    if (t.alive && t !== owner) {
-      return t;
-    }
-  }
-  return null;
 }

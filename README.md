@@ -36,18 +36,21 @@ browser today. If you want the genuine article, seek out Wendell Hicken's origin
 
 ## How it was built, and how faithful it is
 
-This is not a fresh interpretation - it is a *verified reimplementation*:
+The port combines differential tests with direct checks of the DOS executable:
 
-1. The original DOS binary was reverse-engineered **statically** (it is never executed)
+1. The original DOS binary was initially reverse-engineered **statically**
    into a function-for-function **Python/pygame port**
    ([scorchedearth-python](https://github.com/DigitalCyberSoft/scorchedearth-python)),
-   itself differential-tested against the recovered machine code.
+   using the recovered machine code as its reference.
 2. This HTML5 build is a TypeScript rewrite of that Python port, with the Python port
-   as the **oracle**: every module is proven to reproduce its Python counterpart.
+   as its historical **oracle**. Agreement with that port does not by itself prove
+   agreement with DOS. Funky Bomb, Sandhogs, and multi-layer terrain collapse now
+   use corrected DOS-derived behavior; see [the evidence and limitations](oracle/WEAPON_FIDELITY.md).
 
 The verification:
 
-- **15,705 differential tests** (`npm test`, vitest) assert the TypeScript reproduces
+- **Over 15,000 tests** (`npm test`, vitest) cover the corrected mechanics and assert
+  the remaining TypeScript reproduces
   the Python port's output **exactly** (integers, pixels, bytes) or within a tight
   epsilon (transcendental math only). The RNG reproduces CPython's Mersenne Twister
   bit-for-bit; the game engine is checked by 29,814 turn/round state snapshots; the
@@ -58,7 +61,8 @@ The verification:
   **byte-identical** (zero channel delta). Only on-screen text differs, because a
   browser's font rasterizer is not pygame's; that is expected and reported separately.
 
-The original binary is never run by anything in this repository.
+The automated test suite does not require DOSBox or the original executable.
+Optional DOSBox captures were used to review the corrected weapon effects.
 
 ## Play
 

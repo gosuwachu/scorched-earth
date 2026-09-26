@@ -35,6 +35,7 @@
 import * as pygame from "./pygame";
 import * as C from "./constants";
 import * as weapons from "./weapons";
+import { FUNKY_RGB, type WeaponEffect } from "./weapon_effects";
 import * as widgets from "./widgets";
 import * as _pal from "./palette";
 import { build_palette, LiveLUT } from "./palette";
@@ -174,6 +175,7 @@ export interface GridLike {
 }
 
 interface ProjectileLike {
+  weaponEffect?: WeaponEffect;
   sx: number;
   sy: number;
   owner?: { color: number } | null;
@@ -1098,6 +1100,10 @@ export class Renderer {
 
   // ------------------------------------------------------------ projectiles
   private _draw_projectile(surf: pygame.Surface, p: ProjectileLike): void {
+    if (p.weaponEffect) {
+      this._draw_weapon_effect(surf, p.weaponEffect);
+      return;
+    }
     const tp = projTracePath(p);
     if (tp && tp.length) {
       const col = this._trace_color(p);
@@ -1130,6 +1136,31 @@ export class Renderer {
         if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
           surf.set_at([nx, ny], white);
         }
+      }
+    }
+  }
+
+  private _draw_weapon_effect(surf: pygame.Surface, effect: WeaponEffect): void {
+    if (effect.kind === "funky") {
+      for (const trail of effect.trails) {
+        for (const point of trail) surf.set_at(point, [120, 120, 252]);
+      }
+      // 2dce:0309..03c6: five 12-entry rise/fall ramps, cycled together.
+      for (const burst of effect.bursts) {
+        for (let r = burst.grown - 1; r >= 0; r--) {
+          const cycle = effect.phase === "hold" ? 1 + Math.floor(effect.hold * 80 / 39) : 1;
+          const index = (burst.color * 12 + 6 - Math.trunc(r * 6 / burst.radius) + cycle) % 60;
+          const rgb = FUNKY_RGB[Math.floor(index / 12)];
+          const ramp = index % 12;
+          const brightness = (ramp < 6 ? ramp : 11 - ramp) / 5;
+          const color: RGB = [Math.trunc(rgb[0] * brightness), Math.trunc(rgb[1] * brightness), Math.trunc(rgb[2] * brightness)];
+          pygame.draw.circle(surf, color, [burst.x, burst.y], r);
+        }
+      }
+    } else {
+      // 251b:0120 paints a sparse red charge disk, then removes those pixels.
+      for (const c of effect.charges) {
+        for (const point of c.pixels) surf.set_at(point, [240, 40, 40]);
       }
     }
   }

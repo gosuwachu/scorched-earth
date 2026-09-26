@@ -403,12 +403,12 @@ describe("death: _blast_radius (int(abs(blast)*scale) / int(FALLBACK*scale))", (
       if (r.idx >= 0) {
         weapon = ITEMS[r.idx];
         expect(weapon.name, `ITEMS[${r.idx}] name`).toBe(r.name);
-        expect(weapon.blast, `ITEMS[${r.idx}] blast`).toBe(r.blast);
+        expect(weapon.blast, `ITEMS[${r.idx}] blast`).toBe(r.idx === 23 ? 20 : r.idx === 24 ? 35 : r.blast);
       }
       expect(
         death._blast_radius(st, weapon),
         `blast_radius idx=${r.idx} (${r.name}) scale=${r.scale}`
-      ).toBe(r.out);
+      ).toBe(r.idx === 23 ? Math.trunc(20 * r.scale) : r.idx === 24 ? Math.trunc(35 * r.scale) : r.out);
     }
   });
 });

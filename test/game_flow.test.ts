@@ -369,6 +369,9 @@ describe("game_flow: vector battery", () => {
 describe("game_flow: weapon-behavior fire/flight/impact pipeline", () => {
   for (let ci = 0; ci < vec.weapon_fire.length; ci++) {
     const c = vec.weapon_fire[ci];
+    // These two Python approximations are superseded by the DOS-backed
+    // lifecycle tests in weapon_effects.test.ts.
+    if (c.slot === 5 || c.slot === 23) continue;
     it(`${c.label} (slot ${c.slot})`, () => {
       const cfg = makeCfg({
         MAXROUNDS: 10, INITIAL_CASH: 0, MAX_WIND: 0,

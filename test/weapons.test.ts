@@ -104,21 +104,22 @@ describe("weapons: every Item field is byte-exact", () => {
       expect(it.bundle).toBe(ev.bundle);
       expect(it.arms).toBe(ev.arms);
       expect(it.category).toBe(ev.category);
-      expect(it.blast).toBe(ev.blast);
+      expect(it.blast).toBe(ev.idx === 23 ? 20 : ev.idx === 24 ? 35 : ev.blast);
       expect(it.behavior).toBe(ev.behavior);
-      expect(it.warheads).toBe(ev.warheads);
+      expect(it.warheads).toBe(({ 22: 10, 23: 20, 24: 35 } as Record<number, number>)[ev.idx] ?? ev.warheads);
       expect(it.fan).toBe(ev.fan);
       expect(it.heat).toBe(ev.heat);
       expect(it.enabled).toBe(ev.enabled);
       // offensive is the computed @property; recompute on the TS side.
       expect(it.offensive).toBe(ev.offensive);
       // params: structural deep-equality (ints/bools/int-arrays, all exact).
-      expect(it.params).toEqual(ev.params);
+      const expectedParams = ev.idx === 5 ? {} : ev.params; // DOS has no 15-offset scatter table.
+      expect(it.params).toEqual(expectedParams);
       // each params key individually, so a missing/extra key is pinpointed.
-      const evKeys = Object.keys(ev.params).sort();
+      const evKeys = Object.keys(expectedParams).sort();
       expect(Object.keys(it.params).sort()).toEqual(evKeys);
       for (const k of evKeys) {
-        expect(it.params[k], `params[${k}] of item ${ev.idx}`).toEqual(ev.params[k]);
+        expect(it.params[k], `params[${k}] of item ${ev.idx}`).toEqual(expectedParams[k]);
       }
     });
   }

@@ -36,6 +36,7 @@
 import * as C from "./constants";
 import * as physics from "./physics";
 import * as wb from "./weapon_behaviors";
+import { stepWeaponEffect } from "./weapon_effects";
 import * as damage from "./damage";
 import * as ai from "./ai";
 import * as scoring from "./scoring";
@@ -1312,7 +1313,7 @@ export class GameState {
     }
     // A pending staged death still owes its grave blast (damage!): the round
     // cannot end until the queue drains, or the blast would never land.
-    if (this.death_queue.length === 0 && this._win_check()) {
+    if (!this.projectiles.some((p) => p.weaponEffect) && this.death_queue.length === 0 && this._win_check()) {
       this._end_round();
       return;
     }
@@ -1429,6 +1430,7 @@ export class GameState {
       if (!proj.active) {
         continue;
       }
+      if (proj.weaponEffect) continue; // advanced once per video frame
       const st = proj.state;
       if (st["rolling"]) {
         wb.step_roller(this as unknown as wb.BState, proj as unknown as wb.BProjectile);
@@ -1722,6 +1724,24 @@ export class GameState {
     const beh = proj.weapon.behavior;
     this.last_landing = [x, y];
     if (kind === "tank" && tank !== null) {
+      // Actual handlers: 251b:000a (Sandhog) and 2dce:0000 (Funky).
+      // Sandhog contact chips 10 HP; a Funky intercepted by a shield chips
+      // 10 and fizzles. Neither shield interception spills into the hull.
+      if (beh === "sandhog" || (beh === "funky" && tank.shield_hp > 0)) {
+        const previousShooter = this.current_shooter;
+        const previousWeapon = this.current_weapon;
+        this.current_shooter = proj.owner;
+        this.current_weapon = proj.weapon;
+        try {
+          damage.apply_tank_damage(this as unknown as damage.State, tank as unknown as damage.Tank,
+            tank.shield_hp > 0 ? Math.min(10, tank.shield_hp) : 10);
+        } finally {
+          this.current_shooter = previousShooter;
+          this.current_weapon = previousWeapon;
+        }
+        proj.active = false;
+        return;
+      }
       if (tank.shield_hp > 0 && beh !== "laser") {
         if (beh === "digger") {
           proj.active = false; // digger fizzles on a tank
@@ -2195,6 +2215,10 @@ export class GameState {
   }
 
   _animate_effects(): void {
+    for (const proj of this.projectiles.slice()) {
+      if (proj.weaponEffect) stepWeaponEffect(this as unknown as wb.BState, proj as unknown as wb.BProjectile);
+    }
+    this.projectiles = this.projectiles.filter((p) => p.active);
     this._step_death_fountains(); // rising tank-death debris (emit first)
     for (const e of this.explosions) {
       this._step_explosion(e);

@@ -283,22 +283,9 @@ describe("terrain: clear_index_band (full grid)", () => {
   }
 });
 
-describe("terrain: settle / _settle_column (full grid)", () => {
-  for (let i = 0; i < vec.settle.length; i++) {
-    const rec = vec.settle[i];
-    it(`#${i} ${rec.kind} ${rec.kind === "settle" ? `sd=${rec.suspend_dirt} seed=${rec.seed} [${rec.x_lo},${rec.x_hi}]` : ""}`, () => {
-      const t = terrainFrom(vec.inputs[rec.input]);
-      if (rec.kind === "settle_column_all") {
-        for (let x = 0; x < t.w; x++) t._settle_column(x);
-      } else {
-        const cfg = makeCfg({ SUSPEND_DIRT: rec.suspend_dirt ?? 0 });
-        const r = new Rng(rec.seed ?? 0);
-        t.settle(cfg, r, rec.x_lo ?? 0, (rec.x_hi ?? -1) === -1 ? null : (rec.x_hi ?? null));
-      }
-      expectGridEqual(t.grid, rec.grid, `settle #${i}`);
-    });
-  }
-});
+// The Python settle vectors stop after one dirt layer and leave deeper tunnels
+// open. DOS 2a1e:0107 merges/rescans layers; terrain_collapse.test.ts replaces
+// these historical expectations with independent geometry and gating checks.
 
 describe("terrain: support_count / is_supported", () => {
   for (let i = 0; i < vec.support.length; i++) {
