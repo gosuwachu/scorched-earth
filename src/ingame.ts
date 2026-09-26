@@ -67,6 +67,7 @@ import * as movement from "./movement";
 import * as weapons from "./weapons";
 import * as widgets from "./widgets";
 import { HumanController } from "./ui";
+import { sfx } from "./sound";
 
 // ---------------------------------------------------------------------------
 // Duck-typed structural shapes (the subset of fields the ported code reads).
@@ -857,13 +858,17 @@ function _handle_hud_click(state: GameState, e: IngameEvent): string | null {
   // Power word: LEFT = power-1, RIGHT = power+1 (DOC:L451-463)
   let r = boxes["power"];
   if (r !== undefined && r.collidepoint(pos)) {
+    const before = t.power;
     t.power = Math.trunc(Math.max(0, Math.min(1000, t.power + (inc ? 1 : -1))));
+    sfx.adjustment("power", before, t.power, state.cfg.is_on("SOUND"));
     return "_consumed";
   }
   // Angle word: RIGHT = CW (arrow RIGHT, internal angle -1), LEFT = CCW (+1)
   r = boxes["angle"];
   if (r !== undefined && r.collidepoint(pos)) {
+    const before = t.angle;
     t.angle = Math.trunc(Math.max(0, Math.min(180, t.angle + (inc ? -1 : 1))));
+    sfx.adjustment("angle", before, t.angle, state.cfg.is_on("SOUND"));
     return "_consumed";
   }
   // weapon readout: RIGHT = next (TAB), LEFT = previous (SHIFT-TAB)
@@ -1132,7 +1137,9 @@ export class ControlPanelScreen implements Screen {
         "Remaining Power:",
         () => t.power,
         (v: number) => {
+          const before = t.power;
           t.power = Math.trunc(v);
+          sfx.adjustment("power", before, t.power, this.state.cfg.is_on("SOUND"));
         },
         0,
         1000,

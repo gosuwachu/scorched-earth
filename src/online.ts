@@ -7,6 +7,7 @@ import { Renderer } from "./render";
 import { Connection } from "./online_connection";
 import { joinOrigin } from "./online_address";
 import { RemoteAdapter } from "./remote";
+import { sfx } from "./sound";
 import { button, el, dialog, installOnlineTheme, Roster, type OnlineDialog } from "./online_ui";
 import "./online.css";
 
@@ -205,7 +206,10 @@ export class HostSession {
         type: "add-ai", ai: Number(ai.value), name: AI_NAMES[Number(ai.value) - 1].slice(0, 8), icon: Number(design.value),
       }));
       players.append(aiLabel, designLabel, this.addButton);
-      this.startButton = button("Start online game", () => this.connection.send({ type: "start" }));
+      this.startButton = button("Start online game", () => {
+        sfx.unlock();
+        this.connection.send({ type: "start" });
+      });
       players.append(el("p", "2–10 tanks; at least one human. Every human must be connected and ready."));
       this.box.footer.append(this.startButton, button("Cancel", close));
     } else this.box.footer.append(button("Close join link", close));

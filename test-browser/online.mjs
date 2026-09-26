@@ -46,7 +46,7 @@ try {
   await host.waitForFunction(() => !!window.onlineApp);
   await host.evaluate(() => {
     const app = window.onlineApp;
-    Object.assign(app.cfg, { INITIAL_CASH: 100_000, MAXROUNDS: 2, PLAY_ORDER: "ROUND-ROBIN", PLAY_MODE: "SIMULTANEOUS", MAX_WIND: 0, FALLING_TANKS: "OFF", SOUND: "OFF" });
+    Object.assign(app.cfg, { INITIAL_CASH: 100_000, MAXROUNDS: 2, PLAY_ORDER: "ROUND-ROBIN", PLAY_MODE: "SIMULTANEOUS", MAX_WIND: 0, FALLING_TANKS: "OFF", SOUND: "ON" });
     app._act("start_game");
   });
   await click(host, "Local");
@@ -62,6 +62,16 @@ try {
 
   const contextA = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   const contextB = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true, isMobile: true });
+  for (const context of [contextA, contextB]) {
+    await context.addInitScript(() => {
+      window.audioStarts = 0;
+      const start = AudioBufferSourceNode.prototype.start;
+      AudioBufferSourceNode.prototype.start = function (...args) {
+        window.audioStarts++;
+        return start.apply(this, args);
+      };
+    });
+  }
   let a = await contextA.newPage(); wireErrors(a);
   const b = await contextB.newPage(); wireErrors(b);
   await a.goto(joinUrl); await b.goto(joinUrl);
@@ -72,6 +82,7 @@ try {
   await click(host, "Add computer");
   await until(() => enabled(host, "Start online game"), "ready lobby");
   await click(host, "Start online game");
+  await host.waitForFunction(async () => (await import("/src/sound.ts")).sfx._ctx?.state === "running");
   await until(() => enabled(a, "Done"), "Alice shopping");
   assert.equal(await enabled(b, "Space / Fire"), false);
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
@@ -101,14 +112,27 @@ try {
   await until(() => enabled(b, "Done"), "Bob shopping");
   await click(b, "Done");
   await until(() => enabled(a, "Space / Fire"), "Alice aiming");
+  // Observe real adjustment tone playback on the host, without replacing it.
+  await host.evaluate(async () => {
+    const { sfx } = await import("/src/sound.ts");
+    window.adjustmentTicks = [];
+    const beep = sfx.beep.bind(sfx);
+    sfx.beep = (freq, ms, gate) => {
+      if (ms === 20 && (freq === 600 || freq === 900)) window.adjustmentTicks.push(freq);
+      return beep(freq, ms, gate);
+    };
+  });
+  const ticks = () => host.evaluate(() => window.adjustmentTicks);
   const angle = () => host.evaluate(() => window.onlineApp.gs.tanks[0].angle);
   const initialAngle = await angle();
   await click(a, "← Angle");
   await until(async () => await angle() > initialAngle, "angle changes");
+  assert.deepEqual(await ticks(), [600]);
   const afterTap = await angle();
   // Forged input from the inactive player is rejected by the relay and host.
   await b.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { code: "ArrowLeft" })));
   await pause(300); assert.equal(await angle(), afterTap);
+  assert.deepEqual(await ticks(), [600]);
   // Holding, losing focus, and release must not leave aim stuck.
   const arrow = a.getByRole("button", { name: "← Angle", exact: true });
   const box = await arrow.boundingBox();
@@ -116,12 +140,34 @@ try {
   await a.mouse.down(); await pause(500); await a.mouse.up();
   await pause(200); const afterHold = await angle();
   assert.ok(afterHold > afterTap);
+  const afterHoldTicks = await ticks();
+  assert.ok(afterHoldTicks.length > 2 && afterHoldTicks.every((freq) => freq === 600));
   await pause(650); assert.equal(await angle(), afterHold);
+  assert.deepEqual(await ticks(), afterHoldTicks);
+  await click(a, "↑ Power");
+  await until(async () => (await ticks()).at(-1) === 900, "power tick on host");
+  const beforeMuteTicks = await ticks();
+  await host.evaluate(() => { window.onlineApp.cfg.SOUND = "OFF"; });
+  await click(a, "↓ Power");
+  await pause(150);
+  assert.deepEqual(await ticks(), beforeMuteTicks);
+  await host.evaluate(() => {
+    window.onlineApp.cfg.SOUND = "ON";
+    window.onlineApp.gs.tanks[0].angle = 180;
+  });
+  await click(a, "← Angle");
+  await pause(150);
+  assert.deepEqual(await ticks(), beforeMuteTicks);
   await click(a, "Tank controls");
   await a.getByRole("heading", { name: /Tank controls/ }).waitFor();
+  const beforePanelTicks = (await ticks()).length;
   await a.getByLabel("Remaining Power:").fill("300");
   await a.getByLabel("Remaining Power:").press("Tab");
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].power) === 300, "tank panel power");
+  assert.equal((await ticks()).length, beforePanelTicks + 1);
+  assert.equal((await ticks()).at(-1), 900);
+  assert.equal(await a.evaluate(() => window.audioStarts), 0);
+  assert.equal(await b.evaluate(() => window.audioStarts), 0);
   // Exercise the nested equipment dialog using purchased batteries.
   await host.evaluate(() => { window.onlineApp.gs.tanks[0].health = 80; });
   await a.getByRole("button", { name: /^Batteries:/ }).click();

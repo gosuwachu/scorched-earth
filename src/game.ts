@@ -1391,8 +1391,12 @@ export class GameState {
     if (held("power_down")) {
       pw -= SIM_POWER_RATE * dt;
     }
+    const beforeAngle = t.angle;
+    const beforePower = t.power;
     t.angle = pyInt(Math.max(0, Math.min(180, ang)));
     t.power = pyInt(Math.max(0, Math.min(1000, pw)));
+    sfx.adjustment("angle", beforeAngle, t.angle, this.cfg.is_on("SOUND"));
+    sfx.adjustment("power", beforePower, t.power, this.cfg.is_on("SOUND"));
   }
 
   _sim_human_keydown(key: number): boolean {

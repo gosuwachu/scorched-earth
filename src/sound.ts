@@ -171,6 +171,7 @@ export class Sfx {
   private _tone_cache = new Map<string, AudioBufferLike>(); // (freq,ms) -> buffer
   private _sweep_cache = new Map<string, AudioBufferLike>(); // (f0,f1,ms) -> buffer
   private _seq_cache = new Map<string, AudioBufferLike>(); // (tones) -> buffer
+  private _adjustment_time = { angle: -Infinity, power: -Infinity };
 
   // ---- flight-tone state (continuous looped whine) ----
   private _fly_source: AudioBufferSourceLike | null = null;
@@ -207,6 +208,27 @@ export class Sfx {
       this._init_failed = true;
       return false;
     }
+  }
+
+  /** Call directly from a host gesture before remote input starts arriving. */
+  unlock(): void {
+    if (!this.init()) return;
+    try {
+      if (this._ctx?.state === "suspended") {
+        void Promise.resolve(this._ctx.resume?.()).catch(() => {});
+      }
+    } catch {
+      // Audio availability must never block starting a game.
+    }
+  }
+
+  /** New UI feedback, not an oracle-derived effect. No queued hold-repeat ticks. */
+  adjustment(kind: "angle" | "power", before: number, after: number, enabled = this.enabled): void {
+    if (before === after || !enabled || !this.init()) return;
+    const now = this._ctx!.currentTime;
+    if (now - this._adjustment_time[kind] < 0.060) return;
+    this._adjustment_time[kind] = now;
+    this.beep(kind === "angle" ? 600 : 900, 20, enabled);
   }
 
   // ---- square-wave synthesis (pure; the differentially-tested substrate) -----

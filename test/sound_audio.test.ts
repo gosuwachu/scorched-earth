@@ -34,8 +34,14 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { describe, it, expect, afterEach } from "vitest";
-import { Sfx } from "../src/sound";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { Sfx, sfx } from "../src/sound";
+import { HumanController, type HumanState } from "../src/ui";
+import { Config } from "../src/config";
+import { Tank } from "../src/objects";
+import { createGameState, SIM_LIVE } from "../src/game";
+import * as ingame from "../src/ingame";
+import * as pg from "../src/pygame";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VECTORS = join(__dirname, "..", "oracle", "vectors", "sound.json");
@@ -180,7 +186,129 @@ function expectBufferPlane(buf: MockBuffer, want: number[], label: string): void
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   uninstall();
+});
+
+describe("sound: human adjustment feedback", () => {
+  function setup() {
+    installMock();
+    const sound = new Sfx();
+    sound.init();
+    vi.spyOn(sfx, "adjustment").mockImplementation(sound.adjustment.bind(sound));
+    const tank = new Tank(0, "Human");
+    const cfg = new Config();
+    cfg.SOUND = "ON";
+    const state: HumanState = { current_shooter: tank, cfg, fire() {} };
+    return { sound, ctx: ctxOf(sound), tank, cfg, state };
+  }
+
+  it("plays distinct 20 ms tones and limits each type independently to 60 ms", () => {
+    const { sound, ctx } = setup();
+    sound.adjustment("angle", 45, 46);
+    sound.adjustment("power", 500, 501);
+    expect(ctx.started).toHaveLength(2);
+    expectBufferPlane(ctx.started[0].buffer!, Array.from(sound._square_array(600, 20)), "angle tick");
+    expectBufferPlane(ctx.started[1].buffer!, Array.from(sound._square_array(900, 20)), "power tick");
+    ctx.currentTime = 0.059;
+    sound.adjustment("angle", 46, 47);
+    expect(ctx.started).toHaveLength(2);
+    ctx.currentTime = 0.060;
+    sound.adjustment("angle", 47, 48);
+    expect(ctx.started).toHaveLength(3);
+  });
+
+  it("does not play or consume the cooldown for muted or unchanged values", () => {
+    const { sound, ctx } = setup();
+    sound.adjustment("angle", 180, 180);
+    sound.adjustment("angle", 45, 46, false);
+    sound.enabled = false;
+    sound.adjustment("power", 500, 501);
+    expect(ctx.started).toHaveLength(0);
+    sound.adjustment("angle", 46, 47, true);
+    expect(ctx.started).toHaveLength(1);
+  });
+
+  it("plays taps and held changes, then stops at limits and on release", () => {
+    const { ctx, tank, state, cfg } = setup();
+    HumanController.handle(state, { type: pg.KEYDOWN, key: pg.K_LEFT });
+    HumanController.handle(state, { type: pg.KEYDOWN, key: pg.K_UP });
+    expect([tank.angle, tank.power]).toEqual([46, 501]);
+    expect(ctx.started).toHaveLength(2);
+    for (let i = 1; i <= 60; i++) {
+      ctx.currentTime = i / 60;
+      HumanController.update_continuous(state, { [pg.K_LEFT]: true, [pg.K_UP]: true });
+    }
+    expect(ctx.started.length).toBeGreaterThan(4);
+    expect(tank.angle).toBeGreaterThan(46);
+    expect(tank.power).toBeGreaterThan(501);
+    const count = ctx.started.length;
+    tank.angle = 180; tank.power = 1000;
+    ctx.currentTime = 2;
+    HumanController.update_continuous(state, { [pg.K_LEFT]: true, [pg.K_UP]: true });
+    HumanController.handle(state, { type: pg.KEYDOWN, key: pg.K_LEFT });
+    HumanController.update_continuous(state, {});
+    cfg.SOUND = "OFF";
+    HumanController.handle(state, { type: pg.KEYDOWN, key: pg.K_DOWN });
+    expect(tank.power).toBe(999);
+    expect(ctx.started).toHaveLength(count);
+  });
+
+  it("plays HUD adjustments but ignores AI turns and non-aim phases", () => {
+    const { ctx, tank, cfg } = setup();
+    const gs = createGameState(cfg, 640, 480, 1);
+    gs.current_shooter = tank;
+    gs.phase = "aim";
+    const state = gs as unknown as ingame.GameState;
+    state._hud_hitboxes = { angle: new pg.Rect(150, 4, 80, 20), power: new pg.Rect(6, 4, 80, 20) };
+    const angleClick = { type: pg.MOUSEBUTTONDOWN, button: 1, pos: [160, 10] as [number, number] };
+    ingame.handle_game_event(state, angleClick);
+    ingame.handle_game_event(state, { ...angleClick, pos: [10, 10] });
+    expect([tank.angle, tank.power]).toEqual([46, 499]);
+    expect(ctx.started).toHaveLength(2);
+    ctx.currentTime = 1;
+    tank.ai_class = 1;
+    ingame.handle_game_event(state, angleClick);
+    tank.ai_class = 0;
+    gs.phase = "flight";
+    ingame.handle_game_event(state, angleClick);
+    expect(ctx.started).toHaveLength(2);
+  });
+
+  it("plays simultaneous human adjustments without changing their arithmetic", () => {
+    const { ctx, tank, cfg } = setup();
+    const gs = createGameState(cfg, 640, 480, 1);
+    gs.phase = SIM_LIVE;
+    gs._sim_human = tank;
+    gs._sim_keymap = { ccw: 0, power_up: 1 };
+    gs._sim_human_input([true, true], 0.1);
+    expect(tank.angle).toBeGreaterThan(45);
+    expect(tank.power).toBe(525);
+    expect(ctx.started).toHaveLength(2);
+    ctx.currentTime = 1;
+    gs._sim_human_input([false, false], 0.1);
+    expect(ctx.started).toHaveLength(2);
+  });
+
+  it("unlocks suspended audio silently and tolerates rejected resume requests", async () => {
+    installMock({ state: "suspended" });
+    const sound = new Sfx();
+    sound.unlock();
+    const ctx = ctxOf(sound);
+    expect(ctx.resumeCalls).toBe(1);
+    expect(ctx.started).toHaveLength(0);
+    vi.spyOn(ctx, "resume").mockImplementation(() => Promise.reject(new Error("blocked")));
+    expect(() => sound.unlock()).not.toThrow();
+    await Promise.resolve();
+    vi.spyOn(ctx, "resume").mockImplementation(() => { throw new Error("blocked"); });
+    expect(() => sound.unlock()).not.toThrow();
+  });
+
+  it("remains safe without an audio device", () => {
+    uninstall();
+    const sound = new Sfx();
+    expect(() => { sound.unlock(); sound.adjustment("angle", 45, 46); }).not.toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------

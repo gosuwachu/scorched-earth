@@ -38,6 +38,7 @@ import * as pygame from "./pygame";
 
 import * as C from "./constants";
 import * as weapons from "./weapons";
+import { sfx } from "./sound";
 
 export const AI_TYPE_NAMES = [
   "Human",
@@ -150,6 +151,7 @@ export type KeyState = { [code: number]: boolean } | boolean[];
 /** The game-state subset HumanController reads. */
 export interface HumanState {
   current_shooter: Tank | null;
+  cfg?: { is_on(key: string): boolean };
   _aim_hold?: AimHold;
   fire(): void;
 }
@@ -466,7 +468,9 @@ export class HumanController {
         hold.af += rate * dt * (left ? 1 : -1);
         const whole = pyInt(hold.af);
         hold.af -= whole;
+        const before = t.angle;
         t.angle = Math.max(0, Math.min(180, t.angle + whole));
+        sfx.adjustment("angle", before, t.angle, state.cfg?.is_on("SOUND"));
       }
     } else {
       hold.a = hold.af = 0.0;
@@ -478,7 +482,9 @@ export class HumanController {
         hold.pf += rate * dt * (up ? 1 : -1);
         const whole = pyInt(hold.pf);
         hold.pf -= whole;
+        const before = t.power;
         t.power = Math.max(0, Math.min(1000, t.power + whole));
+        sfx.adjustment("power", before, t.power, state.cfg?.is_on("SOUND"));
       }
     } else {
       hold.p = hold.pf = 0.0;
@@ -491,6 +497,8 @@ export class HumanController {
       return;
     }
     const k = e.key;
+    const beforeAngle = t.angle;
+    const beforePower = t.power;
     if (k === pygame.K_SPACE || k === pygame.K_RETURN) {
       state.fire();
     } else if (k === pygame.K_LEFT || k === pygame.K_a) {
@@ -514,6 +522,11 @@ export class HumanController {
       HumanController._use_battery(t);
     } else if (k === pygame.K_MINUS) {
       t.contact_trigger = !t.contact_trigger;
+    }
+    if ([pygame.K_LEFT, pygame.K_RIGHT, pygame.K_a, pygame.K_d].includes(k!)) {
+      sfx.adjustment("angle", beforeAngle, t.angle, state.cfg?.is_on("SOUND"));
+    } else if ([pygame.K_UP, pygame.K_DOWN, pygame.K_w, pygame.K_s].includes(k!)) {
+      sfx.adjustment("power", beforePower, t.power, state.cfg?.is_on("SOUND"));
     }
   }
 
