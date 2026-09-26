@@ -6,7 +6,7 @@
   "description": "Browser (TypeScript + Canvas + Web Audio) port of Scorched Earth v1.5, differential-verified against the Python port.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build",
     "preview": "vite preview",
     "test": "bash scripts/capped.sh vitest run",
     "test:uncapped": "vitest run",
@@ -14,15 +14,28 @@
     "typecheck": "tsc --noEmit",
     "coverage:node": "CAP_MEM=8G bash scripts/capped.sh vitest run --coverage",
     "coverage:merge": "node scripts/coverage_merge.mjs",
-    "coverage:all": "CAP_MEM=12G bash scripts/capped.sh bash scripts/coverage_all.sh"
+    "coverage:all": "CAP_MEM=12G bash scripts/capped.sh bash scripts/coverage_all.sh",
+    "dev:lan": "tsx server/index.ts --dev",
+    "start:lan": "node dist-server/server/index.js",
+    "lan": "npm run build && npm run start:lan",
+    "test:online": "vitest run test/online.test.ts",
+    "test:online:browser": "node test-browser/online.mjs",
+    "test:online:production": "node test-browser/online_production.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.8.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^2.1.9",
     "monocart-coverage-reports": "^2.12.12",
     "playwright": "^1.61.1",
+    "tsx": "^4.23.15",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vitest": "^2.1.4"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "ws": "^8.21.3"
   }
 }
