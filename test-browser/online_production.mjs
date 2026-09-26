@@ -7,12 +7,13 @@ import { chromium } from "playwright";
 import { WebSocket } from "ws";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const server = spawn(process.execPath, ["dist-server/server/index.js"], {
+const externalBase = process.env.ONLINE_BASE_URL;
+const server = externalBase ? undefined : spawn(process.execPath, ["dist-server/server/index.js"], {
   cwd: root, env: { ...process.env, PORT: "4318" }, stdio: ["ignore", "pipe", "pipe"],
 });
 let log = "";
-server.stdout.on("data", (b) => { log += b; });
-server.stderr.on("data", (b) => { log += b; });
+server?.stdout.on("data", (b) => { log += b; });
+server?.stderr.on("data", (b) => { log += b; });
 let browser;
 let phone;
 const peers = [];
@@ -39,7 +40,7 @@ async function joinPeer(url, room, token) {
   return { socket, ...joined };
 }
 try {
-  const base = "http://127.0.0.1:4318";
+  const base = externalBase || "http://127.0.0.1:4318";
   let up = false;
   for (let i = 0; i < 100 && !up; i++) {
     try { up = (await fetch(`${base}/api/lan`)).ok; } catch { /* starting */ }
@@ -51,7 +52,8 @@ try {
     args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
   });
   const errors = [];
-  const hostContext = await browser.newContext({ viewport: { width: 1200, height: 900 } });
+  const ignoreHTTPSErrors = process.env.ONLINE_TEST_TLS === "1";
+  const hostContext = await browser.newContext({ viewport: { width: 1200, height: 900 }, ignoreHTTPSErrors });
   await hostContext.addInitScript(() => localStorage.setItem("scorch.cfg", "INITIAL_CASH=100000\nPLAY_ORDER=ROUND-ROBIN\nHOSTILE_ENVIRONMENT=OFF\nSOUND=OFF\n"));
   const host = await hostContext.newPage();
   host.on("pageerror", (e) => errors.push(String(e)));
@@ -75,7 +77,8 @@ try {
   const link = host.getByRole("textbox", { name: "Join link", exact: true });
   await link.waitFor();
   const join = await link.inputValue();
-  const phoneContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  if (externalBase) assert.equal(new URL(join).origin, new URL(base).origin, "Join link must use the public proxy origin");
+  const phoneContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, ignoreHTTPSErrors });
   phone = await phoneContext.newPage();
   phone.on("pageerror", (e) => errors.push(String(e)));
   // Use the actual generated LAN address, not a rewritten localhost URL.
@@ -84,7 +87,7 @@ try {
   await phone.getByRole("button", { name: "Ready", exact: true }).click();
   await host.getByRole("button", { name: "Add computer", exact: true }).click();
   const room = new URL(join).searchParams.get("join");
-  const wsUrl = `${base.replace("http:", "ws:")}/online`;
+  const wsUrl = `${base.replace(/^http/, "ws")}/online`;
   const guestPeers = [];
   for (let i = 0; i < 8; i++) {
     const peer = await joinPeer(wsUrl, room);
@@ -200,8 +203,8 @@ try {
 } finally {
   for (const peer of peers) peer.close();
   await browser?.close();
-  server.kill("SIGTERM");
-  await new Promise((resolve) => {
+  server?.kill("SIGTERM");
+  if (server) await new Promise((resolve) => {
     if (server.exitCode !== null) return resolve();
     server.once("exit", resolve);
     setTimeout(() => { server.kill("SIGKILL"); resolve(); }, 3000).unref();

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in
+    remove)
+        deb-systemd-helper mask scorchedearth-html5.service >/dev/null || true
+        ;;
+    purge)
+        deb-systemd-helper purge scorchedearth-html5.service >/dev/null || true
+        deb-systemd-helper unmask scorchedearth-html5.service >/dev/null || true
+        ;;
+esac
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+fi
+# Keep the system account: deleting it could reassign its UID to another service.

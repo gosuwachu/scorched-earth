@@ -1,0 +1,4 @@
+# Deployed independently through the shared VPS caddy-config helper.
+scorched.gosuwachu.fyi {
+    reverse_proxy 127.0.0.1:4001
+}

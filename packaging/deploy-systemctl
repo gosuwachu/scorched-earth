@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Container-only adapter: real game processes, no systemd PID 1 required.
+set -euo pipefail
+# Debian helpers use offline systemctl for enablement/presets even without PID 1.
+if [[ ${1:-} == --root=* ]]; then exec /usr/bin/systemctl.real "$@"; fi
+pid_file=/tmp/scorch-deploy-service.pid
+log_file=/tmp/scorch-deploy-service.log
+active() { [[ -s $pid_file ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; }
+stop() {
+  if active; then
+    kill "$(cat "$pid_file")"
+    for _ in $(seq 1 100); do active || break; sleep 0.05; done
+  fi
+  rm -f "$pid_file"
+}
+case ${1:-} in
+  show) if active; then cat "$pid_file"; else echo 0; fi ;;
+  is-active) active ;;
+  enable) /usr/bin/systemctl.real --root=/ enable "${@:2}" ;;
+  restart)
+    stop
+    install -o scorchedearth-html5 -m 644 /dev/null "$pid_file"
+    runuser -u scorchedearth-html5 -- sh -c '
+      echo $$ > /tmp/scorch-deploy-service.pid
+      cd /opt/scorchedearth-html5
+      set -a
+      . /etc/default/scorchedearth-html5
+      if [ -f /tmp/scorch-deploy-unhealthy ]; then
+        exec ./node/bin/node --input-type=module -e '\''import {createServer} from "node:http"; createServer((req, res) => {res.writeHead(503); res.end();}).listen(Number(process.env.PORT), process.env.HOST);'\''
+      fi
+      exec ./node/bin/node dist-server/server/index.js
+    ' </dev/null >"$log_file" 2>&1 &
+    for _ in $(seq 1 100); do active && exit 0; sleep 0.05; done
+    exit 1
+    ;;
+  stop) stop ;;
+  status) echo 'Container service status:'; if [[ -f $log_file ]]; then cat "$log_file"; fi; active ;;
+  daemon-reload) ;;
+  *) echo "Unexpected systemctl call: $*" >&2; exit 1 ;;
+esac

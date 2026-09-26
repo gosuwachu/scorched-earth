@@ -1,16 +1,21 @@
 import { createServer } from "node:http";
-import { networkInterfaces } from "node:os";
+import { isIP } from "node:net";
 import { readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { Rooms, type Peer } from "./rooms.js";
+import { discoverLanUrls } from "./lan.js";
 
 const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST ?? "0.0.0.0";
+if (!Number.isInteger(port) || port < 1 || port > 65535 || !isIP(host)) {
+  console.error("Invalid server configuration: HOST must be an IP address and PORT an integer from 1 to 65535.");
+  process.exit(1);
+}
 const dev = process.argv.includes("--dev");
 const root = resolve("dist");
 const registry = new Rooms();
-const urls = [...new Set(Object.values(networkInterfaces()).flat()
-  .filter((i) => i && !i.internal && i.family === "IPv4").map((i) => `http://${i!.address}:${port}`))];
+const urls = discoverLanUrls(port);
 const mime: Record<string, string> = {
   ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
   ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon",
@@ -58,9 +63,15 @@ wss.on("connection", (ws) => {
   ws.on("close", () => { clearInterval(heartbeat); registry.disconnect(peer); });
 });
 const cleanup = setInterval(() => registry.expire(), 30_000);
-server.listen(port, "0.0.0.0", () => {
-  console.log(`Scorched Earth LAN: http://localhost:${port}`);
-  for (const url of urls) console.log(`  Join from your LAN: ${url}`);
+server.on("error", (error: NodeJS.ErrnoException) => {
+  console.error(`Cannot listen on ${host}:${port}: ${error.code === "EADDRINUSE" ? "address already in use" : error.message}`);
+  process.exit(1);
+});
+server.listen(port, host, () => {
+  console.log(`Scorched Earth listening on ${host}:${port}`);
+  if (host === "0.0.0.0" || host === "::") {
+    for (const url of urls) console.log(`  Join from your LAN: ${url}`);
+  }
 });
 async function shutdown(): Promise<void> {
   clearInterval(cleanup);

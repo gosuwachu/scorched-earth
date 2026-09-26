@@ -1,0 +1,30 @@
+[Unit]
+Description=Scorched Earth browser game and multiplayer relay
+After=network.target
+
+[Service]
+Type=simple
+User=scorchedearth-html5
+Group=scorchedearth-html5
+WorkingDirectory=/opt/scorchedearth-html5
+EnvironmentFile=/etc/default/scorchedearth-html5
+ExecStart=/opt/scorchedearth-html5/node/bin/node dist-server/server/index.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+UMask=0027
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+# Node's LAN discovery uses netlink to enumerate Linux network interfaces.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

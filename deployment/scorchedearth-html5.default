@@ -1,0 +1,5 @@
+# Restart scorchedearth-html5.service after changing these values.
+# Caddy connects to this loopback address. Keep its upstream in sync with PORT.
+HOST=127.0.0.1
+PORT=4001
+NODE_ENV=production

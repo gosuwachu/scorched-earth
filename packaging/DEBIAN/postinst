@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+if [ "${1:-}" = configure ]; then
+    getent group scorchedearth-html5 >/dev/null || groupadd --system scorchedearth-html5
+    getent passwd scorchedearth-html5 >/dev/null || useradd --system --gid scorchedearth-html5 --home-dir /nonexistent --shell /usr/sbin/nologin scorchedearth-html5
+    deb-systemd-helper unmask scorchedearth-html5.service >/dev/null || true
+    if deb-systemd-helper --quiet was-enabled scorchedearth-html5.service; then
+        deb-systemd-helper enable scorchedearth-html5.service >/dev/null
+    fi
+    deb-systemd-helper update-state scorchedearth-html5.service >/dev/null
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        deb-systemd-invoke restart scorchedearth-html5.service
+    fi
+fi

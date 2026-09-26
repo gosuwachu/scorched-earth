@@ -127,6 +127,177 @@ protocol tests; `npm run test:online:browser` runs the multiplayer browser check
 After building, `npm run test:online:production` checks the shipped pages and server.
 The static hosted site supports Local play; Online requires this LAN service.
 
+## Install on an Ubuntu VPS
+
+The Debian package includes the compiled game, original assets, production
+`node_modules`, and a private, checksum-verified Node.js 24.21.0 runtime. The VPS
+does not need Node, npm, Docker, or a source checkout. Standard Ubuntu system
+libraries and systemd are declared package dependencies; `apt` can install any
+missing OS dependencies. Package installation never downloads JavaScript packages.
+
+### Build and test the package
+
+On an amd64 development machine with Docker access:
+
+```bash
+./packaging/build-and-test.sh
+./packaging/build-and-test.sh --skip-tests  # build only, including type checking
+```
+
+The build runs inside Ubuntu 24.04. Tests install the resulting package in fresh
+Ubuntu 24.04 and 25.04 containers without system Node/npm and with networking
+disabled. They check assets, multiplayer/reconnect, invalid settings, port
+conflicts, service-unit validity, upgrades, configuration preservation, removal,
+and purge. An additional browser test exercises HTTPS and secure WebSockets through
+Caddy's shared `sites.d` layout, alongside another application. The TLS certificate
+is generated only for this isolated test; production uses Caddy's automatic HTTPS.
+The deployment installer is also exercised with real package transactions and
+game processes in both Ubuntu containers, using a service-control adapter in place
+of systemd. Checks include same-version reinstallation, changed package defaults,
+foreign port listeners, invalid uploads, and failed application health checks.
+
+With tests enabled, successful completion prints `PASS`. Both modes leave these files:
+
+```text
+artifacts/scorchedearth-html5_0.0.0-1_amd64.deb
+artifacts/SHA256SUMS
+```
+
+The package is approximately 33 MB. A runtime smoke test launches the service
+command as its dedicated account with a test-only seccomp launcher enforcing the
+packaged socket-family allowlist. It also denies `AF_NETLINK` to verify that failed
+LAN discovery warns once and returns empty LAN URLs without breaking HTTP or
+multiplayer. The service allows `AF_NETLINK` because Linux interface discovery
+requires it. These tests do not emulate the complete systemd sandbox;
+Docker does not run systemd as PID 1. Actual
+service startup, reboot behavior, and public certificate issuance should also be
+verified when deploying. The package build does not require the separate Python
+oracle vectors. To run the deployment-client test alone:
+
+```bash
+node --test packaging/test-*.mjs
+```
+
+### Install the game
+
+From the development checkout, deploy with one command:
+
+```bash
+./deploy.sh                    # defaults to root@shopping
+./deploy.sh admin@another-vps   # requires non-interactive sudo on the VPS
+./deploy.sh --skip-tests       # faster: build and deploy without test suites
+./deploy.sh --skip-tests admin@another-vps
+```
+
+The script checks SSH access, builds and tests a fresh package in Docker, verifies
+its checksum, uploads it into a temporary directory, and installs it on the VPS.
+It then enables/restarts `scorchedearth-html5.service` and verifies the installed
+version, active service, and application health within 30 seconds. It works from
+any current directory when invoked by its path.
+
+`--skip-tests` may appear before or after the SSH target. It skips all test suites,
+including those otherwise run during Docker image verification, and prints a
+warning. It still builds a fresh package from the current source, runs TypeScript
+checking and production bundling, and performs checksum, privilege, port, and
+post-install health checks. It does not reuse an existing package instead of
+building. Tests remain enabled by default. Both scripts support `--help`.
+
+The destination must run matching-architecture Ubuntu with systemd. Deployment
+preserves existing settings and reinstalls even an unchanged package version, so
+rebuilding `0.0.0-1` still replaces the installed files. An unrelated listener on
+the configured port causes deployment to fail before installation; the game's
+own listener is allowed during upgrades. Package installation restarts the game
+and interrupts active matches. Failures return a nonzero status, report service
+diagnostics when installation has begun, and clean up uploads; there is no
+automatic package rollback.
+
+Caddy is deployed separately with `./deploy-caddy.sh` as described below. The game
+deployment does not change DNS, firewall rules, or other applications.
+
+For manual package transfer and installation:
+
+The `shopping` VPS uses amd64 Ubuntu. Its ports 3000 and 4000 serve other apps;
+this package defaults to **127.0.0.1:4001**. Before the first install, check again
+that 4001 has no listener:
+
+```bash
+ssh shopping 'ss -H -ltn "( sport = :4001 )"'
+scp artifacts/scorchedearth-html5_0.0.0-1_amd64.deb artifacts/SHA256SUMS shopping:/tmp/
+ssh shopping
+cd /tmp
+sha256sum --check SHA256SUMS
+sudo apt install ./scorchedearth-html5_0.0.0-1_amd64.deb
+systemctl status scorchedearth-html5 --no-pager
+curl --fail http://127.0.0.1:4001/api/lan
+```
+
+If the first command prints a listener, investigate it before installing; do not
+replace another application's service. For upgrades, the game itself is expected
+to own this port. The package enables the service at boot and starts it immediately,
+running as `scorchedearth-html5` from `/opt/scorchedearth-html5`. Logs go to the journal:
+
+```bash
+journalctl -u scorchedearth-html5 -f
+```
+
+Settings live in `/etc/default/scorchedearth-html5` and survive upgrades. `HOST`
+accepts an IPv4/IPv6 bind address, and `PORT` accepts 1–65535. Restart the service
+after editing settings. If changing the port, also change the Caddy upstream below
+and redeploy that configuration. The backend remains private on loopback; no
+public firewall opening for port 4001 is needed.
+
+### Deploy the HTTPS site
+
+The shared proxy is provisioned separately by
+[`caddy-reverse-proxy`](../caddy-reverse-proxy). This application expects an active
+`caddy.service` and `/usr/local/sbin/caddy-config` on the VPS. It does not install
+or manage a second proxy. Create the DNS A record for `scorched.gosuwachu.fyi`
+pointing to **209.97.177.131** before requesting its public certificate.
+
+The game owns [deploy/caddy/scorchedearth-html5.caddy](deploy/caddy/scorchedearth-html5.caddy).
+From this checkout on the workstation, deploy just that site:
+
+```bash
+./deploy-caddy.sh                 # defaults to root@shopping
+./deploy-caddy.sh admin@my-vps     # requires non-interactive sudo on the VPS
+```
+
+The script streams its configuration to a temporary upload and invokes
+`caddy-config deploy scorchedearth-html5`. The shared helper validates the combined
+configuration, installs `/etc/caddy/sites.d/scorchedearth-html5.caddy`, and gracefully
+reloads Caddy. It preserves other applications and rolls back on reload failure.
+The script returns a failure if upload, validation, or reload fails. The shared
+proxy repository does not need to be checked out on the workstation.
+
+For installation from the `.deb` alone, a copy of the site is included:
+
+```bash
+# On the VPS:
+sudo caddy-config deploy scorchedearth-html5 \
+  /usr/share/scorchedearth-html5/caddy/scorchedearth-html5.caddy
+curl --fail https://scorched.gosuwachu.fyi/
+systemctl status caddy --no-pager
+journalctl -u caddy --since '-5 minutes' --no-pager
+```
+
+Open **https://scorched.gosuwachu.fyi**, choose Online, and connect a controller using
+the generated join link. It retains the public HTTPS origin and uses secure
+WebSockets. The host browser still runs the game and must stay open; the VPS relays
+messages. Restarting/upgrading the game service loses its in-memory rooms. Caddy
+reloads may briefly disconnect WebSockets, which reconnect automatically.
+
+Install a newer `.deb` with the same `apt install ./…deb` command. To remove the
+site and game, run on the VPS:
+
+```bash
+sudo caddy-config remove scorchedearth-html5
+sudo apt remove scorchedearth-html5  # retain service settings
+# Or: sudo apt purge scorchedearth-html5  # also remove service settings
+```
+
+Proxy configuration is deployed independently and is never changed by game package
+maintenance scripts. The system account is retained after removal to avoid UID reuse.
+
 ## Building from source (developers only)
 
 The game is written in TypeScript and compiled **once** to the browser JavaScript that

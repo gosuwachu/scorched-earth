@@ -1,0 +1,12 @@
+.git
+node_modules
+dist
+dist-server
+artifacts
+coverage
+oracle/vectors
+visual/out
+test-browser/out
+screenshots
+*.log
+.env*

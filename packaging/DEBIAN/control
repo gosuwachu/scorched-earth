@@ -1,0 +1,10 @@
+Package: scorchedearth-html5
+Version: 0.0.0-1
+Section: games
+Priority: optional
+Architecture: amd64
+Maintainer: Piotr Wach <wach.piotrek@gmail.com>
+Depends: libc6 (>= 2.28), libstdc++6 (>= 8), libgcc-s1, systemd, init-system-helpers, passwd
+Description: Scorched Earth browser game and multiplayer relay
+ Includes the built game, original game assets, production JavaScript
+ dependencies, and a private Node.js runtime. No npm installation required.

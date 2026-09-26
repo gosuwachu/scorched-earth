@@ -5,6 +5,7 @@ import { canStart } from "../shared/online";
 import { Config } from "./config";
 import { Renderer } from "./render";
 import { Connection } from "./online_connection";
+import { joinOrigin } from "./online_address";
 import { RemoteAdapter } from "./remote";
 import { button, el, dialog, installOnlineTheme, Roster, type OnlineDialog } from "./online_ui";
 import "./online.css";
@@ -34,8 +35,8 @@ export class HostSession {
 
   constructor(private app: App, private urls: string[]) {
     this.localConfig = app.cfg;
-    const current = new URL(location.href);
-    this.origin = urls.includes(current.origin) ? current.origin : urls[0] ?? "";
+    this.origin = joinOrigin(location.href, urls);
+    this.urls = [...new Set([this.origin, ...urls].filter(Boolean))];
     this.box = dialog("Online lobby", { wide: true, cancel: () => app._act("to_menu") });
     this.box.body.append(el("p", "Creating room…"));
     this.bar.append(this.status);
