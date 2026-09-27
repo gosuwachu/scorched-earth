@@ -54,6 +54,8 @@
  *   every screen .draw() need a DOM / a real engine and defer to the Phase-3 visual
  *   gate + a live boot (pixelsDeferredToPhase3 = true).
  */
+import { UiHost, uiOwnsInput, type HtmlScreen } from "./html/host";
+import { UI_ACTION } from "./screen";
 import { handleCharge, type ChargeState } from "./energy_controls";
 import * as pygame from "./pygame";
 import * as assets from "./assets";
@@ -144,6 +146,7 @@ interface StackScreen {
   opaque?: boolean;
   panel?: { rect?: pygame.Rect } | null;
   handle(event: ScreenEvent): string | null;
+  dispatchAction?(action: string | null): string | null;
   update(dt: number): string | null;
   draw(surf: pygame.Surface): void;
   [extra: string]: unknown;
@@ -574,6 +577,19 @@ const SUBMENUS = new Set([
 
 export class App {
   online: HostSession | null = null;
+  ui: UiHost | null = null;
+
+  mountUi(canvas: HTMLCanvasElement): void {
+    this.ui?.dispose();
+    this.ui = new UiHost(this, canvas, _releaseInput);
+    this.renderer.htmlDialogs = true;
+  }
+
+  dispatchAction(action: string | null): void {
+    const screen = this.top;
+    this._act(screen.dispatchAction ? screen.dispatchAction(action) : screen.handle({ type: UI_ACTION, action }));
+    this.ui?.sync();
+  }
   chooseMode: (() => void) | null = null;
   cfg: Config;
   w: number;
@@ -654,7 +670,7 @@ export class App {
     return this.stack[this.stack.length - 1];
   }
 
-  get transitioning(): boolean { return this._wipe !== null; }
+  get transitioning(): boolean { return this._wipe !== null || !!this.ui?.transitioning; }
 
   get onlineScreen(): "battle" | "player" | "rankings" | "finished" | "admin" {
     if (this.top instanceof GameScreen) return "battle";
@@ -666,7 +682,7 @@ export class App {
   }
 
   handleRemote(event: ScreenEvent): void {
-    if (!this._wipe) this._act(this.top.handle(event));
+    if (!this.transitioning) this._act(this.top.handle(event));
   }
 
   startLocal(): void { this._start_setup(); }
@@ -701,9 +717,10 @@ export class App {
 
   /** main.py:407. */
   push(screen: StackScreen): void {
-    const wipe = _wants_zoom_wipe(screen);
+    const wipe = !this.ui && _wants_zoom_wipe(screen);
     const bg = wipe ? this._compose(this.stack) : null;
     this.stack.push(screen);
+    this.ui?.sync();
     if (wipe) {
       this._begin_wipe(screen, bg as pygame.Surface, true);
     }
@@ -713,7 +730,7 @@ export class App {
   pop(): void {
     if (this.stack.length > 1) {
       const leaving = this.stack[this.stack.length - 1];
-      if (_wants_zoom_wipe(leaving)) {
+      if (!this.ui && _wants_zoom_wipe(leaving)) {
         const fg = this._compose(this.stack);
         this.stack.pop();
         const bg = this._compose(this.stack);
@@ -721,6 +738,7 @@ export class App {
       } else {
         this.stack.pop();
       }
+      this.ui?.sync();
     }
   }
 
@@ -1019,6 +1037,7 @@ export class App {
     this.online?.beforeFrame(nowMs);
     if (this.online?.paused) {
       this._debt = 0;
+      this.ui?.sync();
       this.online.afterFrame(nowMs);
       return true;
     }
@@ -1039,6 +1058,8 @@ export class App {
           // The host administers the match through the LAN bar. Tank/shop input
           // belongs exclusively to the player who owns the current controller.
           continue;
+        } else if (this.ui?.transitioning) {
+          if (e.type === pygame.KEYDOWN || e.type === pygame.MOUSEBUTTONDOWN) this.ui.finishTransition();
         } else if (this._wipe !== null) {
           // A dialog is animating: any key/click COMPLETES it instantly.
           if (e.type === pygame.KEYDOWN || e.type === pygame.MOUSEBUTTONDOWN) {
@@ -1048,7 +1069,9 @@ export class App {
           this._act(this.top.handle(e));
         }
       }
-      if (this._wipe !== null) {
+      if (this.ui?.transitioning) {
+        this._debt = 0;
+      } else if (this._wipe !== null) {
         // UI transition: consume REAL elapsed time (its own _FRAME_DT accumulator
         // is frame-rate independent); cap only the pause-resume spike. The stack
         // below is frozen during a wipe, so its debt does not accrue.
@@ -1066,6 +1089,7 @@ export class App {
           this._act(this.top.update(STEP_DT));
         }
       }
+      this.ui?.sync();
       this._draw();
       _present(this.screen);
       this.online?.afterFrame(nowMs);
@@ -1080,6 +1104,20 @@ export class App {
 
   /** main.py:687. */
   private _draw(): void {
+    if (this.ui) {
+      this.renderer.htmlDialogs = true;
+      let start = 0;
+      for (let i = this.stack.length - 1; i >= 0; i--) {
+        if (this.stack[i].opaque ?? !this.ui.isHtml(this.stack[i] as unknown as HtmlScreen)) { start = i; break; }
+      }
+      this.screen.fill([200, 200, 200]);
+      for (let i = start; i < this.stack.length; i++) {
+        const screen = this.stack[i];
+        if (screen instanceof TankInitScreen) screen._draw_shade_field(this.screen);
+        else if (!this.ui.isHtml(screen as unknown as HtmlScreen)) screen.draw(this.screen);
+      }
+      return;
+    }
     if (this._wipe !== null) {
       this._wipe.draw(this.screen);
       return;
@@ -1112,6 +1150,7 @@ const SIM_LIVE = "sim_live";
 /** main.py:215 -- the live battlefield: renders the world + HUD, routes in-round
  *  input, advances the GameState, signals phase transitions to the App. */
 class GameScreen extends Screen {
+  readonly uiKind = "battle";
   override opaque = true;
   app: App;
   gs: GameStateLike;
@@ -1184,6 +1223,7 @@ class GameScreen extends Screen {
 /** main.py:289 -- interim rankings panel.  STATIC by ground truth (no per-row
  *  color cycle; see main.py:269-286). */
 class RankingsScreen extends Screen {
+  readonly uiKind = "rankings";
   override opaque = false;
   app: App;
   title: string;
@@ -1218,6 +1258,7 @@ class RankingsScreen extends Screen {
 
 /** main.py:314 -- the game-end final-scoring screen. */
 class GameOverScreen extends Screen {
+  readonly uiKind = "finished";
   override opaque = false;
   app: App;
   quote: readonly [string, string] | null;
@@ -1340,7 +1381,7 @@ function _toggleFullscreenApi(wantFull: boolean): void {
   try {
     let p: Promise<void> | undefined;
     if (wantFull) {
-      const el = (document.getElementById("game") as HTMLElement | null) ?? document.documentElement;
+      const el = document.documentElement;
       p = el.requestFullscreen?.();
     } else {
       p = document.exitFullscreen?.();
@@ -1401,11 +1442,22 @@ function _logicalPos(canvas: HTMLCanvasElement, clientX: number, clientY: number
 const _mousePressed: [boolean, boolean, boolean] = [false, false, false];
 let _mousePos: [number, number] = [0, 0];
 
+function _releaseInput(): void {
+  for (const key of Object.keys(_keysHeld)) delete _keysHeld[Number(key)];
+  _mousePressed.fill(false);
+  _eventQueue.length = 0;
+}
+
 /** Wire the DOM listeners onto `canvas` + window.  Called once during boot. */
 function _installInput(canvas: HTMLCanvasElement): void {
   window.addEventListener("keydown", (e) => {
-    if (e.target instanceof Element && e.target.closest(".lan-overlay, .lan-bar")) return;
-    if (document.querySelector(".lan-overlay")) return;
+    if (e.key === "F11" || (e.altKey && e.key === "Enter")) {
+      e.preventDefault();
+      _eventQueue.push({ type: pygame.KEYDOWN, key: pygame.keyToPygame(e), mod: pygame.modsToPygame(e) });
+      return;
+    }
+    if (e.target instanceof Element && e.target.closest(".se-ui")) return;
+    if (uiOwnsInput()) return;
     const key = pygame.keyToPygame(e);
     if (key !== 0) {
       _keysHeld[key] = true;
@@ -1433,12 +1485,12 @@ function _installInput(canvas: HTMLCanvasElement): void {
     if (key !== 0) {
       _keysHeld[key] = false;
     }
-    if (e.target instanceof Element && e.target.closest(".lan-overlay, .lan-bar")) return;
-    if (document.querySelector(".lan-overlay")) return;
+    if (e.target instanceof Element && e.target.closest(".se-ui")) return;
+    if (uiOwnsInput()) return;
     _eventQueue.push({ type: pygame.KEYUP, key, mod: pygame.modsToPygame(e) });
   });
   canvas.addEventListener("mousedown", (e) => {
-    if (document.querySelector(".lan-overlay")) return;
+    if (uiOwnsInput()) return;
     const pos = _logicalPos(canvas, e.clientX, e.clientY);
     _mousePos = pos;
     const btn = pygame.mouseButtonToPygame(e.button);
@@ -1463,10 +1515,11 @@ function _installInput(canvas: HTMLCanvasElement): void {
     } else if (btn === 3) {
       _mousePressed[2] = false;
     }
-    if (document.querySelector(".lan-overlay")) return;
+    if (uiOwnsInput()) return;
     _eventQueue.push({ type: pygame.MOUSEBUTTONUP, button: btn, pos });
   });
   canvas.addEventListener("mousemove", (e) => {
+    if (uiOwnsInput()) return;
     const pos = _logicalPos(canvas, e.clientX, e.clientY);
     _mousePos = pos;
     _eventQueue.push({ type: pygame.MOUSEMOTION, pos });
@@ -1619,6 +1672,7 @@ export async function boot(): Promise<App> {
   const backbuffer = new pygame.Surface([rw, rh]);
   (backbuffer as unknown as { _cfg: Config })._cfg = cfg;
   const app = new App(backbuffer, fullscreen, mayhem, fpsSecs);
+  app.mountUi(pageCanvas);
   const { installOnline } = await import("./online");
   installOnline(app);
 
@@ -1646,6 +1700,7 @@ export async function boot(): Promise<App> {
     if (cont) {
       requestAnimationFrame(frame);
     } else {
+      app.ui?.dispose();
       diag.log.info("app stopped; loop halted");
     }
   };

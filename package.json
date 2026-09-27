@@ -18,6 +18,7 @@
     "dev:lan": "tsx server/index.ts --dev",
     "start:lan": "node dist-server/server/index.js",
     "lan": "npm run build && npm run start:lan",
+    "test:ui:browser": "node test-browser/ui.mjs",
     "test:online": "vitest run test/online.test.ts",
     "test:online:browser": "node test-browser/online.mjs",
     "test:online:production": "node test-browser/online_production.mjs"

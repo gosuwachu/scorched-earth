@@ -616,6 +616,8 @@ export function shieldPct(t: { shield_hp: number; shield_item: number }): number
 // ===========================================================================
 
 export class Renderer {
+  /** The browser UI host owns modal prompts; oracle renderers still paint them. */
+  htmlDialogs = false;
   cfg: Cfg;
   w: number;
   h: number;
@@ -785,7 +787,7 @@ export class Renderer {
       this._draw_flash(surf, f);
     }
     const charge = state.plasma_charge as { value: number; max: number } | null | undefined;
-    if (charge) {
+    if (charge && !this.htmlDialogs) {
       const layout = chargeLayout(this.w, this.h);
       pygame.draw.rect(surf, [192, 192, 192], new pygame.Rect(layout.x, layout.y, layout.width, layout.height));
       pygame.draw.rect(surf, [255, 255, 255], new pygame.Rect(layout.x, layout.y, layout.width, layout.height), 1);

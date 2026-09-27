@@ -1406,7 +1406,7 @@ export class TankInitScreen extends Screen {
     return null;
   }
 
-  override draw(surf: pygame.Surface): void {
+  syncUi(): void {
     // Exactly one top-region widget is active per is_computer.
     this.name_label.enabled = !this.is_computer;
     this.name_field.enabled = !this.is_computer;
@@ -1414,6 +1414,10 @@ export class TankInitScreen extends Screen {
     for (const fr of this.sim_frames) {
       fr.enabled = !this.is_computer;
     }
+  }
+
+  override draw(surf: pygame.Surface): void {
+    this.syncUi();
     // Background: the player-color vertical shade field, palette-cycled.
     this._draw_shade_field(surf);
     this.panel.draw(surf, false);
@@ -1985,9 +1989,12 @@ export class SellScreen extends Screen {
     return act;
   }
 
-  override draw(surf: pygame.Surface): void {
-    // recompute offer for the current quantity
+  syncUi(): void {
     this.offer_label.label = `Offer: $${this._offer(this.qty)}`;
+  }
+
+  override draw(surf: pygame.Surface): void {
+    this.syncUi();
     this.panel.draw(surf, true);
     draw_cursor(surf);
   }

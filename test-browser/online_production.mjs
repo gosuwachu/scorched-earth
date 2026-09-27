@@ -64,7 +64,7 @@ try {
   const dimensions = await mode.boundingBox();
   assert.ok(dimensions.width <= 422 && dimensions.height < 240, "Mode chooser must be compact");
   assert.equal(await mode.evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(170, 170, 170)");
-  assert.equal(await mode.locator(".lan-title").evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(0, 0, 160)");
+  assert.equal(await mode.locator(".ui-title").evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(0, 0, 160)");
   assert.equal(await host.evaluate(() => document.activeElement.textContent), "Local");
   await host.keyboard.press("Shift+Tab");
   assert.equal(await host.evaluate(() => document.activeElement.textContent), "Back");
@@ -168,7 +168,7 @@ try {
   await phone.setViewportSize({ width: 390, height: 844 });
   for (const viewport of [{ width: 1024, height: 768 }, { width: 320, height: 568 }, { width: 1200, height: 900 }]) {
     await host.setViewportSize(viewport);
-    const footer = await host.locator(".lan-dialog-footer").boundingBox();
+    const footer = await host.locator(".ui-dialog-footer").boundingBox();
     assert.ok(footer.y >= 0 && footer.y + footer.height <= viewport.height, "Dialog actions remain in the viewport");
   }
   await host.screenshot({ path: `${root}/test-browser/out/online-lobby.png` });

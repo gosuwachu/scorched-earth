@@ -59,6 +59,7 @@
  *   "clear_screen", "mass_kill", "quit_game", "reassign_players",
  *   "reassign_teams", "save_game", "restore_game", "new_game", "back"
  */
+import { UI_ACTION } from "./screen";
 import * as pygame from "./pygame";
 
 import * as C from "./constants";
@@ -76,6 +77,7 @@ import { sfx } from "./sound";
 
 /** A pygame-shaped event as main.ts builds it (subset of fields read here). */
 export interface IngameEvent {
+  action?: string | null;
   type: number;
   pos?: pygame.Point;
   button?: number;
@@ -937,6 +939,10 @@ interface Screen {
  *
  *  Returns 'done' on Ok (after applying), 'back' on cancel/Esc, null otherwise. */
 export class _BatteryDischargeScreen implements Screen {
+  dispatchAction(action: string | null): string | null {
+    return this.handle({ type: UI_ACTION, action });
+  }
+
   static readonly PROMPT = "Batteries to discharge:";
 
   state: GameState;
@@ -1026,6 +1032,10 @@ export class _BatteryDischargeScreen implements Screen {
 /** Modal Tank Control Panel built on widgets.Panel.  Conforms to the Screen
  *  protocol: handle(event)->action|null, update(dt), draw(surf). */
 export class ControlPanelScreen implements Screen {
+  dispatchAction(action: string | null): string | null {
+    return this.handle({ type: UI_ACTION, action });
+  }
+
   state: GameState;
   tank: Tank;
   action: string | null;
@@ -1317,6 +1327,10 @@ type MenuItem = [string, string, string | null];
  *  confirm string in the binary).  Esc / click-outside cancels.  Returns the
  *  supplied action on Yes, 'back' on cancel. */
 export class _ConfirmScreen implements Screen {
+  dispatchAction(action: string | null): string | null {
+    return this.handle({ type: UI_ACTION, action });
+  }
+
   state: SizeLike;
   prompt: string;
   on_yes: string;
@@ -1367,6 +1381,10 @@ export class _ConfirmScreen implements Screen {
  *  Single ~Yes at each step; Esc / click-outside aborts.  opaque=false so the
  *  battlefield shows dimmed behind it (SCORCH.DOC L520-528). */
 export class RetreatScreen implements Screen {
+  dispatchAction(action: string | null): string | null {
+    return this.handle({ type: UI_ACTION, action });
+  }
+
   opaque = false;
 
   state: GameState;
@@ -1418,6 +1436,10 @@ export class RetreatScreen implements Screen {
  *  TWO columns.  LEFT: Clear Screen, Mass Kill, Reassign Players, Reassign Teams,
  *  Sound(toggle).  RIGHT: Save Game, Restore Game, New Game, Quit Game. */
 export class SystemMenuScreen implements Screen {
+  dispatchAction(action: string | null): string | null {
+    return this.handle({ type: UI_ACTION, action });
+  }
+
   static readonly LEFT: MenuItem[] = [
     ["~Clear Screen", "clear_screen", null],
     ["~Mass Kill", "mass_kill", "Mass kill everyone?"],
@@ -1619,6 +1641,10 @@ const _CONTROLLER_OPTIONS: string[] = (() => {
  *
  *  Returns: 'back' on ~Done / Esc (changes are already applied live). */
 export class ReassignPlayersScreen implements Screen {
+  dispatchAction(action: string | null): string | null {
+    return this.handle({ type: UI_ACTION, action });
+  }
+
   opaque = false;
 
   state: GameState;

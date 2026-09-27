@@ -24,7 +24,7 @@ export class HostSession {
   private startButton?: HTMLButtonElement;
   private addButton?: HTMLButtonElement;
   private confirmation?: OnlineDialog;
-  private bar = el("div", "", "lan-bar");
+  private bar = el("div", "", "lan-bar se-ui");
   private status = el("span", "Creating room…");
   private lastPublish = -Infinity;
   private disposed = false;

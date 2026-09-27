@@ -119,9 +119,7 @@ export class RemoteAdapter {
       if (widget instanceof W.Label) {
         this.add({ ...base, kind: "label" });
       } else if (widget instanceof W.Button) {
-        this.add({ ...base, kind: "button" }, () => this.app.handleRemote({
-          type: pg.MOUSEBUTTONDOWN, pos: widget.rect.center, button: 1,
-        }));
+        this.add({ ...base, kind: "button" }, () => this.app.dispatchAction(widget.action));
       } else if (widget instanceof W.Spinner) {
         this.add({ ...base, kind: "number", value: widget.get(), min: widget.lo, max: widget.hi, step: widget.step }, (v) => {
           if (typeof v === "number") widget.set(widget._clamp(Math.round(v / widget.step) * widget.step));

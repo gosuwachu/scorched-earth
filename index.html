@@ -6,13 +6,6 @@
     <link rel="icon" href="data:," />
     <title>Scorched Earth</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-      #game {
-        --game-height: max(0px, calc(100dvh - var(--game-bottom, 0px)));
-        position: fixed; inset: 0 0 var(--game-bottom, 0px); margin: auto;
-        display: block; width: min(100vw, calc(var(--game-height) * 4 / 3)); height: auto;
-        image-rendering: pixelated;
-      }
       /* Preloader: covers the canvas until main.ts has fetched every asset and the
          first menu frame is drawn, then gets the .done class (display:none). This is
          why the whole game works the instant it appears -- nothing loads late. */

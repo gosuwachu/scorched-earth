@@ -1,36 +1,10 @@
+import { el, button } from "./html/components";
+export { el, button, dialog, installTheme as installOnlineTheme } from "./html/components";
+export type { Dialog as OnlineDialog } from "./html/components";
 import * as pg from "./pygame";
 import { draw_tank_icon_cell } from "./sprites";
 import { TEAM_RGB } from "./palette";
-import { C_BG, C_PANEL, C_PANEL_HI, C_PANEL_LO, C_TEXT, C_TEXT_LT, C_ACCEL, C_SEL, C_FIELD } from "./widgets";
 import type { Player } from "../shared/online";
-
-export function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = "", className = ""): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  node.textContent = text;
-  node.className = className;
-  return node;
-}
-
-/** Share the canvas widget palette instead of maintaining a second UI theme. */
-export function installOnlineTheme(): void {
-  const colors = { bg: C_BG, panel: C_PANEL, hi: C_PANEL_HI, lo: C_PANEL_LO,
-    text: C_TEXT, title: C_TEXT_LT, accel: C_ACCEL, selection: C_SEL, field: C_FIELD };
-  for (const [name, rgb] of Object.entries(colors)) {
-    document.documentElement.style.setProperty(`--lan-${name}`, `rgb(${rgb.join(", ")})`);
-  }
-}
-
-export function button(label: string, action: () => void, shortcut?: string): HTMLButtonElement {
-  const b = el("button", label);
-  b.type = "button";
-  b.onclick = action;
-  if (shortcut) {
-    const index = label.toLowerCase().indexOf(shortcut.toLowerCase());
-    if (index >= 0) b.replaceChildren(label.slice(0, index), el("span", label[index], "lan-accel"), label.slice(index + 1));
-    b.setAttribute("aria-keyshortcuts", shortcut);
-  }
-  return b;
-}
 
 export function tankIcon(icon: number, index = 0): HTMLCanvasElement {
   const surface = new pg.Surface([64, 54]);
@@ -96,48 +70,4 @@ export class Roster {
     });
     this.element.scrollTop = scroll;
   }
-}
-
-export interface OnlineDialog {
-  element: HTMLDialogElement;
-  body: HTMLElement;
-  footer: HTMLElement;
-  close(): void;
-}
-
-let nextDialogId = 0;
-
-/** Native modal behavior supplies an inert background and Escape handling. */
-export function dialog(title: string, options: { wide?: boolean; cancel?: () => void } = {}): OnlineDialog {
-  const element = el("dialog", "", `lan-overlay${options.wide ? " lan-wide" : ""}`);
-  const heading = el("h1", title, "lan-title");
-  heading.id = `lan-dialog-${++nextDialogId}`;
-  element.setAttribute("aria-labelledby", heading.id);
-  const body = el("div", "", "lan-dialog-body");
-  const footer = el("footer", "", "lan-dialog-footer");
-  element.append(heading, body, footer);
-  element.addEventListener("cancel", (event) => {
-    event.preventDefault();
-    options.cancel?.();
-  });
-  element.addEventListener("keydown", (event) => {
-    if (event.key !== "Tab") return;
-    const controls = Array.from(element.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex='0']"))
-      .filter((node) => node.getClientRects().length > 0);
-    const first = controls[0];
-    const last = controls[controls.length - 1];
-    if (event.shiftKey && (document.activeElement === first || document.activeElement === element)) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first?.focus();
-    }
-  });
-  document.body.append(element);
-  element.showModal();
-  queueMicrotask(() => {
-    if (element.isConnected && document.activeElement === element) element.querySelector<HTMLElement>("button:not(:disabled), input, select")?.focus();
-  });
-  return { element, body, footer, close: () => { element.close(); element.remove(); } };
 }

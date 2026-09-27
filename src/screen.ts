@@ -54,6 +54,9 @@ export interface ScreenEvent {
  */
 export type ScreenAction = string | null;
 
+/** Semantic control activation, independent of canvas hit-test coordinates. */
+export const UI_ACTION = 0x10000;
+
 /**
  * Base screen.  Subclasses override handle/update/draw (and set `opaque`).
  *
@@ -75,6 +78,10 @@ export class Screen {
   /** Process one pygame event.  Return null or an action string. */
   handle(_event: ScreenEvent): ScreenAction {
     return null;
+  }
+
+  dispatchAction(action: ScreenAction): ScreenAction {
+    return this.handle({ type: UI_ACTION, action });
   }
 
   /** Advance time-based state.  dt is seconds since last frame. */

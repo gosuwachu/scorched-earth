@@ -10,13 +10,13 @@ export function startController(roomId: string): void {
   document.getElementById("loading")?.remove();
   document.body.classList.add("lan-phone");
   document.documentElement.classList.add("lan-phone");
-  const root = el("main", "", "lan-controller");
+  const root = el("main", "", "lan-controller se-ui");
   const status = el("p", "Connecting…", "lan-status");
   const error = el("p", "", "lan-error");
   const content = el("div");
   const body = el("div", "", "lan-controller-body");
   body.append(status, error, content);
-  root.append(el("h1", "Scorched Earth", "lan-title"), body);
+  root.append(el("h1", "Scorched Earth", "ui-title"), body);
   document.body.append(root);
   const storageKey = `scorch-player:${roomId}`;
   let token: string | undefined;
