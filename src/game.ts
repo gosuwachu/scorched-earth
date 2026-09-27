@@ -1710,44 +1710,70 @@ export class GameState {
 
   _check_collision(proj: Projectile): Hit | null {
     // Walk prev->current so a fast shell cannot skip a one-pixel shield outline.
-    const x0 = pyInt(proj.prev_px);
-    const y0 = pyInt(proj.prev_py);
+    const x0 = pyRound(proj.prev_px);
+    const y0 = pyRound(proj.prev_py);
     const x1 = proj.sx;
     const y1 = proj.sy;
-    for (const [x, y] of _bresenham(x0, y0, x1, y1)) {
-      if (y >= this.h - 1) {
-        return { 0: "terrain", 1: null, 2: x, 3: this.h - 2 };
-      }
-      for (const t of this.tanks) {
-        if (!t.alive) continue;
-        if (t === proj.owner && Math.hypot(x - t.x, y - t.y) > 16) proj.state.ownerCleared = true;
-        if (t !== proj.owner && t.shield_hp > 0 && !(t as Tank & { chute_descent?: unknown }).chute_descent &&
-            shieldContains(t.shield_item, x - t.x, y - t.y) && !this.terrain.is_dirt(x, y)) {
-          // 2a4a:1583: the Mag Deflector's painted arcs do not intercept.
-          const last = proj.state.forceContact as number[] | undefined;
-          // A subpixel departure can still rasterize the last contact. Once
-          // reflected, keep passing that pixel while moving outward; an
-          // incoming return to the same pixel is a fresh contact.
-          const leavingContact = last && last[0] === t.player_index && last[1] === x && last[2] === y &&
-            (x - t.x) * proj.saved_vx + (t.y - y) * proj.saved_vy >= 0;
-          // 2a4a:24c4..25c6: an outgoing Force contact keeps walking the
-          // segment. Do not snap a departing shell back onto the ring.
-          const outgoing = t.shield_deflect && _sgn(x - t.x) === _sgn(proj.saved_vx) &&
-            _sgn(t.y - y) === _sgn(proj.saved_vy);
-          if (t.shield_item !== weapons.SLOT_MAG_DEFLECTOR &&
-              !outgoing && !leavingContact)
-            return { 0: "shield", 1: t, 2: x, 3: y };
+    let penetrated = false;
+    try {
+      for (const [x, y] of _bresenham(x0, y0, x1, y1)) {
+        if (y >= this.h - 1) {
+          return { 0: "terrain", 1: null, 2: x, 3: this.h - 2 };
         }
-        if (Math.abs(t.x - x) <= t.half_width && 0 <= t.y - y && t.y - y <= 10 &&
-            (t !== proj.owner || (proj.armed && proj.state.ownerCleared)))
-          return { 0: "tank", 1: t, 2: x, 3: y };
+        for (const t of this.tanks) {
+          if (!t.alive) continue;
+          if (t === proj.owner && Math.hypot(x - t.x, y - t.y) > 16) proj.state.ownerCleared = true;
+          if (t !== proj.owner && t.shield_hp > 0 && !(t as Tank & { chute_descent?: unknown }).chute_descent &&
+              shieldContains(t.shield_item, x - t.x, y - t.y) && !this.terrain.is_dirt(x, y)) {
+            // 2a4a:1583: the Mag Deflector's painted arcs do not intercept.
+            const last = proj.state.forceContact as number[] | undefined;
+            // A subpixel departure can still rasterize the last contact. Once
+            // reflected, keep passing that pixel while moving outward; an
+            // incoming return to the same pixel is a fresh contact.
+            const leavingContact = last && last[0] === t.player_index && last[1] === x && last[2] === y &&
+              (x - t.x) * proj.saved_vx + (t.y - y) * proj.saved_vy >= 0;
+            // 2a4a:24c4..25c6: an outgoing Force contact keeps walking the
+            // segment. Do not snap a departing shell back onto the ring.
+            const outgoing = t.shield_deflect && _sgn(x - t.x) === _sgn(proj.saved_vx) &&
+              _sgn(t.y - y) === _sgn(proj.saved_vy);
+            if (t.shield_item !== weapons.SLOT_MAG_DEFLECTOR &&
+                !outgoing && !leavingContact)
+              return { 0: "shield", 1: t, 2: x, 3: y };
+          }
+          if (Math.abs(t.x - x) <= t.half_width && 0 <= t.y - y && t.y - y <= 10 &&
+              (t !== proj.owner || (proj.armed && proj.state.ownerCleared)))
+            return { 0: "tank", 1: t, 2: x, 3: y };
+        }
+        if (0 <= x && x < this.w && 0 <= y && y < this.h && this.terrain.is_dirt(x, y)) {
+          // 2a4a:1657..1714: spatial resistance, once per solid pixel. The
+          // saved incoming velocity excludes this step's air forces. Keep
+          // walking the original segment; slowdown affects the next step.
+          if (!this.cfg.is_on("TUNNELLING") || proj.contact || proj.mode === 0)
+            return { 0: "terrain", 1: null, 2: x, 3: y };
+          penetrated = true;
+          proj.saved_vx *= 0.75; // DS:1d54 (float)
+          proj.saved_vy *= 0.75;
+          if (proj.saved_vx * proj.saved_vx + proj.saved_vy * proj.saved_vy < 2000) // DS:1d58
+            return { 0: "terrain", 1: null, 2: x, 3: y };
+          this.terrain.write(x, y, C.COL_SKY);
+          this.soilDirty = true;
+          continue; // DOS skips swept guidance acquisition at a dirt contact.
+        }
+        if (guidance.visit(proj, this, x, y)) return null;
       }
-      if (0 <= x && x < this.w && 0 <= y && y < this.h && this.terrain.is_dirt(x, y)) {
-        return { 0: "terrain", 1: null, 2: x, 3: y };
+      return null;
+    } finally {
+      // 2a4a:0ecc..0f9b: penetration replaces the post-force velocity. A
+      // subsequent dirt-free movement restores normal flight; a stationary
+      // integral position retains mode 1. This is not the Sandhog state flag.
+      if (penetrated) {
+        proj.vx = proj.saved_vx;
+        proj.vy = proj.saved_vy;
+        proj.mode = 1;
+      } else if (proj.mode === 1 && (x0 !== proj.px || y0 !== proj.py)) {
+        proj.mode = -1;
       }
-      if (guidance.visit(proj, this, x, y)) return null;
     }
-    return null;
   }
 
   _resolve_hit(proj: Projectile, hit: Hit): void {
@@ -1836,40 +1862,21 @@ export class GameState {
       proj.active = false;
     } else {
       // terrain
-      // Contact Trigger disables tunnelling/rolling: detonate on first ground hit.
-      if (!proj.contact) {
-        if (beh === "roller") {
-          wb.start_roller(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
-          return;
-        }
-        if (beh === "digger") {
-          wb.start_digger(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
-          return;
-        }
-        if (beh === "sandhog") {
-          wb.start_sandhog(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
-          return;
-        }
+      // 2a4a:2228 dispatches the same weapon handler with or without a
+      // Contact Trigger. It bypasses shell penetration, not the weapon effect.
+      if (beh === "roller") {
+        wb.start_roller(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
+        return;
+      }
+      if (beh === "digger") {
+        wb.start_digger(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
+        return;
+      }
+      if (beh === "sandhog") {
+        wb.start_sandhog(this as unknown as wb.BState, proj as unknown as wb.BProjectile, x, y);
+        return;
       }
       if (beh === "tracer") {
-        proj.active = false;
-        return;
-      }
-      // A contact-triggered digger/sandhog can't tunnel -> detonate at the surface.
-      if (proj.contact && beh === "digger") {
-        const r = pyInt(wb.eff_radius(this as unknown as wb.BState, proj.weapon));
-        this.terrain.carve_circle(x, y, r);
-        this.add_explosion(x, y, r, { dirt_only: true });
-        proj.active = false;
-        return;
-      }
-      if (proj.contact && beh === "sandhog") {
-        damage.explode(
-          this as unknown as damage.State,
-          x,
-          y,
-          wb.eff_radius(this as unknown as wb.BState, proj.weapon),
-        );
         proj.active = false;
         return;
       }

@@ -11,6 +11,10 @@ misidentified several handlers; its remaining vectors are legacy regression
 coverage, not evidence of DOS accuracy. New comparisons use original DOS runtime
 captures or directly checked executable/disassembly evidence.
 
+Ordinary projectile penetration now follows the DOS per-dirt-pixel resistance,
+speed threshold and flight-mode transitions. See [TUNNELING_FIDELITY.md](TUNNELING_FIDELITY.md)
+for eligibility, Contact Trigger interactions, runtime observations and limits.
+
 ## Weapons and shared effects
 
 | Original slots | Handler | Ported behavior |

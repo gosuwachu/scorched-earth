@@ -12,7 +12,7 @@
  *   - ELASTIC sub-mode order: catalog 13 s.0 note on DAT_5f38_5156 (0..7). The
  *     Concrete<->Wrap swap fix (2026-06-25) is byte-resolved against parser
  *     FUN_22a5_0005: idx1=4f38:278e "Wrap-around", idx5=4f38:27af "Concrete".
- *   - FLATLAND / RANDOM_LAND / USELESS_ITEMS / TUNNELLING defaults follow the
+ *   - FLATLAND / RANDOM_LAND / USELESS_ITEMS defaults follow the
  *     binary's no-scorch.cfg parser (FUN_22a5_0005.c) where it disagrees with the
  *     manual; the binary is authority (port/DEFAULTS_AUDIT.md).
  *   - __post_init__ live globals: DAT_5f38_515a wind, DAT_5f38_5154 live wall mode.
@@ -329,7 +329,7 @@ export class Config {
   PLAY_ORDER: string = "RANDOM";
   TEAM_MODE: string = "NONE";
   HOSTILE_ENVIRONMENT: string = "ON";
-  TUNNELLING: string = "OFF"; // binary no-cfg default (FUN_22a5_0005.c:582; manual says ON)
+  TUNNELLING: string = "ON"; // manual default; saved OFF still wins (binary no-cfg default was OFF)
   USELESS_ITEMS: string = "ON"; // binary no-cfg default (FUN_22a5_0005.c:600; manual says OFF)
   EXPLOSION_SCALE: string = "NORMAL";
   // economy

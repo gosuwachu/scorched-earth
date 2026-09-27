@@ -266,15 +266,16 @@ describe("game integration", () => {
     expect(p.active).toBe(false);
     expect(gs.projectiles.some((p) => p.weaponEffect)).toBe(false);
   });
-  it("a contact-triggered Sandhog resolves at the surface", () => {
+  it("a contact-triggered Sandhog starts its weapon effect at the surface", () => {
     const gs = game();
     const p = new Projectile(gs.tanks[0], ITEMS[23], 160, 120, 0, -1);
     p.contact = true;
     gs.projectiles.push(p);
     gs._resolve_hit(p, ["terrain", null, 160, 120]);
-    expect(p.active).toBe(false);
-    expect(p.weaponEffect).toBeUndefined();
-    expect(gs.explosions.length).toBeGreaterThan(0);
+    // 2a4a:2297..22a4 dispatches 251b:000a regardless of the trigger flag.
+    expect(p.active).toBe(true);
+    expect(p.weaponEffect?.kind).toBe("sandhog");
+    expect([p.px, p.py]).toEqual([160, 120]);
   });
   it("a Funky Bomb resolving at the floor retains its secondary effect", () => {
     const gs = game();

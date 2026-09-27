@@ -153,9 +153,10 @@ describe("dirt, fluid, cluster and tunnel families", () => {
     gs._resolve_hit(gs.projectiles[0], ["terrain", null, 160, 160]);
     expect(gs.projectiles.at(-1)?.weaponEffect).toMatchObject({ kind: "soil", mode: "spray", x: 160 });
   });
-  it("finishes each LeapFrog blast before relaunching with two-thirds velocity", () => {
+  for (const contact of [false, true]) it(`finishes LeapFrog blasts before relaunching, contact=${contact}`, () => {
     const gs = game();
     let p = new Projectile(gs.tanks[0], ITEMS[4], 160, 160, 90, -120);
+    p.contact = contact;
     p.state.launchVx = 90; p.state.launchVy = -120;
     for (const [i, radius] of [30, 25, 20].entries()) {
       gs.projectiles = [p];
@@ -167,6 +168,7 @@ describe("dirt, fluid, cluster and tunnel families", () => {
         expect(gs.projectiles).toHaveLength(1); p = gs.projectiles[0];
         expect(p.weaponEffect).toBeUndefined(); expect(p.vx).toBeCloseTo(90 / 1.5 ** (i + 1));
         expect(p.vy).toBeCloseTo(-120 / 1.5 ** (i + 1));
+        expect(p.contact).toBe(contact);
       } else expect(gs.projectiles).toHaveLength(0);
     }
   });

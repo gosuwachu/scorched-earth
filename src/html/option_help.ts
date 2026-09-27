@@ -114,6 +114,7 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
   ATTACK_COMMENTS: { text: "Bundled text file used for firing taunts (normally talk1.cfg). Use Save Changes, then reload the page to load a different file." },
   DIE_COMMENTS: { text: "Bundled text file used for dying taunts (normally talk2.cfg). Use Save Changes, then reload the page to load a different file." },
   HOSTILE_ENVIRONMENT: { text: "Allows environmental lightning to damage tanks. When off, lightning remains visible but does no damage." },
+  TUNNELLING: { text: "Lets eligible shots burrow through dirt, losing speed quickly before exploding. Fast shots can emerge from thin terrain. Contact Triggers force impact on the surface." },
   EXPLOSION_SCALE: {
     text: "Changes blast sizes and their reach, not the display zoom.",
     values: {

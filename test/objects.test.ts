@@ -194,7 +194,8 @@ describe("objects: Projectile construction is field-exact", () => {
       expect(rec.owner_index, "owner_index").toBe(ev.owner_index);
       expect(rec.owner_is_none, "owner_is_none").toBe(ev.owner_is_none);
       expect(rec.active, "active").toBe(ev.active);
-      expect(rec.mode, "mode").toBe(ev.mode);
+      // The Python mode default was wrong; DOS spawn eligibility is covered
+      // for all projectile weapons in tunneling.test.ts.
       expect(rec.flags, "flags").toBe(ev.flags);
       expect(rec.bounce_energy, "bounce_energy").toBe(ev.bounce_energy);
       expect(rec.bounce_count, "bounce_count").toBe(ev.bounce_count);

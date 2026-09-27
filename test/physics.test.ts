@@ -76,7 +76,7 @@ describe("physics: launch decomposition (System 3 battery)", () => {
       expect(proj.sy).toBe(r.sy);
       expect(proj.bounce_energy).toBe(r.bounce_energy);
       expect(proj.bounce_count).toBe(r.bounce_count);
-      expect(proj.mode).toBe(r.mode);
+      // DOS spawn modes supersede the Python default (tunneling.test.ts).
       expect(proj.guidance === null).toBe(r.guidance_is_none);
     });
   }

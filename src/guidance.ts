@@ -56,6 +56,9 @@ export function attach(tank: Tank, cfg: GuidanceCfg, weapon: Item, proj: Project
     tanks: null, armed: false, _last_x: null, _last_y: null,
   };
   proj.guidance = g;
+  // 2a4a:08f6..0910 forces contact for all non-ballistic guidance, even
+  // before acquisition. This costs no Contact Trigger inventory.
+  if (g.type !== "ballistic") proj.contact = true;
   return g;
 }
 

@@ -18,6 +18,9 @@ constant after every measurement.
 Guidance evidence and its static numerical fixtures are documented in
 [GUIDANCE_FIDELITY.md](../GUIDANCE_FIDELITY.md).
 
+Projectile soil resistance, eligibility, and recorded ON/OFF/Contact Trigger
+observations are documented in [TUNNELING_FIDELITY.md](../TUNNELING_FIDELITY.md).
+
 The original DOS executable is the sole fidelity reference. Use its runtime
 captures and directly checked binary/disassembly evidence for new comparisons.
 Do not generate reference behavior or images by running the Python game port.
@@ -171,9 +174,13 @@ the array at `ceb8`, stride `0x6c`. Sampling occurs at SDL event polls, at least
 16 ms apart; wall-clock timestamps are not simulation time. With zero wind and
 drag and constant horizontal velocity, elapsed simulation time is `(x-x0)/vx`.
 Only compare continuous flight windows before contact/clamping and without
-changes in N. The sampler reads the first N slots; it does not track projectile
-identities through removal/compaction. Timing/count measurements remain useful
-across those events, but the slot positions are not used as trajectory evidence.
+changes in N. The legacy `projectiles` array reads the first N slots and does not
+track identities through removal/compaction. The additional `shots` array scans
+all allocated slots, retains active slot numbers, and records item, contact
+flag, mode and screen coordinates alongside `[x,y,vx,vy]`. `tunneling` records
+`DS:513a`. Slots can be reused after retirement; neither array assigns a global
+shot ID. Timing/count measurements remain useful across removals, but trajectory
+comparisons must stay within a known shot's lifetime.
 
 The retained observations in `test/fixtures/dos_magnet.json` include five fresh
 boots, three flight windows (Mag, Super Mag and no shield), and the count/timestep

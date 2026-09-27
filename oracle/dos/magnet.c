@@ -76,6 +76,20 @@ static void sample(void) {
         real(p + 0x14), real(p + 0x1c), real(p + 4), real(p + 12));
     }
   }
+  fprintf(output, "],\"tunneling\":%u,\"shots\":[", word(data + 0x513a));
+  // Unlike the legacy first-N array, retain active slot identities and contact
+  // modes across removals. Useful for soil entry/exit and terminal samples.
+  unsigned slots = word(data + 0x1c7c), count = 0;
+  if (slots <= 100 && address + 108 * slots < 0x100000) {
+    for (unsigned i = 0; i < slots; i++) {
+      const unsigned char *p = memory + address + 108 * i;
+      if (!word(p + 0x3c)) continue;
+      fprintf(output, "%s{\"slot\":%u,\"item\":%u,\"mode\":%d,\"contact\":%u,"
+        "\"pixel\":[%u,%u],\"flight\":[%.17g,%.17g,%.17g,%.17g]}",
+        count++ ? "," : "", i, word(p + 0x26), (int16_t)word(p + 0x4a), word(p + 0x2e),
+        word(p), word(p + 2), real(p + 0x14), real(p + 0x1c), real(p + 4), real(p + 12));
+    }
+  }
   fprintf(output, "]}\n");
   fclose(output);
 }

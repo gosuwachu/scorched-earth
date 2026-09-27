@@ -16,6 +16,32 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`${base}/test-browser/harness.html`);
   await page.evaluate(() => window.harnessReady);
+  const tunneling = [];
+  for (const kind of ["thick", "thin", "off", "contact"]) {
+    await page.evaluate((k) => window.startTunnelingDemo(k), kind);
+    await page.locator("#game").screenshot({ path: `${out}/tunneling-${kind}-entry.png` });
+    let meta, captured = false;
+    for (let step = 0; step < 1000; step++) {
+      meta = await page.evaluate(() => window.advanceTunnelingDemo(1));
+      if (!captured && meta.active && meta.speed < 1000) {
+        await page.locator("#game").screenshot({ path: `${out}/tunneling-${kind}-inside.png` });
+        captured = true;
+      }
+      if (!meta.active || (kind === "thin" && meta.x > 430)) break;
+    }
+    if (kind === "thin") {
+      assert.ok(meta.active && meta.x > 430);
+      assert.equal(meta.speed, 1000 * 0.75 ** 3);
+    } else {
+      assert.equal(meta.active, false);
+      assert.deepEqual(meta.landing, [kind === "thick" ? 410 : 400, 400]);
+      assert.equal(meta.effects, 1);
+      assert.equal(meta.cleared.length, kind === "thick" ? 10 : 0);
+    }
+    await page.locator("#game").screenshot({ path: `${out}/tunneling-${kind}-result.png` });
+    tunneling.push({ kind, ...meta });
+  }
+  writeFileSync(`${out}/tunneling.json`, JSON.stringify(tunneling, null, 2));
   // Verify successive real canvas frames, not just the final flame shape.
   for (const idx of [8, 9]) {
     await page.evaluate((i) => window.startWeaponDemo(i), idx);

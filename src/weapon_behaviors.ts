@@ -103,6 +103,7 @@ export interface BProjectile {
   sx: number;
   sy: number;
   active: boolean;
+  contact?: boolean;
   split_done: boolean;
   weaponEffect?: WeaponEffect;
   warheads_left: number;

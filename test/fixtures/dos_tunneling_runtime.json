@@ -1,0 +1,2045 @@
+{
+  "sha256": "05e4a11643ec7055b1c811531a73c5b4f5c67c463612f3e4910e557301c3179f",
+  "kind": "recorded DOS runtime samples; not static transcription",
+  "profile": {
+    "emulator": "DOSBox 0.74-3",
+    "core": "normal",
+    "cycles": 20000,
+    "machine": "svga_s3",
+    "output": "surface",
+    "logicalSize": [
+      360,
+      480
+    ],
+    "framebufferSize": [
+      720,
+      480
+    ]
+  },
+  "limits": "SDL poll sampling at least 16ms apart. Last slot values may repeat during impact. Timestamps are wall time, not simulation time. No exact vertical trajectory comparison.",
+  "cases": [
+    {
+      "name": "underground-stop",
+      "configuration": "MAXPLAYERS=2\nMAXROUNDS=100\nSOUND=Off\nFLY_SOUND=Off\nGRAPHICS_MODE=360x480\nBIOS_KEYBOARD=On\nFIRE_DELAY=100\nINITIAL_CASH=0\nAIR_VISCOSITY=0\nGRAVITY=0.200000\nFALLING_TANKS=Off\nSKY=Plain\nMAX_WIND=0\nCHANGING_WIND=Off\nLAND1=20\nLAND2=20\nFLATLAND=On\nRANDOM_LAND=Off\nMTN_PERCENT=0.000000\nTALKING_TANKS=Off\nPLAY_MODE=Sequential\nPLAY_ORDER=Round-Robin\nARMS=4\nTRACE=On\nTUNNELLING=On\n",
+      "initial": {
+        "ms": 433309,
+        "calibration": 201,
+        "n": 0,
+        "delay": 100,
+        "dt": 9.950248756218905e-05,
+        "gravity": 0.2,
+        "bounds": [
+          476,
+          479,
+          356,
+          359
+        ],
+        "tanks": [
+          {
+            "x": 268,
+            "y": 474,
+            "shield": 0,
+            "angle": 79,
+            "power": 200
+          },
+          {
+            "x": 91,
+            "y": 224,
+            "shield": 0,
+            "angle": 6,
+            "power": 1000
+          }
+        ],
+        "projectiles": [],
+        "tunneling": 1,
+        "shots": []
+      },
+      "images": [
+        "oracle/reference/tunneling/underground-stop-before.png",
+        "oracle/reference/tunneling/underground-stop-flight.png"
+      ],
+      "samples": [
+        {
+          "ms": 433326,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                85,
+                218
+              ],
+              "flight": [
+                85.29890547263659,
+                218.30759535655056,
+                -547,
+                100.616915422886
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 433342,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                71,
+                215
+              ],
+              "flight": [
+                71.43340796019868,
+                215.96862552907103,
+                -410.25,
+                61.54477611940469
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 433358,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                63,
+                214
+              ],
+              "flight": [
+                63.36745413557163,
+                214.89592780036384,
+                -97.354248046875,
+                6.754904675839841
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 433374,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                61,
+                214
+              ],
+              "flight": [
+                61.28838393785403,
+                214.93926969624926,
+                -54.76176452636719,
+                -8.678599950685872
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 433390,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                60,
+                214
+              ],
+              "flight": [
+                60.96144803023409,
+                215.00100495725536,
+                -54.76176452636719,
+                -11.713425821332692
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 433406,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                60,
+                214
+              ],
+              "flight": [
+                60.96144803023409,
+                215.00100495725536,
+                -54.76176452636719,
+                -11.713425821332692
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 433422,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                60,
+                214
+              ],
+              "flight": [
+                60.96144803023409,
+                215.00100495725536,
+                -54.76176452636719,
+                -11.713425821332692
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ridge-exit",
+      "configuration": "MAXPLAYERS=2\nMAXROUNDS=100\nSOUND=Off\nFLY_SOUND=Off\nGRAPHICS_MODE=360x480\nBIOS_KEYBOARD=On\nFIRE_DELAY=100\nINITIAL_CASH=0\nAIR_VISCOSITY=0\nGRAVITY=0.200000\nFALLING_TANKS=Off\nSKY=Plain\nMAX_WIND=0\nCHANGING_WIND=Off\nLAND1=20\nLAND2=20\nFLATLAND=On\nRANDOM_LAND=Off\nMTN_PERCENT=0.000000\nTALKING_TANKS=Off\nPLAY_MODE=Sequential\nPLAY_ORDER=Round-Robin\nARMS=4\nTRACE=On\nTUNNELLING=On\n",
+      "initial": {
+        "ms": 439336,
+        "calibration": 201,
+        "n": 0,
+        "delay": 100,
+        "dt": 9.950248756218905e-05,
+        "gravity": 0.2,
+        "bounds": [
+          476,
+          479,
+          356,
+          359
+        ],
+        "tanks": [
+          {
+            "x": 268,
+            "y": 474,
+            "shield": 0,
+            "angle": 79,
+            "power": 200
+          },
+          {
+            "x": 91,
+            "y": 224,
+            "shield": 0,
+            "angle": 6,
+            "power": 1000
+          }
+        ],
+        "projectiles": [],
+        "tunneling": 1,
+        "shots": []
+      },
+      "images": [
+        "oracle/reference/tunneling/ridge-exit-before.png",
+        "oracle/reference/tunneling/ridge-exit-flight.png"
+      ],
+      "samples": [
+        {
+          "ms": 439352,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                83,
+                217
+              ],
+              "flight": [
+                83.33950248756184,
+                217.95029528972054,
+                -547,
+                98.8756218905479
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439368,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                68,
+                215
+              ],
+              "flight": [
+                68.64398009950125,
+                215.47504467711192,
+                -547,
+                85.39303482587297
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439385,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                55,
+                213
+              ],
+              "flight": [
+                55.64932835820791,
+                213.667450805673,
+                -410.25,
+                49.19402985074791
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439401,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                48,
+                212
+              ],
+              "flight": [
+                48.64328270755518,
+                212.97483417799046,
+                -97.354248046875,
+                2.99024409204009
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439417,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                45,
+                213
+              ],
+              "flight": [
+                45.90186457847404,
+                213.08816599913968,
+                -97.354248046875,
+                -11.089357898009716
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439433,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                42,
+                213
+              ],
+              "flight": [
+                42.95701966242928,
+                213.6515996393961,
+                -97.354248046875,
+                -26.21373600746272
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439449,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                39,
+                214
+              ],
+              "flight": [
+                39.83780892898714,
+                214.74732272638653,
+                -97.354248046875,
+                -42.23363650497544
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439465,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                36,
+                216
+              ],
+              "flight": [
+                36.92202498250861,
+                216.23573996466652,
+                -97.354248046875,
+                -57.20876088308516
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439481,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                34,
+                218
+              ],
+              "flight": [
+                33.99655404617467,
+                218.17984837937163,
+                -97.354248046875,
+                -72.2336365049748
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439497,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                31,
+                220
+              ],
+              "flight": [
+                31.071083109840735,
+                220.57545056898323,
+                -97.354248046875,
+                -87.25851212686347
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439513,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                28,
+                223
+              ],
+              "flight": [
+                28.16498615321762,
+                223.40220648158433,
+                -97.354248046875,
+                -102.18388526118996
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439529,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                25,
+                226
+              ],
+              "flight": [
+                25.45262899370271,
+                226.44248224827314,
+                -97.354248046875,
+                -116.11423351989468
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439545,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                22,
+                230
+              ],
+              "flight": [
+                22.372166219682207,
+                230.36605818853428,
+                -97.354248046875,
+                -131.93512904228078
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439561,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                19,
+                234
+              ],
+              "flight": [
+                19.4757562529145,
+                234.51183642190077,
+                -97.354248046875,
+                -146.7609996890451
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439577,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                16,
+                239
+              ],
+              "flight": [
+                16.598720265857615,
+                239.06802136704414,
+                -97.354248046875,
+                -161.5868703358094
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439593,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                13,
+                244
+              ],
+              "flight": [
+                13.72168427880073,
+                244.06087372141002,
+                -97.354248046875,
+                -176.36298973879263
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439609,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                11,
+                249
+              ],
+              "flight": [
+                11.019014109141231,
+                249.14890129575804,
+                -97.354248046875,
+                -190.24358675371627
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439625,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                8,
+                254
+              ],
+              "flight": [
+                8.141978122084346,
+                254.98862377710083,
+                -97.354248046875,
+                -205.0197061566995
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439641,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                5,
+                261
+              ],
+              "flight": [
+                5.100263307485484,
+                261.6374808521108,
+                -97.354248046875,
+                -220.64159670396123
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439657,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                2,
+                267
+              ],
+              "flight": [
+                2.3879061479705754,
+                267.97807096745396,
+                -97.354248046875,
+                -234.57194496266595
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439673,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                0,
+                276
+              ],
+              "flight": [
+                -0.8475484637365097,
+                276.04909047346797,
+                -97.354248046875,
+                -251.18886038554945
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439689,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                65533,
+                284
+              ],
+              "flight": [
+                -3.8892632783353736,
+                284.14044649652357,
+                -97.354248046875,
+                -266.8107509328112
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439705,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                65530,
+                292
+              ],
+              "flight": [
+                -6.940665082789646,
+                292.7479921985165,
+                -97.354248046875,
+                -282.482392723854
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439721,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                65527,
+                301
+              ],
+              "flight": [
+                -9.798327090135711,
+                301.2544368293726,
+                -97.354248046875,
+                -297.15900963927504
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439738,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                65523,
+                311
+              ],
+              "flight": [
+                -13.02409471198737,
+                311.37424772127406,
+                -97.354248046875,
+                -313.72617381837745
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439754,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                65520,
+                322
+              ],
+              "flight": [
+                -16.25954932369444,
+                322.0758654798062,
+                -97.354248046875,
+                -330.34308924126094
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439770,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                65519,
+                327
+              ],
+              "flight": [
+                -17.98383351795749,
+                328.00470142291346,
+                -97.354248046875,
+                -339.19881063429466
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439786,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                65519,
+                327
+              ],
+              "flight": [
+                -17.98383351795749,
+                328.00470142291346,
+                -97.354248046875,
+                -339.19881063429466
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 439802,
+          "calibration": 201,
+          "n": 1,
+          "dt": 9.950248756218905e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                65519,
+                327
+              ],
+              "flight": [
+                -17.98383351795749,
+                328.00470142291346,
+                -97.354248046875,
+                -339.19881063429466
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tunneling-off",
+      "configuration": "MAXPLAYERS=2\nMAXROUNDS=100\nSOUND=Off\nFLY_SOUND=Off\nGRAPHICS_MODE=360x480\nBIOS_KEYBOARD=On\nFIRE_DELAY=100\nINITIAL_CASH=0\nAIR_VISCOSITY=0\nGRAVITY=0.200000\nFALLING_TANKS=Off\nSKY=Plain\nMAX_WIND=0\nCHANGING_WIND=Off\nLAND1=20\nLAND2=20\nFLATLAND=On\nRANDOM_LAND=Off\nMTN_PERCENT=0.000000\nTALKING_TANKS=Off\nPLAY_MODE=Sequential\nPLAY_ORDER=Round-Robin\nARMS=4\nTRACE=On\nTUNNELLING=Off\n",
+      "initial": {
+        "ms": 25288,
+        "calibration": 0,
+        "n": 0,
+        "delay": 100,
+        "dt": 0,
+        "gravity": 0.2,
+        "bounds": [
+          476,
+          479,
+          356,
+          359
+        ],
+        "tanks": [
+          {
+            "x": 91,
+            "y": 170,
+            "shield": 0,
+            "angle": 58,
+            "power": 200
+          },
+          {
+            "x": 268,
+            "y": 116,
+            "shield": 0,
+            "angle": 46,
+            "power": 200
+          }
+        ],
+        "projectiles": [],
+        "tunneling": 0,
+        "shots": []
+      },
+      "images": [
+        "oracle/reference/tunneling/tunneling-off-before.png",
+        "oracle/reference/tunneling/tunneling-off-flight.png"
+      ],
+      "samples": [
+        {
+          "ms": 25304,
+          "calibration": 0,
+          "n": 1,
+          "dt": 0,
+          "tunneling": 0,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                267,
+                106
+              ],
+              "flight": [
+                267,
+                106,
+                -76,
+                143
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 25320,
+          "calibration": 204,
+          "n": 1,
+          "dt": 9.80392156862745e-05,
+          "tunneling": 0,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                266,
+                104
+              ],
+              "flight": [
+                266.3741176470594,
+                104.83910611303345,
+                -76,
+                138.88235294117544
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 25336,
+          "calibration": 204,
+          "n": 1,
+          "dt": 9.80392156862745e-05,
+          "tunneling": 0,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                264,
+                101
+              ],
+              "flight": [
+                264.27294117647307,
+                101.18982987312579,
+                -76,
+                125.05882352940814
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 25352,
+          "calibration": 204,
+          "n": 1,
+          "dt": 9.80392156862745e-05,
+          "tunneling": 0,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                261,
+                97
+              ],
+              "flight": [
+                261.90352941176934,
+                97.53316608996558,
+                -76,
+                109.47058823529112
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 25368,
+          "calibration": 204,
+          "n": 1,
+          "dt": 9.80392156862745e-05,
+          "tunneling": 0,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                261,
+                96
+              ],
+              "flight": [
+                260.99450980392703,
+                96.25928392925819,
+                -76,
+                103.49019607842861
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 25384,
+          "calibration": 204,
+          "n": 1,
+          "dt": 9.80392156862745e-05,
+          "tunneling": 0,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                261,
+                96
+              ],
+              "flight": [
+                260.99450980392703,
+                96.25928392925819,
+                -76,
+                103.49019607842861
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 25400,
+          "calibration": 204,
+          "n": 1,
+          "dt": 9.80392156862745e-05,
+          "tunneling": 0,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 0,
+              "pixel": [
+                261,
+                96
+              ],
+              "flight": [
+                260.99450980392703,
+                96.25928392925819,
+                -76,
+                103.49019607842861
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "contact-trigger",
+      "configuration": "MAXPLAYERS=2\nMAXROUNDS=100\nSOUND=Off\nFLY_SOUND=Off\nGRAPHICS_MODE=360x480\nBIOS_KEYBOARD=On\nFIRE_DELAY=100\nINITIAL_CASH=1000000\nAIR_VISCOSITY=0\nGRAVITY=0.200000\nFALLING_TANKS=Off\nSKY=Plain\nMAX_WIND=0\nCHANGING_WIND=Off\nLAND1=20\nLAND2=20\nFLATLAND=On\nRANDOM_LAND=Off\nMTN_PERCENT=0.000000\nTALKING_TANKS=Off\nPLAY_MODE=Sequential\nPLAY_ORDER=Round-Robin\nARMS=4\nTRACE=On\nTUNNELLING=On\n",
+      "initial": {
+        "ms": 147491,
+        "calibration": 0,
+        "n": 0,
+        "delay": 100,
+        "dt": 0,
+        "gravity": 0.2,
+        "bounds": [
+          476,
+          479,
+          356,
+          359
+        ],
+        "tanks": [
+          {
+            "x": 91,
+            "y": 461,
+            "shield": 0,
+            "angle": 78,
+            "power": 200
+          },
+          {
+            "x": 268,
+            "y": 464,
+            "shield": 0,
+            "angle": 79,
+            "power": 200
+          }
+        ],
+        "projectiles": [],
+        "tunneling": 1,
+        "shots": []
+      },
+      "images": [
+        "oracle/reference/tunneling/contact-trigger-before.png",
+        "oracle/reference/tunneling/contact-trigger-selected.png",
+        "oracle/reference/tunneling/contact-trigger-flight.png"
+      ],
+      "samples": [
+        {
+          "ms": 147523,
+          "calibration": 0,
+          "n": 1,
+          "dt": 0,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                269,
+                452
+              ],
+              "flight": [
+                269,
+                452,
+                -21,
+                196
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147539,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                268,
+                446
+              ],
+              "flight": [
+                268.43445544553833,
+                446.9022331144007,
+                -21,
+                182.53465346534676
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147555,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                267,
+                441
+              ],
+              "flight": [
+                267.77118811879836,
+                441.3856376825801,
+                -21,
+                166.74257425742624
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147571,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                267,
+                436
+              ],
+              "flight": [
+                267.14534653463306,
+                436.637680619547,
+                -21,
+                151.8415841584166
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147587,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                266,
+                432
+              ],
+              "flight": [
+                266.51950495046776,
+                432.33380256837563,
+                -21,
+                136.94059405940695
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147603,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                265,
+                428
+              ],
+              "flight": [
+                265.89366336630246,
+                428.4740035290658,
+                -21,
+                122.0396039603973
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147619,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                265,
+                425
+              ],
+              "flight": [
+                265.2615841583747,
+                425.02647485540615,
+                -21,
+                106.99009900990251
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147635,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                264,
+                422
+              ],
+              "flight": [
+                264.6731683167841,
+                422.2242172336044,
+                -21,
+                92.98019801980374
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147651,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                264,
+                419
+              ],
+              "flight": [
+                264.04108910885634,
+                419.6513479070679,
+                -21,
+                77.93069306930894
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147667,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                263,
+                417
+              ],
+              "flight": [
+                263.3695049504331,
+                417.4140005881774,
+                -21,
+                61.94059405940823
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147683,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                262,
+                415
+              ],
+              "flight": [
+                262.7395049504262,
+                415.7800401921376,
+                -21,
+                46.94059405940848
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147700,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                262,
+                414
+              ],
+              "flight": [
+                262.101188118736,
+                414.5834594647579,
+                -21,
+                31.742574257428544
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147716,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                261,
+                413
+              ],
+              "flight": [
+                261.42752475239195,
+                413.82165768061907,
+                -21,
+                15.702970297032778
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147732,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                260,
+                413
+              ],
+              "flight": [
+                260.78920792070176,
+                413.57457700225405,
+                -21,
+                0.5049504950527037
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147748,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                260,
+                413
+              ],
+              "flight": [
+                260.15089108901157,
+                413.78945593569176,
+                -21,
+                -14.693069306927386
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147764,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                259,
+                414
+              ],
+              "flight": [
+                259.5146534652422,
+                414.4633398686394,
+                -21,
+                -29.79207920791723
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147780,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                258,
+                415
+              ],
+              "flight": [
+                258.88049504939363,
+                415.59172924223026,
+                -21,
+                -44.94059405940212
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147796,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                258,
+                417
+              ],
+              "flight": [
+                258.28792079196137,
+                417.05821782178106,
+                -21,
+                -59.04950495049099
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147812,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                257,
+                419
+              ],
+              "flight": [
+                257.6558415840336,
+                419.0612920301918,
+                -21,
+                -74.09900990098579
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147828,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                256,
+                421
+              ],
+              "flight": [
+                256.9842574256104,
+                421.68588471718317,
+                -21,
+                -90.08910891088651
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147844,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                256,
+                424
+              ],
+              "flight": [
+                256.39168316817813,
+                424.4263660425434,
+                -21,
+                -104.19801980197538
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147860,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                255,
+                427
+              ],
+              "flight": [
+                255.7242574256003,
+                427.98974610332147,
+                -21,
+                -120.089108910886
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147876,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                255,
+                431
+              ],
+              "flight": [
+                255.094257425602,
+                431.8166767963906,
+                -21,
+                -135.0396039603907
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147892,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                254,
+                435
+              ],
+              "flight": [
+                254.50999999986098,
+                435.76792079207735,
+                -21,
+                -148.99999999999443
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147908,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                253,
+                440
+              ],
+              "flight": [
+                253.88623762362502,
+                440.413494755414,
+                -21,
+                -163.85148514850903
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147924,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                253,
+                445
+              ],
+              "flight": [
+                253.22089108897333,
+                445.85500049014564,
+                -21,
+                -179.6930693069246
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147940,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                252,
+                451
+              ],
+              "flight": [
+                252.6407920790739,
+                451.00888344279724,
+                -21,
+                -193.50495049504318
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147956,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                251,
+                457
+              ],
+              "flight": [
+                251.97960396026377,
+                457.34846485638406,
+                -21,
+                -209.24752475246865
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147972,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                251,
+                458
+              ],
+              "flight": [
+                251.81534653452164,
+                459.00025487697,
+                -21,
+                -213.1584158415775
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 147988,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                251,
+                458
+              ],
+              "flight": [
+                251.81534653452164,
+                459.00025487697,
+                -21,
+                -213.1584158415775
+              ]
+            }
+          ]
+        },
+        {
+          "ms": 148004,
+          "calibration": 202,
+          "n": 1,
+          "dt": 9.900990099009902e-05,
+          "tunneling": 1,
+          "shots": [
+            {
+              "slot": 0,
+              "item": 0,
+              "mode": -1,
+              "contact": 1,
+              "pixel": [
+                251,
+                458
+              ],
+              "flight": [
+                251.81534653452164,
+                459.00025487697,
+                -21,
+                -213.1584158415775
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

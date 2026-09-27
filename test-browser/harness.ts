@@ -870,6 +870,35 @@ for (const [name, idx, frames] of [
 }
 Object.assign(window, { startWeaponDemo, advanceWeaponDemo, weaponDemoTerrainStats });
 
+// Ordinary projectile penetration, distinct from Digger/Sandhog effects. Freeze
+// at individual physics steps so the narrow cleared trail is visible pre-blast.
+let tunnelingDemo: { gs: GameState; renderer: Renderer; surf: pygame.Surface; shot: Projectile };
+function startTunnelingDemo(kind: string): void {
+  const gs = buildState(42, { GRAVITY: 0, AIR_VISCOSITY: 0, MAX_WIND: 0, FALLING_TANKS: "OFF",
+    TUNNELLING: kind === "off" ? "OFF" : "ON", TRACE: "ON" });
+  driveToAim(gs);
+  gs.terrain.grid.fill(C.COL_SKY);
+  const edge = 400, y = 400, width = kind === "thin" ? 3 : 60;
+  for (let x = edge; x < edge + width; x++) for (let row = y - 50; row < H; row++)
+    gs.terrain.write(x, row, C.DIRT_SHADE_LO + 8);
+  gs.tanks.forEach((t, i) => { t.x = i ? 850 : 100; t.y = y + 4; });
+  const p = new Projectile(gs.current_shooter, ITEMS[0], edge - 6, y, 1000, 0);
+  p.contact = kind === "contact";
+  gs.projectiles = [p]; gs.phase = FIRING;
+  tunnelingDemo = { gs, renderer: freshRenderer(gs), surf: newSurf(), shot: p };
+  advanceTunnelingDemo(0);
+}
+function advanceTunnelingDemo(steps: number) {
+  const d = tunnelingDemo;
+  for (let i = 0; i < steps && d.shot.active; i++) d.gs._step_flight();
+  d.renderer.render(d.surf, d.gs); blit(d.surf);
+  const p = d.shot;
+  return { active: p.active, x: p.px, speed: p.vx, mode: p.mode, landing: d.gs.last_landing,
+    cleared: Array.from({ length: 60 }, (_, i) => i + 400).filter((x) => !d.gs.terrain.is_dirt(x, 400)),
+    effects: d.gs.projectiles.filter((q) => q.weaponEffect).length };
+}
+Object.assign(window, { startTunnelingDemo, advanceTunnelingDemo });
+
 // Real flight sequences for the shield gate; setup goes through normal equipment.
 let shieldDemo: { gs: GameState; p: Projectile; renderer: Renderer; surf: pygame.Surface; frame: number;
   descending: boolean; lifted: boolean };

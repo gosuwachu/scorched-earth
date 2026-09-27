@@ -66,6 +66,7 @@ export function plasmaRadius(scale: number, batteries: number): number {
 
 function controller(state: BState, shot: BProjectile, effect: CombatEffect): BProjectile {
   const p = new Projectile(shot.owner as never, shot.weapon, shot.px, shot.py, 0, 0) as unknown as BProjectile;
+  p.contact = shot.contact ?? false;
   p.weaponEffect = effect;
   state.projectiles.push(p);
   return p;
@@ -123,6 +124,7 @@ function stepBlast(state: BState, shot: BProjectile, e: BlastEffect): void {
   shot.active = false;
   if (e.hop) {
     const next = new Projectile(shot.owner as never, shot.weapon, e.x, e.y - 1, e.hop.vx, e.hop.vy);
+    next.contact = shot.contact ?? false;
     next.warheads_left = e.hop.left;
     next.state.launchVx = e.hop.vx; next.state.launchVy = e.hop.vy;
     state.projectiles.push(next as unknown as BProjectile);

@@ -1,11 +1,10 @@
 /**
- * Projectile physics integrator -- a faithful TypeScript port of
- * scorch-py/scorch/physics.py (the fidelity oracle, itself byte-verified against
- * 1.5/SCORCH.EXE). Control flow and numeric behavior are identical to the Python;
- * the differential gate (test/physics.test.ts) asserts every result against the
- * Python-dumped vectors.
+ * Projectile physics integrator, originally ported from scorch-py. Retained
+ * Python vectors are legacy regression coverage, not the fidelity reference.
+ * The DOS mode-1 air-force bypass is now activated by ordinary soil penetration
+ * in game.ts; see oracle/TUNNELING_FIDELITY.md and test/tunneling.test.ts.
  *
- * Ground truth (READ-ONLY RE, binary never executed):
+ * Original routine map (subsequently checked against the DOS executable):
  *   FUN_2a4a_02f2  shot driver / fixed-step loop (decompiles/FUN_2a4a_02f2.c)
  *   FUN_2a4a_0763  spawn: seeds pos/vel, +0x4c guidance cb (FUN_2a4a_0763.c)
  *   FUN_2a4a_01c4  per-shot dt/grav/wind scalar setup (FUN_2a4a_01c4.c)

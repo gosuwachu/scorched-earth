@@ -49,6 +49,18 @@ try {
     assert.equal(await page.evaluate(() => document.activeElement.textContent), name);
   }
   await checkOptionHelp(page, { click, settled, shot });
+  await click("Play Options...");
+  const tunneling = page.getByRole("checkbox", { name: "Tunneling", exact: true });
+  assert.ok(await tunneling.isChecked(), "tunneling defaults ON");
+  await tunneling.uncheck();
+  assert.equal(await page.evaluate(() => window.onlineApp.cfg.TUNNELLING), "OFF");
+  assert.equal(await page.evaluate(async () => {
+    const { Config } = await import("/src/config.ts");
+    return Config.load(window.onlineApp.cfg.save()).TUNNELLING;
+  }), "OFF", "explicit OFF survives save/load");
+  await tunneling.check();
+  assert.equal(await page.evaluate(() => window.onlineApp.cfg.TUNNELLING), "ON");
+  await shot("tunneling"); await click("Done");
   await click("About"); assert.ok(await page.getByText("Register Scorched Earth", { exact: true }).isVisible()); await click("OK");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await click("Sound..."); assert.equal(await page.evaluate(() => window.onlineApp.transitioning), false);

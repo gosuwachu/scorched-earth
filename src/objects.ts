@@ -107,7 +107,9 @@ export class Projectile {
     this.owner = owner;
     this.owner_index = owner ? owner.player_index : -1;
     this.active = true;                   // +0x3c
-    this.mode = 0;                        // +0x4a (1 = stuck/landed)
+    // 2a4a:0a1e..0a84: rollers, tracers and Dirt Charge cannot penetrate soil.
+    // +0x4a: 0 = ineligible, -1 = airborne, 1 = tunneling (no air forces).
+    this.mode = ["roller", "tracer", "dirt_wedge"].includes(weapon.behavior) ? 0 : -1;
     this.flags = 0;                       // +0x3a (bit0 = dirt/riot blast)
     this.bounce_energy = C.BOUNCE_ENERGY; // +0x32 (seed 0.8, DAT_5f38_1d24)
     this.bounce_count = 0;                // +0x30 wall-bounce counter (FUN_2a4a_0763.c:87)
@@ -119,7 +121,7 @@ export class Projectile {
     this.trail = [];                      // TRACE / smoke-tracer path
     this.armed = true;                    // self-hit / muzzle-clearance gate
     this.split_done = false;              // MIRV apogee split latch
-    // Contact Trigger (+0x4a == 0xffff in the original): this shot detonates on
+    // Contact Trigger (+0x2e in the original): this shot detonates on
     // FIRST contact, disabling tunnelling for it (DOC L1436 "equivalent to
     // turning off the Tunneling option"). One trigger covers all MIRV warheads,
     // so children inherit it. Default off.

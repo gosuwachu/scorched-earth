@@ -19,7 +19,6 @@ export async function checkOptionHelp(page, { click, settled, shot }) {
     Landscape: [["LAND2", "Slope:", "l"]],
     "Play Options": [
       ["DAMAGE_TANKS_ON_IMPACT", "Impact Damage", "i"],
-      ["TUNNELLING", "Tunneling", "t"],
       ["EXTRA_DIRT", "Extra Dirt", "e"],
       ["USELESS_ITEMS", "Useless Items", "u"],
     ],
