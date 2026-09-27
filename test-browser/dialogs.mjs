@@ -79,5 +79,19 @@ export async function checkSetupDialogs(page, shot) {
 
 export async function checkNoOnlineBar(page) {
   assert.equal(await page.locator(".lan-bar").count(), 0);
-  assert.ok(await page.evaluate(() => !document.body.classList.contains("lan-host") && !document.body.style.getPropertyValue("--lan-bar-height")), "No space reserved for the toolbar before play or after disposal");
+  assert.ok(await page.evaluate(() => !document.body.classList.contains("lan-host") && !document.body.style.getPropertyValue("--lan-bar-height")), "No space reserved for an online toolbar");
+}
+
+export async function openHostMenu(page) {
+  await settledDialogs(page);
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog", { name: "System Menu", exact: true }).waitFor();
+  await settledDialogs(page);
+}
+
+export async function closeHostMenu(page) {
+  await settledDialogs(page);
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog", { name: "System Menu", exact: true }).waitFor({ state: "detached" });
+  await settledDialogs(page);
 }

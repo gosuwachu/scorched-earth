@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { openHostMenu, closeHostMenu } from "./dialogs.mjs";
 
 export async function checkSimultaneous({ host, a, b, base, root, click, enabled, until, pause }) {
   await host.evaluate(() => {
@@ -49,6 +50,17 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   assert.deepEqual((await angles()).slice(1), [90, 90]);
   await hold(a, "← Angle"); await hold(b, "← Angle");
   await until(async () => { const x = await angles(); return x[0] > 100 && x[1] > 100; }, "overlapping angle holds");
+  await openHostMenu(host);
+  await until(async () => !await enabled(a, "Space / Fire") && !await enabled(b, "Space / Fire"), "both controllers pause");
+  const pausedAngles = await angles();
+  await pause(250);
+  assert.deepEqual(await angles(), pausedAngles);
+  await closeHostMenu(host);
+  await until(async () => await enabled(a, "Space / Fire") && await enabled(b, "Space / Fire"), "both controllers resume");
+  await pause(150);
+  assert.deepEqual(await angles(), pausedAngles, "Old holds do not resume with the match");
+  await a.mouse.up(); await b.mouse.up();
+  await hold(a, "← Angle"); await hold(b, "← Angle");
   await a.mouse.up(); await pause(150);
   const stopped = (await angles())[0], moving = (await angles())[1];
   await until(async () => (await angles())[1] > moving + 5, "Bob continues after Alice releases");
@@ -93,7 +105,23 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   await until(async () => await host.evaluate(() => window.simShots.filter((s) => s.owner === "Bob").length) > bobShots, "Bob fires during Alice's Plasma choice");
   await charge.fill("2"); await charge.press("Tab");
   await until(async () => await host.evaluate(() => window.onlineApp.gs.sim_charges.get(window.onlineApp.gs.tanks[0])?.value) === 2, "private battery selection");
+  await openHostMenu(host);
+  const flight = () => host.evaluate(() => window.onlineApp.gs.projectiles.map((p) => [p.x, p.y, p.vx, p.vy]));
+  const pausedFlight = await flight();
+  assert.ok(pausedFlight.length > 0, "Bob's shot is in flight when the host pauses");
+  await pause(300);
+  assert.deepEqual(await flight(), pausedFlight, "Projectiles freeze while the host menu is open");
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.sim_charges.get(window.onlineApp.gs.tanks[0])?.value), 2);
+  await closeHostMenu(host);
+  await charge.waitFor();
+  assert.equal(await charge.inputValue(), "2", "The pending Plasma choice survives pause and resume");
+  await until(async () => JSON.stringify(await flight()) !== JSON.stringify(pausedFlight), "projectiles resume");
   await a.screenshot({ path: `${root}/test-browser/out/online-simultaneous-plasma.png`, fullPage: true });
+  // Let Bob's resumed shot and soil settling finish before requesting another fire.
+  await host.waitForFunction(() => {
+    const gs = window.onlineApp.gs;
+    return !gs.projectiles.length && !gs.explosions.length && !gs.sim_settling && !gs.soilDirty;
+  });
   await click(a, "Fire Plasma");
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[31]) === 2, "Alice Plasma fires");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].batteries), 3);
@@ -115,11 +143,20 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   assert.equal(await enabled(b, "Space / Fire"), true);
   await host.evaluate(() => window.onlineApp.gs.mass_kill());
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
-  await click(host, "Continue to purchasing");
+  await click(host, "Go");
   await until(() => enabled(a, "Done"), "next round Alice shopping"); await click(a, "Done");
   await until(() => enabled(b, "Done"), "next round Bob shopping"); await click(b, "Done");
   await until(async () => await enabled(a, "Space / Fire") && await enabled(b, "Space / Fire"), "next round both controllers");
-  await host.evaluate(() => window.onlineApp._act("to_menu"));
+  // Losing the host connection freezes play but must leave its menu usable.
+  await host.evaluate(() => window.onlineApp.online.connection.close());
+  await host.waitForFunction(() => window.onlineApp.online.paused);
+  await openHostMenu(host);
+  await click(host, "Join link");
+  await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor();
+  await click(host, "Close join link");
+  await click(host, "Quit Game");
+  await click(host, "Yes");
+  await host.getByRole("button", { name: "Start", exact: true }).waitFor();
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SIMULTANEOUS");
-  console.log("PASS: simultaneous phones, concurrent aim/power/fire, independent releases, private Plasma, reconnect, death and next round");
+  console.log("PASS: simultaneous phones, pause/resume, frozen flight, preserved Plasma, independent releases, reconnect, death, next round and disconnected host menu");
 }

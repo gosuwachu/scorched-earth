@@ -21,7 +21,7 @@ function setup() {
     t.angle = 90; t.power = 300; t.x = 100 + 200 * i; t.y = 350;
     t.inventory[1] = 3; t.selected_weapon = 0;
   });
-  const app = { gs, top: {}, onlineScreen: "battle", transitioning: false, handleRemote: vi.fn(), _act: vi.fn() };
+  const app = { gs, top: {}, onlineScreen: "battle", onlineMenuOpen: false, transitioning: false, handleRemote: vi.fn(), _act: vi.fn() };
   const adapter = new RemoteAdapter(app as unknown as App, roster);
   const states = () => adapter.states(roster);
   const seq: Record<string, number> = {};
@@ -37,6 +37,64 @@ function setup() {
 }
 
 describe("independent simultaneous controllers", () => {
+  it("pauses controllers without losing Plasma choices and rejects commands from before or during the pause", () => {
+    const { gs, app, states, adapter, key, send, plasma } = setup();
+    const alice = plasma(0), bob = gs.tanks[1];
+    key("Alice", "Space");
+    send("Alice", { kind: "control", id: "plasma-charge", value: 2 });
+    key("Bob", "ArrowLeft");
+    const before = states();
+    const angle = bob.angle;
+    app.onlineMenuOpen = true; app.onlineScreen = "admin";
+    const paused = states();
+    expect(Object.values(paused).every((s) => !s.enabled && s.message === "Paused by host.")).toBe(true);
+    expect(paused.Alice.controls).toEqual([]);
+    adapter.updateSimultaneous(0.1, 100);
+    send("Alice", { kind: "control", id: "plasma-fire" });
+    expect(gs.projectiles).toHaveLength(0);
+    expect(bob.angle).toBe(angle);
+    expect(gs.sim_charges.get(alice)?.value).toBe(2);
+    // Blur/release during the menu must not discard a pending charge either.
+    adapter.release("Alice");
+    expect(gs.sim_charges.get(alice)?.value).toBe(2);
+    app.onlineMenuOpen = false; app.onlineScreen = "battle"; app.transitioning = true;
+    states();
+    expect(gs.sim_charges.get(alice)?.value).toBe(2);
+    app.transitioning = false;
+    const resumed = states();
+    expect(resumed.Alice.enabled && resumed.Bob.enabled).toBe(true);
+    adapter.updateSimultaneous(0.1, 150);
+    expect(bob.angle).toBe(angle);
+    for (const context of [before.Alice.context, paused.Alice.context]) {
+      adapter.receive("Alice", context, 100, { kind: "control", id: "plasma-fire" }, 150);
+    }
+    expect(gs.projectiles).toHaveLength(0);
+    send("Alice", { kind: "control", id: "plasma-fire" });
+    expect(gs.projectiles[0].owner).toBe(alice);
+    expect(alice.batteries).toBe(3);
+  });
+
+  it("clears sequential holds and invalidates both sides of a menu pause", () => {
+    const { gs, app, states, adapter, key } = setup();
+    gs.phase = "aim"; gs.current_shooter = gs.tanks[0];
+    key("Alice", "ArrowLeft");
+    const before = states().Alice;
+    expect(Object.keys(adapter.keys(0))).not.toHaveLength(0);
+    app.onlineMenuOpen = true; app.onlineScreen = "admin";
+    const paused = states().Alice;
+    expect(adapter.keys(0)).toEqual({});
+    adapter.receive("Alice", paused.context, 10, { kind: "key", key: "Space", down: true }, 0);
+    app.onlineMenuOpen = false; app.onlineScreen = "battle";
+    const resumed = states().Alice;
+    app.handleRemote.mockClear();
+    for (const context of [before.context, paused.context]) {
+      adapter.receive("Alice", context, 100, { kind: "key", key: "Space", down: true }, 0);
+    }
+    expect(app.handleRemote).not.toHaveBeenCalled();
+    adapter.receive("Alice", resumed.context, 101, { kind: "key", key: "Space", down: true }, 0);
+    expect(app.handleRemote).toHaveBeenCalledOnce();
+  });
+
   it("rejects fire during terrain settling without changing the controller context or spending ammunition", () => {
     const { gs, key, states, adapter } = setup();
     const t = gs.tanks[0];

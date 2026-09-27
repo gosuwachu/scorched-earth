@@ -672,6 +672,8 @@ export class App {
 
   get transitioning(): boolean { return this._wipe !== null || !!this.ui?.transitioning; }
 
+  get onlineMenuOpen(): boolean { return !!this.online && this.top instanceof ingame.SystemMenuScreen; }
+
   get onlineScreen(): "battle" | "player" | "rankings" | "finished" | "admin" {
     if (this.top instanceof GameScreen) return "battle";
     if (this.top instanceof RankingsScreen) return "rankings";
@@ -886,7 +888,7 @@ export class App {
       } else if (name === "control" && gs) {
         this.push(new ingame.ControlPanelScreen(gs as never, gs.current_shooter as never) as unknown as StackScreen);
       } else if (name === "system") {
-        this.push(new ingame.SystemMenuScreen(gs as never) as unknown as StackScreen);
+        if (!this.onlineMenuOpen) this.push(new ingame.SystemMenuScreen(gs as never, !!this.online) as unknown as StackScreen);
       } else if (name === "sell" && gs) {
         const slot = (this.top as unknown as { sell_slot?: number | null }).sell_slot;
         if (slot !== undefined && slot !== null) {
@@ -894,6 +896,8 @@ export class App {
           this.push(new SellScreen(gs as unknown as never, tank as never, slot, this.w, this.h) as unknown as StackScreen);
         }
       }
+    } else if (action === "join_link") {
+      if (this.onlineMenuOpen) this.online?.showJoinLink();
     } else if (action === "open_inventory" && gs) {
       this.push(
         new InventoryScreen(gs as unknown as never, gs.current_shooter as never, this.w, this.h) as unknown as StackScreen,
@@ -1035,12 +1039,6 @@ export class App {
     const elapsed = this._lastMs === null ? 0 : (nowMs - this._lastMs) / 1000.0;
     this._lastMs = nowMs;
     this.online?.beforeFrame(nowMs);
-    if (this.online?.paused) {
-      this._debt = 0;
-      this.ui?.sync();
-      this.online.afterFrame(nowMs);
-      return true;
-    }
     diag.heartbeat(); // no-op in browser
     this.sampler.tick(elapsed);
     this.watchdog.begin_frame();
@@ -1055,8 +1053,8 @@ export class App {
         ) {
           this._toggle_fullscreen();
         } else if (this.online && this.onlineScreen !== "admin") {
-          // The host administers the match through the LAN bar. Tank/shop input
-          // belongs exclusively to the player who owns the current controller.
+          // Only Escape belongs to the host; tank/shop input stays with guests.
+          if (e.type === pygame.KEYDOWN && e.key === pygame.K_ESCAPE && this.gs && !this.transitioning) this._act("push:system");
           continue;
         } else if (this.ui?.transitioning) {
           if (e.type === pygame.KEYDOWN || e.type === pygame.MOUSEBUTTONDOWN) this.ui.finishTransition();
@@ -1079,6 +1077,8 @@ export class App {
         if (this._wipe.done) {
           this._wipe = null; // settle onto the live screen
         }
+        this._debt = 0;
+      } else if (this.online?.paused || this.onlineMenuOpen) {
         this._debt = 0;
       } else {
         const plan = stepPlan(elapsed, this._debt);

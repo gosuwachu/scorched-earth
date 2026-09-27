@@ -24,15 +24,12 @@ export class HostSession {
   private lobbyStarted?: boolean;
   private startButton?: HTMLButtonElement;
   private addButton?: HTMLButtonElement;
-  private confirmation?: OnlineDialog;
-  private bar = el("div", "", "lan-bar se-ui");
   private status = el("span", "Creating room…");
   private lastPublish = -Infinity;
   private disposed = false;
   private readonly origin: string;
   private localConfig: Config;
   private shareOpen = false;
-  private barSize: ResizeObserver;
   private pending: Extract<ServerMessage, { type: "input" }>[] = [];
 
   constructor(private app: App, urls: string[]) {
@@ -41,17 +38,6 @@ export class HostSession {
     this.box = dialog("Online lobby", { className: "ui-compact", sound: () => app.cfg.is_on("SOUND"), cancel: () => this.closeLobby() });
     this.status.setAttribute("role", "status");
     this.box.body.append(this.status);
-    const share = button("Join link", () => { this.shareOpen = true; this.renderLobby(); });
-    const continueButton = button("Continue", () => {
-      if (app.onlineScreen === "rankings") app._act("rankings_done");
-      else if (app.onlineScreen === "finished") app._act("to_menu");
-    });
-    continueButton.dataset.lanContinue = "true";
-    continueButton.hidden = true;
-    this.bar.append(share, continueButton, button("End online game", () => this.confirmEnd()));
-    this.barSize = new ResizeObserver(() => {
-      if (this.bar.isConnected) document.body.style.setProperty("--lan-bar-height", `${this.bar.offsetHeight}px`);
-    });
     this.connection = new Connection(
       () => this.token && this.room ? { type: "host-resume", room: this.room.id, token: this.token } : { type: "create" },
       (m) => this.receive(m),
@@ -64,7 +50,14 @@ export class HostSession {
   }
 
   get paused(): boolean { return !this.connection.connected || !this.room?.hostConnected; }
+  get menuPaused(): boolean { return this.app.onlineMenuOpen; }
   get keys(): Record<number, boolean> { return this.adapter?.keys(performance.now()) ?? {}; }
+
+  showJoinLink(): void {
+    if (!this.room?.started || !this.menuPaused || this.shareOpen) return;
+    this.shareOpen = true;
+    this.renderLobby();
+  }
 
   updateSimultaneous(dt: number): void {
     this.adapter?.updateSimultaneous(dt, performance.now());
@@ -73,6 +66,7 @@ export class HostSession {
   beforeFrame(now: number): void {
     if (!this.room || !this.adapter || this.disposed) return;
     this.adapter.states(this.room.players);
+    if (this.paused || this.menuPaused) { this.pending = []; return; }
     for (const m of this.pending.splice(0)) this.adapter.receive(m.player, m.context, m.seq, m.input, now);
   }
 
@@ -81,9 +75,6 @@ export class HostSession {
     const states = this.adapter.states(this.room.players);
     const active = Object.values(states).find((s) => s.enabled);
     if (!this.paused) this.status.textContent = active ? `${active.tank?.name}: ${active.screen}` : Object.values(states)[0]?.message ?? "Playing";
-    const next = this.bar.querySelector<HTMLButtonElement>("[data-lan-continue]")!;
-    next.hidden = this.app.onlineScreen !== "rankings" && this.app.onlineScreen !== "finished";
-    next.textContent = this.app.onlineScreen === "finished" ? "Return to menu" : "Continue to purchasing";
     if (now - this.lastPublish >= 100 && !this.paused) {
       this.connection.send({ type: "states", states });
       this.lastPublish = now;
@@ -109,11 +100,6 @@ export class HostSession {
           this.app.startOnline(m.room.players);
           this.adapter = new RemoteAdapter(this.app, m.room.players);
         }
-        this.bar.prepend(this.status);
-        document.body.append(this.bar);
-        document.body.classList.add("lan-host");
-        document.body.style.setProperty("--lan-bar-height", `${this.bar.offsetHeight}px`);
-        this.barSize.observe(this.bar);
         this.afterFrame(performance.now());
       });
     } else if (m.type === "release") {
@@ -133,17 +119,6 @@ export class HostSession {
     this.roster?.update(this.room.players);
     if (this.startButton) this.startButton.disabled = !canStart(this.room.players) || this.paused;
     if (this.addButton) this.addButton.disabled = this.room.players.length >= 10 || this.paused;
-  }
-
-  private confirmEnd(): void {
-    if (this.confirmation) return;
-    const cancel = (): void => { this.confirmation?.close(() => { this.confirmation = undefined; }); };
-    this.confirmation = dialog("End online game", { sound: () => this.app.cfg.is_on("SOUND"), cancel });
-    this.confirmation.body.append(el("p", "End this online game for everyone?"));
-    this.confirmation.footer.append(
-      button("Cancel", cancel),
-      button("End game", () => this.confirmation?.close(() => this.app._act("to_menu"))),
-    );
   }
 
   private closeLobby(): void {
@@ -170,7 +145,7 @@ export class HostSession {
     this.startButton = undefined;
     this.addButton = undefined;
     this.box.body.replaceChildren(el("p", "Players watch this screen and use their own devices as controllers. Keep this host page open and visible."));
-    if (!this.room.started) this.box.body.append(this.status);
+    this.box.body.append(this.status);
     this.box.footer.replaceChildren();
     const layout = el("div", "", "lan-lobby-layout");
     const sharing = el("section");
@@ -236,11 +211,7 @@ export class HostSession {
     this.connection.send({ type: "end" });
     this.connection.close();
     this.adapter?.release();
-    this.confirmation?.dispose();
-    this.box.dispose(); this.bar.remove();
-    this.barSize.disconnect();
-    document.body.classList.remove("lan-host");
-    document.body.style.removeProperty("--lan-bar-height");
+    this.box.dispose();
     this.app.cfg = this.localConfig;
     this.app.renderer = new Renderer(this.localConfig, this.app.w, this.app.h);
   }

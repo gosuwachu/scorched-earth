@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { WebSocket } from "ws";
-import { checkDialogLayout, checkNoOnlineBar, settledDialogs } from "./dialogs.mjs";
+import { checkDialogLayout, checkNoOnlineBar, settledDialogs, openHostMenu, closeHostMenu } from "./dialogs.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const externalBase = process.env.ONLINE_BASE_URL;
@@ -184,6 +184,8 @@ try {
   for (let i = 0; i < 8; i++) await host.getByRole("button", { name: `Remove Guest${i + 1}`, exact: true }).click();
   await until(async () => await phone.locator(".lan-roster li").count() === 2, "temporary participants removed");
   await host.getByRole("button", { name: "Start online game", exact: true }).click();
+  await host.getByRole("dialog", { name: "Online lobby", exact: true }).waitFor({ state: "detached" });
+  await openHostMenu(host);
   await host.getByRole("button", { name: "Join link", exact: true }).click();
   await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor();
   await checkDialogLayout(host, "Join / reconnect");
@@ -194,6 +196,8 @@ try {
   assert.equal(await host.getByLabel("Custom LAN address", { exact: true }).count(), 0);
   await until(async () => await host.locator("canvas.lan-qr").evaluate((c) => !c.hidden && c.width === 220 && c.height === 220), "reopened join QR code");
   await host.getByRole("button", { name: "Close join link", exact: true }).click();
+  await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor({ state: "detached" });
+  await closeHostMenu(host);
   await phone.getByRole("button", { name: "Done", exact: true }).click();
   await phone.getByRole("button", { name: "Tank controls", exact: true }).waitFor();
   const before = await phone.locator(".lan-stats").textContent();
@@ -202,18 +206,26 @@ try {
   await phone.reload();
   await phone.getByRole("button", { name: "Tank controls", exact: true }).waitFor();
   await host.screenshot({ path: `${root}/test-browser/out/online-production-host.png` });
-  const canvas = await host.locator("#game").boundingBox();
-  const bar = await host.locator(".lan-bar").boundingBox();
-  assert.ok(canvas.y + canvas.height <= bar.y + 1, "The host toolbar must not cover the battlefield");
-  await host.getByRole("button", { name: "End online game", exact: true }).click();
-  await host.getByRole("dialog", { name: "End online game", exact: true }).waitFor();
+  await checkNoOnlineBar(host);
+  await openHostMenu(host);
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) {
+    await host.setViewportSize(viewport);
+    const menu = await host.getByRole("dialog", { name: "System Menu", exact: true }).boundingBox();
+    assert.ok(menu.x >= 0 && menu.y >= 0 && menu.x + menu.width <= viewport.width && menu.y + menu.height <= viewport.height);
+    await host.screenshot({ path: `${root}/test-browser/out/online-menu-${viewport.width}x${viewport.height}.png` });
+  }
+  await host.getByRole("button", { name: "Quit Game", exact: true }).click();
+  await host.getByRole("button", { name: "Yes", exact: true }).waitFor();
   await settledDialogs(host);
   await host.keyboard.press("Escape");
-  await host.getByRole("dialog", { name: "End online game", exact: true }).waitFor({ state: "detached" });
-  assert.equal(await host.evaluate(() => document.activeElement.textContent), "End online game");
-  await host.getByRole("button", { name: "End online game", exact: true }).click();
-  await host.getByRole("button", { name: "End game", exact: true }).click();
-  await host.locator(".lan-bar").waitFor({ state: "detached" });
+  await host.getByRole("button", { name: "Yes", exact: true }).waitFor({ state: "detached" });
+  await settledDialogs(host);
+  assert.equal(await host.evaluate(() => document.activeElement.textContent), "Quit Game");
+  await host.getByRole("button", { name: "Quit Game", exact: true }).click();
+  await settledDialogs(host);
+  await host.getByRole("button", { name: "Yes", exact: true }).click();
+  await host.getByRole("button", { name: "Start", exact: true }).waitFor();
+  await until(async () => (await phone.locator(".lan-status").textContent()).includes("ended"), "Quit Game ends the room");
   await checkNoOnlineBar(host);
   assert.deepEqual(errors, []);
   console.log("PASS: production LAN flow; game-style dialogs; focus/shortcuts; ten-player keyboard, wheel and touch scrolling; stable roster updates; responsive layouts; touch control and refresh recovery");

@@ -1503,7 +1503,7 @@ export class SystemMenuScreen implements Screen {
   panel!: widgets.Panel;
   _action_by_label: { [label: string]: [string, string | null] } = {};
 
-  constructor(state: GameState | null = null) {
+  constructor(state: GameState | null = null, private online = false) {
     // state is optional; only used to centre confirm boxes.  A tiny stub is used
     // for sizing if the caller omits it.
     this.state = state;
@@ -1516,17 +1516,19 @@ export class SystemMenuScreen implements Screen {
   _build(): widgets.Panel {
     const colw = 190;
     const gap = 12;
-    const pw = 16 + colw * 2 + gap + 16;
-    const ph = 26 * 5 + 36; // 5 rows (left column is the tallest)
+    const pw = this.online ? colw + 32 : 16 + colw * 2 + gap + 16;
+    const ph = 26 * (this.online ? 3 : 5) + 36;
     const px = Math.floor((this._w - pw) / 2);
     const py = Math.floor((this._h - ph) / 2);
     const p = new widgets.Panel(px, py, pw, ph, "System Menu");
     this._action_by_label = {};
     const lx = px + 16;
-    const rx = px + 16 + colw + gap;
+    const rx = this.online ? lx : px + 16 + colw + gap;
     const y0 = py + 28;
-    for (let i = 0; i < SystemMenuScreen.LEFT.length; i++) {
-      const [label, action, prompt] = SystemMenuScreen.LEFT[i];
+    const left: MenuItem[] = this.online ? [["~Join link", "join_link", null]] : SystemMenuScreen.LEFT;
+    const right: MenuItem[] = this.online ? [SystemMenuScreen.RIGHT[3]] : SystemMenuScreen.RIGHT;
+    for (let i = 0; i < left.length; i++) {
+      const [label, action, prompt] = left[i];
       this._action_by_label[label] = [action, prompt];
       p.add(new widgets.Button(lx, y0 + i * 26, label, label, colw));
     }
@@ -1536,7 +1538,7 @@ export class SystemMenuScreen implements Screen {
       p.add(
         new widgets.Toggle(
           lx,
-          y0 + 4 * 26,
+          y0 + (this.online ? 1 : 4) * 26,
           "~Sound:",
           () => cfg.is_on("SOUND"),
           (v: boolean) => {
@@ -1546,10 +1548,10 @@ export class SystemMenuScreen implements Screen {
         ),
       );
     }
-    for (let i = 0; i < SystemMenuScreen.RIGHT.length; i++) {
-      const [label, action, prompt] = SystemMenuScreen.RIGHT[i];
+    for (let i = 0; i < right.length; i++) {
+      const [label, action, prompt] = right[i];
       this._action_by_label[label] = [action, prompt];
-      p.add(new widgets.Button(rx, y0 + i * 26, label, label, colw));
+      p.add(new widgets.Button(rx, y0 + (i + (this.online ? 2 : 0)) * 26, label, label, colw));
     }
     return p;
   }

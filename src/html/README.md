@@ -23,7 +23,9 @@ painters remain available to the differential/reference harnesses.
   and online-ownership guards. Guest actions still use the existing remote adapter.
 - `transitions.ts`: shared opening/closing animation and sound for screen-backed
   and standalone dialogs, including reduced-motion support. Standalone transitions
-  do not pause an active online match. Settings and setup dialogs share a responsive
+  do not themselves pause an active online match. The host's Escape menu pauses play,
+  including while its join-link dialog is open. Hosts use Go on results screens.
+  Settings and setup dialogs share a responsive
   600px width.
 - `targeting.ts`: a temporary HTML player-name/status/Cancel row in the top bar.
   It measures its content and shares logical-pixel bounds with the renderer;

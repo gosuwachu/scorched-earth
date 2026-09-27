@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
 import { purchaseButton, checkShopRows, checkShopLayout } from "./online_shop.mjs";
-import { checkNoOnlineBar, settledDialogs } from "./dialogs.mjs";
+import { checkNoOnlineBar, settledDialogs, openHostMenu, closeHostMenu } from "./dialogs.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.ONLINE_TEST_URL || "http://127.0.0.1:4317";
@@ -113,12 +113,22 @@ try {
   await click(host, "Start online game");
   await host.waitForFunction(async () => (await import("/src/sound.ts")).sfx._ctx?.state === "running");
   await until(() => enabled(a, "Done"), "Alice shopping");
-  assert.ok(await host.locator(".lan-bar").isVisible(), "The toolbar appears once play starts");
+  await checkNoOnlineBar(host);
+  await openHostMenu(host);
+  assert.equal(await host.getByRole("button", { name: "Save Game", exact: true }).count(), 0);
+  assert.equal(await host.getByRole("button", { name: "End online game", exact: true }).count(), 0);
+  await until(async () => (await a.locator(".lan-status").textContent()).includes("Paused by host"), "paused shopping controller");
+  assert.equal(await enabled(a, "Done"), false);
   await click(host, "Join link");
   await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor();
-  assert.equal(await host.evaluate(() => window.onlineApp.transitioning), false, "Sharing animations do not pause the match or disable remote input");
-  await click(host, "Close join link");
+  assert.equal(await host.evaluate(() => window.onlineApp.online.menuPaused), true);
+  await host.keyboard.press("Escape");
   await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor({ state: "detached" });
+  assert.equal(await host.evaluate(() => document.activeElement.textContent), "Join link");
+  assert.equal(await host.evaluate(() => window.onlineApp.online.menuPaused), true);
+  await host.screenshot({ path: `${root}/test-browser/out/online-menu.png` });
+  await closeHostMenu(host);
+  await until(() => enabled(a, "Done"), "shopping resumes");
   assert.equal(await enabled(b, "Space / Fire"), false);
   assert.equal(await b.locator(".lan-shop-row:enabled").count(), 0, "Waiting guests cannot purchase");
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
@@ -181,6 +191,8 @@ try {
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]) > 0, "Bob buys guidance");
   await click(b, "Done");
   await until(() => enabled(a, "Space / Fire"), "Alice aiming");
+  await click(a, "Back / Esc");
+  assert.equal(await host.getByRole("dialog", { name: "System Menu", exact: true }).count(), 0, "Guest Escape never opens the host menu");
   // Observe real adjustment tone playback on the host, without replacing it.
   await host.evaluate(async () => {
     const { sfx } = await import("/src/sound.ts");
@@ -229,6 +241,9 @@ try {
   assert.deepEqual(await ticks(), beforeMuteTicks);
   await click(a, "Tank controls");
   await a.getByRole("heading", { name: /Tank controls/ }).waitFor();
+  await openHostMenu(host);
+  await closeHostMenu(host);
+  await until(async () => await a.getByLabel("Remaining Power:").isEnabled(), "tank controls resume");
   const beforePanelTicks = (await ticks()).length;
   await a.getByLabel("Remaining Power:").fill("300");
   await a.getByLabel("Remaining Power:").press("Tab");
@@ -281,6 +296,13 @@ try {
   await a.getByLabel("Target Y", { exact: true }).fill("100");
   await a.getByLabel("Target Y", { exact: true }).press("Tab");
   await until(async () => await host.evaluate(() => JSON.stringify(window.onlineApp.gs.pendingTarget?.point)) === "[200,100]", "coordinate draft");
+  await openHostMenu(host);
+  await until(async () => (await a.locator(".lan-status").textContent()).includes("Paused by host"), "targeting paused");
+  assert.deepEqual(await host.evaluate(() => window.onlineApp.gs.pendingTarget.point), [200, 100]);
+  await closeHostMenu(host);
+  await until(() => enabled(a, "Fire at target"), "targeting resumes");
+  assert.equal(await a.getByLabel("Target X", { exact: true }).inputValue(), "200");
+  assert.equal(await a.getByLabel("Target Y", { exact: true }).inputValue(), "100");
   await a.screenshot({ path: `${root}/test-browser/out/online-guidance.png`, fullPage: true });
   await host.screenshot({ path: `${root}/test-browser/out/online-guidance-host.png` });
   // Lost network on the active player's turn leaves the game waiting.
@@ -314,6 +336,10 @@ try {
   await a.getByLabel("Batteries for Plasma", { exact: true }).fill("5");
   await a.getByLabel("Batteries for Plasma", { exact: true }).press("Tab");
   await until(async () => await host.evaluate(() => window.onlineApp.gs.plasma_charge?.value) === 5, "charge reaches host");
+  await openHostMenu(host);
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.plasma_charge?.value), 5);
+  await closeHostMenu(host);
+  await until(async () => await a.getByLabel("Batteries for Plasma", { exact: true }).isEnabled(), "Plasma choice resumes");
   await a.reload();
   await a.getByLabel("Batteries for Plasma", { exact: true }).waitFor();
   assert.equal(await a.getByLabel("Batteries for Plasma", { exact: true }).inputValue(), "5");
@@ -342,7 +368,9 @@ try {
   // End rounds deterministically through the real engine rather than waiting for random AI hits.
   await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
-  await click(host, "Continue to purchasing");
+  await openHostMenu(host);
+  await closeHostMenu(host);
+  await click(host, "Go");
   await until(() => enabled(a, "Done"), "between-round purchasing");
   await a.reload(); await until(() => enabled(a, "Done"), "rejoin purchasing");
   await click(a, "Done"); await until(() => enabled(b, "Done"), "next shopper"); await click(b, "Done");
@@ -363,11 +391,11 @@ try {
   assert.equal(await host.evaluate(() => window.onlineApp.gs.pendingTarget), null);
   await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
-  await click(host, "Continue to purchasing");
+  await click(host, "Go");
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "finished");
   await until(async () => (await a.locator(".lan-status").textContent()).includes("Match complete"), "final results");
   await host.screenshot({ path: `${root}/test-browser/out/online-host.png` });
-  await click(host, "Return to menu");
+  await click(host, "Go");
   await until(async () => (await a.locator(".lan-status").textContent()).includes("ended"), "room closed");
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
   await checkSimultaneous({ host, a, b, base, root, click, enabled, until, pause });

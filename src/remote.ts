@@ -58,17 +58,18 @@ export class RemoteAdapter {
   private lastSeq = new Map<string, number>();
   private names = new Set<string>();
   private simultaneous = new Map<string, SimController>();
+  private menuPaused = false;
 
   constructor(private app: App, private roster: Player[]) {}
 
-  release(player?: string): void {
+  release(player?: string, preserveCharge = this.app.onlineMenuOpen): void {
     if (!player || player === this.owner) { this.hold.clear(); this.names.clear(); }
     if (player) this.lastSeq.delete(player);
     for (const [id, controller] of this.simultaneous) {
       if (player && id !== player) continue;
       controller.hold.clear(); controller.names.clear(); controller.lastSeq = -1;
       controller.context = ++this.context;
-      controller.gs.sim_release(controller.tank);
+      if (!preserveCharge) controller.gs.sim_release(controller.tank);
     }
   }
 
@@ -95,7 +96,7 @@ export class RemoteAdapter {
         this.simultaneous.set(p.id, c);
       }
       c.enabled = p.connected && tank.alive && tank.ai_class === 0 && !this.app.transitioning;
-      if (!c.enabled) gs.sim_release(tank);
+      if (!p.connected || !tank.alive || tank.ai_class !== 0) gs.sim_release(tank);
       const identity = [gs, this.app.top, gs.round_index, c.enabled, gs.sim_charges.get(tank)];
       if (identity.some((v, j) => v !== c.identity[j])) {
         c.identity = identity;
@@ -175,6 +176,7 @@ export class RemoteAdapter {
   receive(player: string, context: number, seq: number, input: Input, now = performance.now()): void {
     this.keys(now);
     this.refresh();
+    if (this.menuPaused) return;
     const controller = this.simultaneous.get(player);
     if (controller) {
       this.receiveSimultaneous(controller, context, seq, input, now);
@@ -228,6 +230,19 @@ export class RemoteAdapter {
   }
 
   refresh(): void {
+    const menuPaused = !!this.app.onlineMenuOpen;
+    if (menuPaused !== this.menuPaused) {
+      this.menuPaused = menuPaused;
+      this.context++;
+      this.release(undefined, true);
+      this.identity = [];
+      for (const c of this.simultaneous.values()) c.identity = [];
+    }
+    if (menuPaused) {
+      this.enabled = false;
+      for (const c of this.simultaneous.values()) c.enabled = false;
+      return;
+    }
     const gs = this.app.gs as unknown as GameState | null;
     const top = this.app.top;
     const kind = this.app.onlineScreen;
@@ -368,6 +383,12 @@ export class RemoteAdapter {
         controls: enabled ? this.controls : [],
       };
     });
+    if (this.menuPaused) for (const state of Object.values(result)) {
+      state.enabled = false;
+      state.message = "Paused by host.";
+      state.controls = [];
+      state.keys = [];
+    }
     return result;
   }
 }

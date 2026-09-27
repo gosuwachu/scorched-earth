@@ -91,7 +91,9 @@ export class UiHost {
     }
   }
   private permitted(screen: HtmlScreen): boolean {
-    return this.app.top === screen && (!this.app.online || this.app.onlineScreen === "admin") && !this.app.online?.paused;
+    if (this.app.top !== screen) return false;
+    if (!this.app.online || this.app.onlineMenuOpen) return true;
+    return !this.app.online.paused && ["admin", "rankings", "finished"].includes(this.app.onlineScreen);
   }
   private act(screen: HtmlScreen, action: string | null): void {
     if (!this.permitted(screen)) return;
@@ -150,7 +152,7 @@ export class UiHost {
           for (const frame of d.screen.sim_frames) view.widgets.hide(frame, d.screen.is_computer);
         }
         if (view.dialog && !view.dialog.open) {
-          // Player screens are read-only on the host; keep the host's LAN bar usable.
+          // Online player screens remain read-only; Escape opens host controls.
           if (this.app.online) view.dialog.show(); else view.dialog.showModal();
           this.animate(view, true);
         }
@@ -287,9 +289,14 @@ export class UiHost {
     const dialogs = [...document.querySelectorAll<HTMLDialogElement>("dialog[open]")];
     const lastDialog = dialogs[dialogs.length - 1];
     if (lastDialog && !lastDialog.dataset.uiScreen) return;
-    if (event.target instanceof Element && event.target.closest(".lan-bar")) return;
     if (event.isComposing || event.key === "F11" || (event.altKey && event.key === "Enter")) return;
     if (this.transitioning) { event.preventDefault(); this.finishTransition(); return; }
+    if (event.key === "Escape" && this.app.online && this.app.gs && this.app.onlineScreen !== "admin") {
+      event.preventDefault();
+      this.releaseInput();
+      this.app._act("push:system");
+      return;
+    }
     const d = this.order[this.order.length - 1];
     const gs = this.app.gs as unknown as GameState | null;
     if (this.chargeKey && gs?.plasma_charge) {
