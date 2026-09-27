@@ -179,6 +179,8 @@ try {
   await click("Done"); await click("Done"); await click("Done");
   assert.equal(await page.evaluate(() => window.onlineApp.onlineScreen), "battle");
   assert.equal(await page.locator("[data-ui-screen]").count(), 0);
+  // The first simulation frame selects the shooter; menus pause that frame.
+  await page.waitForFunction(() => window.onlineApp.gs.phase === "aim" && !!window.onlineApp.gs.current_shooter);
   await page.keyboard.press("F1"); await settled(); await shot("system");
   await click("Save Game");
   const file = page.getByRole("textbox", { name: "File:" });

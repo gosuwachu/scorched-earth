@@ -674,6 +674,13 @@ export class App {
 
   get onlineMenuOpen(): boolean { return !!this.online && this.top instanceof ingame.SystemMenuScreen; }
 
+  /** Purchasing and the inventory opened for that shopper share host controls. */
+  get shoppingScreen(): boolean {
+    const parent = this.stack[this.stack.length - 2];
+    return this.top instanceof ShopScreen || (this.top instanceof InventoryScreen &&
+      parent instanceof ShopScreen && this.top.tank === parent.tank);
+  }
+
   get onlineScreen(): "battle" | "player" | "rankings" | "finished" | "admin" {
     if (this.top instanceof GameScreen) return "battle";
     if (this.top instanceof RankingsScreen) return "rankings";
@@ -1052,9 +1059,10 @@ export class App {
             (e.key === pygame.K_RETURN && ((e.mod ?? 0) & pygame.KMOD_ALT) !== 0))
         ) {
           this._toggle_fullscreen();
-        } else if (this.online && this.onlineScreen !== "admin") {
-          // Only Escape belongs to the host; tank/shop input stays with guests.
-          if (e.type === pygame.KEYDOWN && e.key === pygame.K_ESCAPE && this.gs && !this.transitioning) this._act("push:system");
+        } else if (this.online && this.onlineScreen !== "admin" && e.type === pygame.KEYDOWN && e.key === pygame.K_ESCAPE) {
+          // Escape still opens host controls while assisting a shopper.
+          if (this.gs && !this.transitioning) this._act("push:system");
+        } else if (this.online && this.onlineScreen !== "admin" && (this.online.paused || !this.shoppingScreen)) {
           continue;
         } else if (this.ui?.transitioning) {
           if (e.type === pygame.KEYDOWN || e.type === pygame.MOUSEBUTTONDOWN) this.ui.finishTransition();

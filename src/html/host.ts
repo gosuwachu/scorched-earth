@@ -93,7 +93,7 @@ export class UiHost {
   private permitted(screen: HtmlScreen): boolean {
     if (this.app.top !== screen) return false;
     if (!this.app.online || this.app.onlineMenuOpen) return true;
-    return !this.app.online.paused && ["admin", "rankings", "finished"].includes(this.app.onlineScreen);
+    return !this.app.online.paused && (this.app.shoppingScreen || ["admin", "rankings", "finished"].includes(this.app.onlineScreen));
   }
   private act(screen: HtmlScreen, action: string | null): void {
     if (!this.permitted(screen)) return;
@@ -152,7 +152,7 @@ export class UiHost {
           for (const frame of d.screen.sim_frames) view.widgets.hide(frame, d.screen.is_computer);
         }
         if (view.dialog && !view.dialog.open) {
-          // Online player screens remain read-only; Escape opens host controls.
+          // Online dialogs leave Escape available to open host controls.
           if (this.app.online) view.dialog.show(); else view.dialog.showModal();
           this.animate(view, true);
         }

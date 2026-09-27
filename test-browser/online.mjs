@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
-import { purchaseButton, checkShopRows, checkShopLayout } from "./online_shop.mjs";
+import { purchaseButton, checkHostShopping, checkShopRows, checkShopLayout } from "./online_shop.mjs";
 import { checkNoOnlineBar, settledDialogs, openHostMenu, closeHostMenu } from "./dialogs.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -115,6 +115,7 @@ try {
   await until(() => enabled(a, "Done"), "Alice shopping");
   await checkNoOnlineBar(host);
   await openHostMenu(host);
+  assert.equal(await enabled(host, "Update"), false, "Host menu disables purchasing underneath");
   assert.equal(await host.getByRole("button", { name: "Save Game", exact: true }).count(), 0);
   assert.equal(await host.getByRole("button", { name: "End online game", exact: true }).count(), 0);
   await until(async () => (await a.locator(".lan-status").textContent()).includes("Paused by host"), "paused shopping controller");
@@ -133,6 +134,7 @@ try {
   assert.equal(await b.locator(".lan-shop-row:enabled").count(), 0, "Waiting guests cannot purchase");
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.cfg.MAXROUNDS), 2);
+  await checkHostShopping({ host, guest: a, click, enabled, until });
   mkdirSync(`${root}/test-browser/out`, { recursive: true });
   await checkShopRows(a, host);
   await checkShopLayout(a, root, "weapons");
@@ -175,17 +177,35 @@ try {
   }
   const equippedCash = await cash();
   assert.ok(equippedCash < purchasedCash);
-  await click(a, "Inventory");
+  await click(host, "Inventory");
   await a.getByRole("heading", { name: /Inventory/ }).waitFor();
+  await host.getByLabel("Weapons", { exact: true }).getByRole("button", { name: /^Missile\s/ }).click();
+  assert.equal(await host.evaluate(() => window.onlineApp.top.tank.selected_weapon), 1);
+  await until(async () => (await a.getByLabel("Weapon", { exact: true }).locator("option:checked").textContent()).startsWith("Missile ("), "host weapon selection reaches guest");
+  await host.getByLabel("Guidance", { exact: true }).getByRole("button", { name: /^Heat Guidance\s/ }).click();
+  await until(async () => (await a.getByLabel("Guidance", { exact: true }).locator("option:checked").textContent()) === "Heat Guidance", "host guidance selection reaches guest");
+  await host.getByRole("button", { name: "None", exact: true }).click();
+  await host.screenshot({ path: `${root}/test-browser/out/online-inventory-host.png` });
   await a.reload();
   await a.getByRole("heading", { name: /Inventory/ }).waitFor();
   assert.equal(await cash(), equippedCash);
-  await click(a, "Done");
+  await click(host, "Done");
   await a.getByRole("heading", { name: /Purchasing/ }).waitFor();
   mkdirSync(`${root}/test-browser/out`, { recursive: true });
   await a.screenshot({ path: `${root}/test-browser/out/online-shopping.png`, fullPage: true });
-  await click(a, "Done");
+  const staleDone = await host.evaluate(() => {
+    const session = window.onlineApp.online;
+    const player = session.room.players[0].id;
+    const state = session.adapter.states(session.room.players)[player];
+    return { type: "input", player, context: state.context, seq: 1_000_000,
+      input: { kind: "control", id: state.controls.find((control) => control.label === "Done").id } };
+  });
+  await click(host, "Done");
   await until(() => enabled(b, "Done"), "Bob shopping");
+  await host.evaluate((input) => window.onlineApp.online.pending.push(input), staleDone);
+  await host.waitForFunction(() => window.onlineApp.online.pending.length === 0);
+  assert.equal(await host.evaluate(() => window.onlineApp.top.tank.name), "Bob", "Stale guest Done cannot skip the next shopper");
+  assert.ok(await enabled(host, "Update"), "Host can assist the next shopper");
   await b.getByLabel("Category", { exact: true }).selectOption("1");
   await purchaseButton(b, "Lazy Boy").click();
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]) > 0, "Bob buys guidance");
@@ -241,6 +261,7 @@ try {
   assert.deepEqual(await ticks(), beforeMuteTicks);
   await click(a, "Tank controls");
   await a.getByRole("heading", { name: /Tank controls/ }).waitFor();
+  assert.equal(await enabled(host, "Engage"), false, "Host cannot operate combat tank controls");
   await openHostMenu(host);
   await closeHostMenu(host);
   await until(async () => await a.getByLabel("Remaining Power:").isEnabled(), "tank controls resume");
@@ -268,6 +289,9 @@ try {
   assert.equal(await a.getByLabel("Target X", { exact: true }).count(), 0);
   // Equipping guidance permits inventory, retreat and aiming before Fire.
   await click(a, "Inventory");
+  await until(async () => await host.getByLabel("Guidance", { exact: true }).count() > 0, "combat inventory on host");
+  assert.equal(await enabled(host, "Done"), false, "Combat inventory remains guest-controlled");
+  assert.equal(await host.getByLabel("Guidance", { exact: true }).locator("button:enabled").count(), 0);
   await a.getByLabel("Guidance", { exact: true }).selectOption("2");
   await click(a, "Done");
   await until(() => enabled(a, "Space / Fire"), "inventory closes");
@@ -373,7 +397,8 @@ try {
   await click(host, "Go");
   await until(() => enabled(a, "Done"), "between-round purchasing");
   await a.reload(); await until(() => enabled(a, "Done"), "rejoin purchasing");
-  await click(a, "Done"); await until(() => enabled(b, "Done"), "next shopper"); await click(b, "Done");
+  assert.ok(await enabled(host, "Update"), "Host can shop between rounds");
+  await click(host, "Done"); await until(() => enabled(b, "Done"), "next shopper"); await click(b, "Done");
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "battle");
   await host.waitForFunction(() => window.onlineApp.gs.phase === "aim");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.current_shooter.name), "Bob");
