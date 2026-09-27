@@ -9,8 +9,9 @@ painters remain available to the differential/reference harnesses.
   online dialog layout, stable keyed lists, and the `Component<T>` lifecycle
   (`element`, `update(value)`, `dispose()`). Uses text nodes, never HTML injection.
 - `theme.ts` / `theme.css`: shared palette and bevels. Add `se-ui` to a container;
-  add `ui-compact` for the original game density. Online and guest controls keep
-  the larger default density. Local screens reflow below 800px width or 600px height.
+  add `ui-compact` for the original game density, including host new-game and online
+  setup dialogs. Guest controllers keep the larger touch-friendly default density.
+  Local screens reflow below 800px width or 600px height.
 - `widgets.ts`: `PanelView` and `WidgetView` bind existing widget models to native
   controls. `WidgetActions` separates rendering from authorized action dispatch,
   value changes, and screen-specific accessible labels.

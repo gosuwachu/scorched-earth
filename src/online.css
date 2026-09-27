@@ -1,5 +1,6 @@
 .lan-lobby-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
 .lan-lobby-layout > section { min-width: 0; }
+.ui-compact .lan-lobby-layout label { margin: 8px 0; }
 .lan-qr { display: block; margin: 12px auto; width: 220px; max-width: 100%; height: auto; image-rendering: pixelated; }
 .lan-link { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .lan-link input { flex: 1 1 180px; width: 100%; }
@@ -16,6 +17,7 @@
 .lan-player-name { display: block; font-weight: bold; }
 .lan-roster small { display: block; font-size: 14px; }
 .lan-roster button { flex: none; padding: 6px; font-size: 14px; }
+.ui-compact .lan-roster button { padding: var(--ui-control-padding); font-size: inherit; }
 .lan-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; padding: 8px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .lan-host #game { --game-bottom: var(--lan-bar-height, 70px); }
 html.lan-phone, body.lan-phone { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; background: var(--ui-bg); }

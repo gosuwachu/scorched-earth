@@ -38,7 +38,7 @@ export class HostSession {
   constructor(private app: App, urls: string[]) {
     this.localConfig = app.cfg;
     this.origin = joinOrigin(location.href, urls);
-    this.box = dialog("Online lobby", { wide: true, cancel: () => app._act("to_menu") });
+    this.box = dialog("Online lobby", { wide: true, className: "ui-compact", cancel: () => app._act("to_menu") });
     this.box.body.append(el("p", "Creating room…"));
     this.bar.append(this.status);
     const share = button("Join link", () => { this.shareOpen = true; this.renderLobby(); });
@@ -145,7 +145,7 @@ export class HostSession {
       else this.app._act("to_menu");
     };
     if (!this.box.element.isConnected) {
-      this.box = dialog(this.room.started ? "Join / reconnect" : "Online lobby", { wide: true, cancel: close });
+      this.box = dialog(this.room.started ? "Join / reconnect" : "Online lobby", { wide: true, className: "ui-compact", cancel: close });
       this.roster = undefined;
     }
     // Presence updates only touch the roster and button availability. Preserve
@@ -258,7 +258,7 @@ function gameDialogShortcuts(box: OnlineDialog, actions: Record<string, HTMLButt
 
 function showLocalGame(app: App, returnFocus: HTMLElement | null): void {
   const cancel = () => { box.close(); returnFocus?.focus(); };
-  const box = dialog("Local game", { cancel });
+  const box = dialog("Local game", { className: "ui-compact", cancel });
   const players = el("fieldset", "", "ui-player-count");
   const choices = el("div", "", "ui-player-choices");
   const inputs = Array.from({ length: 9 }, (_, i) => {
@@ -287,7 +287,7 @@ export function installOnline(app: App): void {
     let pending = false;
     const returnFocus = document.querySelector<HTMLElement>('[data-ui-action="start_game"]');
     const cancel = () => { if (!pending) { box.close(); returnFocus?.focus(); } };
-    const box = dialog("New game", { cancel });
+    const box = dialog("New game", { className: "ui-compact", cancel });
     const rounds = gameNumberInput(app.cfg.MAXROUNDS, 1, 1000, (value) => { app.cfg.MAXROUNDS = value; });
     box.body.append(field("Rounds", rounds), el("p", "Choose how to play."));
     const local = button("Local", () => {

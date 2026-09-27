@@ -49,7 +49,7 @@ export async function checkPlayerGrid(page) {
   }));
   for (let i = 0; i < cells.length; i++) {
     const cell = cells[i];
-    assert.ok(cell.height >= 44, "Player cells provide large click targets");
+    assert.ok(cell.height >= 22 && cell.height < 44, "Host player cells use compact game-menu sizing");
     assert.ok(Math.abs(cell.width - cells[0].width) < 1);
     assert.ok(Math.abs(cell.x - cells[i % 3].x) < 1, "Three aligned columns");
     assert.ok(Math.abs(cell.y - cells[Math.floor(i / 3) * 3].y) < 1, "Counts increase across rows");
