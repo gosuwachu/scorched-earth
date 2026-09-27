@@ -55,6 +55,15 @@ swept contact handling use the original tier geometry and DAC arithmetic; see
 the shield audits below. Laser recharge, terrain burial and delayed damage use
 the corrected weapon paths.
 
+In simultaneous play, completed terrain-changing effects request a brief settling
+pause even while other shells remain airborne. The browser holds projectile and
+effect updates, AI firing timers, and new launches until soil and parachutes finish;
+aiming remains available. Fall-triggered death sequences can then advance with
+unrelated shells still airborne. This is a browser scheduling correction, not a
+measurement of DOS simultaneous timing. Resting geometry continues to use the
+retained DOS fixtures; the weapon browser gate captures the pause and resumption
+in `test-browser/out/weapons/simultaneous-*.png` and `simultaneous.json`.
+
 ## Gameplay feedback audit
 
 - Liquid Dirt fills holes and smooths terrain; Earth Disrupter forces suspended

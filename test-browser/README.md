@@ -56,6 +56,12 @@ frames around the interaction and the numeric outcomes, not just a final image.
 Runs reuse output paths, so preserve any needed before/after captures separately
 and use the latest summary to identify the scenarios that actually ran.
 
+The weapon driver also writes `weapons/simultaneous.json` and
+`weapons/simultaneous-*.png`: an underground explosion collapses while another
+shot stays airborne, with unchanged shot coordinates during the fall and resumed
+flight afterward. The assertions check animated falling, conserved soil, and
+complete settling without requiring an empty battlefield.
+
 After the relevant checks pass, run `npm test` and `npm run build` for code
 changes. Broaden or repeat verification only when another affected subsystem,
 new edit or failure warrants it.

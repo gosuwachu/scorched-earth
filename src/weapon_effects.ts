@@ -80,6 +80,12 @@ export function stepWeaponEffect(state: BState, proj: BProjectile): void {
       effect.charges = effect.charges.filter((c) => c.age < 6);
       proj.active = effect.tunnels.length > 0 || effect.charges.length > 0;
     } else stepCombatEffect(state, proj, effect);
+    // Notify at cleanup, not impact or each terrain write. Funky's terminal
+    // blast supplies its own notification; Plasma never changes the ground.
+    // Death effects and Earth Disrupter already request (forced) settling.
+    if (!proj.active && effect.kind !== "funky" && effect.kind !== "death" &&
+        !(effect.kind === "blast" && effect.plasma) &&
+        !(effect.kind === "soil" && effect.mode === "disrupt")) state.request_terrain_settle?.();
   } finally {
     state.current_shooter = shooter;
     state.current_weapon = weapon;

@@ -612,6 +612,11 @@ export class Terrain {
   private fallingSoil: Array<{ x: number; from: number; to: number; color: number; y: number }> | null = null;
   private soilTravel = 0;
 
+  cancel_settle(): void {
+    this.fallingSoil = null;
+    this.soilTravel = 0;
+  }
+
   /** Snapshot stable destinations once; retain shade order and solid supports.
    * Displaying the descent separately keeps gravity independent of rendering. */
   begin_settle(cfg: TerrainCfg, rng: TerrainRng, force = false, cavern = false): void {

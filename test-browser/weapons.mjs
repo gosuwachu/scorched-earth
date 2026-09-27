@@ -42,6 +42,33 @@ try {
     tunneling.push({ kind, ...meta });
   }
   writeFileSync(`${out}/tunneling.json`, JSON.stringify(tunneling, null, 2));
+  await page.evaluate(() => window.startSimultaneousSettleDemo());
+  await page.locator("#game").screenshot({ path: `${out}/simultaneous-before.png` });
+  let sim;
+  for (let frame = 0; frame < 400; frame++) {
+    sim = await page.evaluate(() => window.advanceSimultaneousSettleDemo(1));
+    if (sim.settling) break;
+  }
+  assert.ok(sim.settling && sim.airborne && !sim.blast, "completed explosion did not settle with another shot airborne");
+  assert.ok(sim.unsupported > 0);
+  const falling = sim;
+  const firstFall = await page.locator("#game").screenshot({ path: `${out}/simultaneous-falling.png` });
+  sim = await page.evaluate(() => window.advanceSimultaneousSettleDemo(4));
+  const nextFall = await page.locator("#game").screenshot({ path: `${out}/simultaneous-falling-later.png` });
+  assert.ok(!firstFall.equals(nextFall), "terrain fall was not animated");
+  assert.deepEqual(sim.flight, falling.flight);
+  for (let frame = 0; frame < 300 && sim.settling; frame++) {
+    sim = await page.evaluate(() => window.advanceSimultaneousSettleDemo(1));
+    assert.deepEqual(sim.flight, falling.flight, "in-flight shot advanced during collapse");
+    assert.equal(sim.dirt, falling.dirt, "collapse changed soil quantity");
+  }
+  assert.equal(sim.settling, false);
+  assert.equal(sim.unsupported, 0);
+  assert.equal(sim.phase, "sim_live");
+  await page.locator("#game").screenshot({ path: `${out}/simultaneous-settled.png` });
+  const resumed = await page.evaluate(() => window.advanceSimultaneousSettleDemo(1));
+  assert.ok(resumed.airborne && resumed.flight[0] > sim.flight[0], "paused shot did not resume");
+  writeFileSync(`${out}/simultaneous.json`, JSON.stringify({ falling, settled: sim, resumed }, null, 2));
   // Verify successive real canvas frames, not just the final flame shape.
   for (const idx of [8, 9]) {
     await page.evaluate((i) => window.startWeaponDemo(i), idx);

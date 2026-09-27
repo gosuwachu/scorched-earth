@@ -430,6 +430,7 @@ export interface SaveGameState {
   beams?: unknown[];
   shield_fades?: Record<number, unknown>;
   awaiting_human?: boolean;
+  reset_terrain_settle?: () => void;
 }
 
 // The plain serialized dict shape (what load() returns / serialize() builds).
@@ -1005,6 +1006,7 @@ export function apply(data: SaveData, state: SaveGameState): SaveGameState {
 
   applyEconomy(state.economy, data.economy);
   state.terrain.grid = gridFromDict(data.terrain);
+  state.reset_terrain_settle?.();
 
   state.round_index = data.round_index;
   state.phase = data.phase;

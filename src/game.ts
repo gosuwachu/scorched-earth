@@ -254,6 +254,8 @@ export class GameState {
   private soilMoving = false;
   private soilDirty = true;
   private forceSoil = false;
+  private simSettlePending = false;
+  private simSettling = false;
   _settle_done = false;
   _sync_locks: { [playerIndex: number]: [number, number, number] } = {};
   _sync_queue: number[] = [];
@@ -453,7 +455,7 @@ export class GameState {
     this._place_tanks();
     this._reset_round_tanks();
     this._build_firing_order();
-    this.soilDirty = false; this.soilMoving = false; this.forceSoil = false;
+    this.reset_terrain_settle();
     this.plasma_charge = null; this.plasmaChoices.clear();
     this.sim_charges.clear(); this.simAim.clear();
     this.projectiles.length = 0;
@@ -835,7 +837,7 @@ export class GameState {
 
   confirm_plasma_charge(): void {
     const charge = this.plasma_charge;
-    if (!charge) return;
+    if (!charge || this.sim_settling) return;
     this.plasmaChoices.set(charge.tank, charge.value);
     this.plasma_charge = null;
     this.fire();
@@ -847,6 +849,7 @@ export class GameState {
   fire(shooter: Tank | null = null): Projectile[] {
     // Launch `shooter`'s selected weapon (FUN_2a4a_02f2 entry).  Defaults to
     // current_shooter so every SEQUENTIAL caller is unchanged; SYNC/SIM pass a tank.
+    if (this.sim_settling) return [];
     const t = shooter !== null ? shooter : this.current_shooter;
     if (t === null) {
       return [];
@@ -1330,15 +1333,20 @@ export class GameState {
   _sim_update(dt: number): void {
     // SIMULTANEOUS frame: step every in-flight shell, animate, settle landed
     // shells, then let each tank act on its own clock.
+    // Collapse snapshots must not race terrain writes from other shots/effects.
+    // A completed effect gets its settling beat even with other shells airborne.
+    if (this.sim_settling) {
+      this._sim_step_settle(dt);
+      return;
+    }
     for (let i = 0; i < SHOT_STEPS_PER_FRAME; i++) {
       this._step_flight();
     }
     this._animate_effects();
-    // Settle only when no shell is mid-flight so tanks are not yanked mid-salvo.
-    if (this.projectiles.length === 0 && this.death_queue.length === 0 && this.explosions.length === 0) {
-      if (!this._advance_settle()) return;
-      this._step_chute_anims(dt);
-      if (this.tanks.some((t) => (t as Tank & { chute_descent?: unknown }).chute_descent)) return;
+    if (this.simSettlePending ||
+        (this.soilDirty && this.projectiles.length === 0 && !this._sim_effects_pending())) {
+      this._sim_step_settle(dt);
+      return;
     }
     // SIMULTANEOUS battery auto-trigger (catalog 02 s.D, DOC L2254).
     for (const t of this.tanks) {
@@ -1346,7 +1354,7 @@ export class GameState {
     }
     // A pending staged death still owes its grave blast (damage!): the round
     // cannot end until the queue drains, or the blast would never land.
-    if (!this.projectiles.some((p) => p.weaponEffect) && this.death_queue.length === 0 && this._win_check()) {
+    if (!this._sim_effects_pending() && this._win_check()) {
       this._end_round();
       return;
     }
@@ -1381,6 +1389,29 @@ export class GameState {
       rec.timer = SIM_AI_RECOCK_DELAY;
     }
     this.current_shooter = this._sim_human; // HUD shows the local human
+  }
+
+  /** Internal pause shared by local and remote launch paths; aiming stays live. */
+  get sim_settling(): boolean {
+    return this.phase === SIM_LIVE && (this.simSettlePending || this.simSettling);
+  }
+
+  private _sim_effects_pending(): boolean {
+    return this.projectiles.some((p) => p.weaponEffect) || this.death_queue.length > 0 ||
+      this.explosions.length > 0 || this.beams.length > 0 || this.plasma_rings.length > 0 ||
+      this.death_fountains.length > 0 || this.throe_fx.length > 0;
+  }
+
+  private _sim_step_settle(dt: number): void {
+    this.simSettling = true;
+    this.simSettlePending = false;
+    // A fall may queue a death. Finish soil/chutes first, then resume its effects
+    // in _animate_effects; waiting for the frozen death queue would deadlock.
+    this._advance_settle();
+    if (this.soilMoving || this.soilDirty) return;
+    this._step_chute_anims(dt);
+    if (this.tanks.some((t) => (t as Tank & { chute_descent?: unknown }).chute_descent)) return;
+    this.simSettling = false;
   }
 
   _sim_human_fire(tank: Tank): boolean {
@@ -1440,7 +1471,7 @@ export class GameState {
   }
 
   sim_fire(tank: Tank): void {
-    if (!this.sim_can_control(tank) || this._sim_in_flight(tank) || this.sim_charges.has(tank)) return;
+    if (this.sim_settling || !this.sim_can_control(tank) || this._sim_in_flight(tank) || this.sim_charges.has(tank)) return;
     if (tank.selected_weapon === 31 && tank.has_ammo(31) && tank.batteries > 0) {
       this.simAim.delete(tank);
       this.sim_charges.set(tank, { value: 0, max: Math.min(10, tank.batteries) });
@@ -1455,6 +1486,7 @@ export class GameState {
   }
 
   sim_confirm_plasma_charge(tank: Tank): void {
+    if (this.sim_settling) return;
     const charge = this.sim_charges.get(tank);
     this.sim_charges.delete(tank);
     if (!charge || !this.sim_can_control(tank) || this._sim_in_flight(tank) ||
@@ -2016,18 +2048,30 @@ export class GameState {
     else startDeathFlames(this as unknown as wb.BState, shot as unknown as wb.BProjectile, x, y);
   }
 
-  request_terrain_settle(force = false): void { this.soilDirty = true; this.forceSoil ||= force; }
+  request_terrain_settle(force = false): void {
+    this.soilDirty = true;
+    this.forceSoil ||= force;
+    if (this.phase === SIM_LIVE) this.simSettlePending = true;
+  }
+
+  reset_terrain_settle(): void {
+    this.soilDirty = false; this.soilMoving = false; this.forceSoil = false;
+    this.simSettlePending = false; this.simSettling = false;
+    this._settle_done = false;
+    this.terrain.cancel_settle();
+    for (const t of this.tanks) (t as Tank & { chute_descent?: unknown }).chute_descent = null;
+  }
 
   _advance_settle(): boolean {
     if (!this.soilDirty && !this.soilMoving) return true;
     if (!this.soilMoving) {
       this.terrain.begin_settle(this.cfg, this.rng, this.forceSoil, this.live_sky === "CAVERN");
       this.forceSoil = false;
+      this.soilDirty = false;
       this.soilMoving = true;
     }
     if (!this.terrain.step_settle()) return false;
     this.soilMoving = false;
-    this.soilDirty = false;
     for (const t of this.tanks) if (t.alive) this._settle_tank(t);
     return this.death_queue.length === 0;
   }
@@ -2398,10 +2442,12 @@ export class GameState {
     this._step_death_fountains(); // rising tank-death debris (emit first)
     for (const e of this.explosions) {
       this._step_explosion(e);
+      if ((e.phase as number) >= 3) this.request_terrain_settle();
     }
     this.explosions = this.explosions.filter((e) => (e.phase as number) < 3);
     for (const b of this.beams) {
       b.frame += 1;
+      if (b.frame > 8) this.request_terrain_settle();
     }
     this.beams = this.beams.filter((b) => b.frame <= 8);
     this._step_plasma_rings(); // plasma grow->shrink ring sweep
@@ -2416,7 +2462,7 @@ export class GameState {
     // processing time -- the binary's sweep order (FUN_2a4a_23f8 ->
     // FUN_271b_0005 offsets 006d/009a), not at the health-zero instant.
     const snd = this.cfg.is_on("SOUND");
-    for (const [sig, payload] of death.step_queue(this as unknown as death.DState)) {
+    for (const [sig, payload] of death.step_queue(this as unknown as death.DState, this.phase === SIM_LIVE)) {
       if (sig === "award") {
         scoring.award_kill(
           this as unknown as scoring.State,

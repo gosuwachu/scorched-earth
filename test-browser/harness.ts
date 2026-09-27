@@ -56,6 +56,7 @@ import * as damage from "../src/damage";
 import * as wb from "../src/weapon_behaviors";
 import { Projectile } from "../src/objects";
 import { ITEMS } from "../src/weapons";
+import { startBlast } from "../src/combat_effects";
 import * as C from "../src/constants";
 import * as sprites from "../src/sprites";
 import * as pygame from "../src/pygame";
@@ -869,6 +870,32 @@ for (const [name, idx, frames] of [
   STATES[name] = () => { startWeaponDemo(idx); return advanceWeaponDemo(frames); };
 }
 Object.assign(window, { startWeaponDemo, advanceWeaponDemo, weaponDemoTerrainStats });
+
+// Browser scheduling check: retain a moving shell throughout an underground
+// explosion and its animated collapse, without relying on a globally idle frame.
+let simultaneousSettleDemo: { airborne: Projectile; blast: Projectile };
+function startSimultaneousSettleDemo(): StateMeta {
+  const gs = buildState(42, { PLAY_MODE: "SIMULTANEOUS", SKY: "PLAIN", FALLING_TANKS: "OFF",
+    MTN_PERCENT: 0, SUSPEND_DIRT: 0, GRAVITY: 0 });
+  gs.terrain.grid.fill(C.COL_SKY);
+  const surface = Math.round(H * 0.55);
+  for (let x = 0; x < W; x++) for (let y = surface; y < H; y++) gs.terrain.write(x, y, C.DIRT_SHADE_LO + y % 12);
+  gs.tanks.forEach((t, i) => { t.x = i ? W - 100 : 100; t.y = surface - 1; });
+  const airborne = new Projectile(gs.tanks[1], ITEMS[0], 200, surface - 100, 80, 0);
+  gs.projectiles.push(airborne);
+  const shot = new Projectile(gs.tanks[0], ITEMS[0], W / 2, surface + 55, 0, 0);
+  startBlast(gs as unknown as wb.BState, shot as unknown as wb.BProjectile, shot.px, shot.py, 45);
+  simultaneousSettleDemo = { airborne, blast: gs.projectiles[gs.projectiles.length - 1] };
+  weaponDemo = { gs, renderer: freshRenderer(gs), surf: newSurf(), frame: 0 };
+  return advanceSimultaneousSettleDemo(0);
+}
+function advanceSimultaneousSettleDemo(frames: number): StateMeta {
+  const meta = advanceWeaponDemo(frames);
+  const { airborne, blast } = simultaneousSettleDemo;
+  return { ...meta, ...weaponDemoTerrainStats(), settling: weaponDemo.gs.sim_settling,
+    flight: [airborne.px, airborne.py, airborne.vx, airborne.vy], airborne: airborne.active, blast: blast.active };
+}
+Object.assign(window, { startSimultaneousSettleDemo, advanceSimultaneousSettleDemo });
 
 // Ordinary projectile penetration, distinct from Digger/Sandhog effects. Freeze
 // at individual physics steps so the narrow cleared trail is visible pre-blast.

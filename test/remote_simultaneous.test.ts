@@ -37,6 +37,25 @@ function setup() {
 }
 
 describe("independent simultaneous controllers", () => {
+  it("rejects fire during terrain settling without changing the controller context or spending ammunition", () => {
+    const { gs, key, states, adapter } = setup();
+    const t = gs.tanks[0];
+    t.selected_weapon = 1;
+    const context = states().Alice.context;
+    gs.request_terrain_settle();
+    key("Alice", "Space");
+    expect(t.inventory[1]).toBe(3);
+    expect(gs.projectiles).toHaveLength(0);
+    expect(states().Alice.context).toBe(context);
+    key("Alice", "ArrowLeft"); adapter.updateSimultaneous(0.1, 100);
+    expect(t.angle).toBeGreaterThan(90);
+    for (let i = 0; i < 500 && gs.sim_settling; i++) gs.update(1 / 60);
+    expect(gs.sim_settling).toBe(false);
+    expect(gs.projectiles).toHaveLength(0);
+    key("Alice", "Space", false); key("Alice", "Space");
+    expect(t.inventory[1]).toBe(2);
+    expect(gs.projectiles).toHaveLength(1);
+  });
   it("enables both humans without key bindings and scopes identical buttons to their tanks", () => {
     const { gs, states, key, adapter, app } = setup();
     expect(gs.phase).toBe(SIM_LIVE);

@@ -312,9 +312,10 @@ export function _roll_throe(state: DState): number {
  *
  * ONE entry plays at a time (binary: blocking, nested).  A live projectile
  * (the killing shot still in flight when a settle-path kill enqueued) blocks
- * the queue -- the binary resolves flights before the sweep continues.
+ * the queue by default. The browser's simultaneous loop waits for effect
+ * cleanup, allowing unrelated airborne shells to continue alongside the queue.
  */
-export function step_queue(state: DState): DeathSignal[] {
+export function step_queue(state: DState, simultaneous = false): DeathSignal[] {
   const signals: DeathSignal[] = [];
   const q = state.death_queue;
   if (q === undefined || q.length === 0) {
@@ -323,8 +324,10 @@ export function step_queue(state: DState): DeathSignal[] {
   let guard = 0;
   while (q.length > 0 && guard < 64) {
     guard += 1;
-    if (state.projectiles !== undefined && state.projectiles.length > 0) {
-      break; // a flight owns the screen first
+    if (state.projectiles?.some((p) => !simultaneous || (p as { weaponEffect?: unknown }).weaponEffect)) {
+      // Real-time play can always have another shell airborne. Still wait for
+      // effect cleanup, including the preceding blast in a death's own ladder.
+      break;
     }
     const e = q[0];
     const previousShooter = state.current_shooter, previousWeapon = state.current_weapon;
