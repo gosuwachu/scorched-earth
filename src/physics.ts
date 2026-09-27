@@ -70,6 +70,7 @@ export interface PhysicsCfg {
   viscosity_mult: number;
   EDGES_EXTEND: number;
   // wall sub-mode: cfg.live_elastic preferred, else cfg.elastic.
+  play_mode?: number;
   live_elastic?: number;
   elastic?: number;
 }
@@ -94,11 +95,11 @@ export function launch(
   }
   // Ballistic guidance acts at LAUNCH: keep the angle, solve the POWER for the
   // chosen target (DOC L1300). Only when the caller did not already supply an
-  // explicit power. The in-launch solve is drag/wind-free (launch has no world
-  // dims); the game hook supplies the wind-corrected refinement.
+  // explicit power. The DOS-derived solve includes wind but ignores drag.
   if (
     power === null &&
     (tank as { selected_guidance?: unknown }).selected_guidance === 34 &&
+    tank.inventory[34] > 0 && cfg.play_mode !== C.PLAYMODE_SIMULTANEOUS &&
     !guidance._IGNORES_GUIDANCE.has(weapon.behavior)
   ) {
     const solved = guidance.solve_ballistic_power_launch(cfg, tank, weapon);
@@ -131,8 +132,7 @@ export function launch(
  * from the previous step (explicit Euler), then drag, then gravity/wind update
  * velocity for the next step.
  *
- * `tanks` (optional) is the live tank list forwarded to the guidance predicate
- * so Heat can scan for the nearest enemy in range.
+ * Heat acquisition runs at swept pixels in the game's collision walker.
  */
 export function step(
   proj: Projectile,
@@ -146,7 +146,7 @@ export function step(
   // Step 0: guidance predicate (+0x4c). FUN_2a4a_0b1f.c:40-46 fires it BEFORE
   // the clamp/move; it steers vx/vy in place and returns nonzero to stay live.
   if (proj.guidance !== null && proj.guidance !== undefined) {
-    guidance.apply(proj, cfg, tanks);
+    if (!guidance.apply(proj, cfg, tanks, dt)) return;
   }
 
   // Step A: velocity-magnitude clamp. FUN_2a4a_0b1f.c:44-55.

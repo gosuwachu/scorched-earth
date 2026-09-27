@@ -36,6 +36,8 @@
 import * as C from "./constants";
 import { magneticLift, shieldContains, startShieldFade, SHIELD_FADE_SAMPLES, type ShieldFade } from "./shields";
 import * as physics from "./physics";
+import * as guidance from "./guidance";
+import * as targeting from "./targeting";
 import * as wb from "./weapon_behaviors";
 import { startBlast, startSoil, startDeathFlames } from "./combat_effects";
 import { startDeathEffect } from "./death_effects";
@@ -215,6 +217,7 @@ export class GameState {
   explosion_scale: number;
   mtn_ranges: unknown[];
   awaiting_human: boolean;
+  pendingTarget: targeting.TargetRequest | null = null;
   active_bolts: unknown[]; // hostile-sky lightning (hazard)
   trace_marks: Array<[number, number, number]>;
   plasma_rings: Array<{ [k: string]: number }>;
@@ -432,6 +435,7 @@ export class GameState {
 
   // -------------------------------------------------------------- round loop
   start_round(): void {
+    this.pendingTarget = null;
     // Round loop body head (FUN_33a1_05ee): terrain + placement + order.
     this.cfg.live_elastic = this._roll_elastic();
     this._setup_wind();
@@ -582,6 +586,7 @@ export class GameState {
       t.angle = t.x < this.w / 2 ? 45 : 135;
       t.power = 500;
       t.selected_guidance = null;
+      t.guidance_target = null; t.guidance_target_pt = null;
       t.selected_weapon = 0; // FUN_3a16_0320.c:29 round init resets to slot 0
       // auto-activate the best owned shield (defenses are pre-armed)
       this._arm_defenses(t);
@@ -843,6 +848,7 @@ export class GameState {
       return [];
     }
     if (this.plasma_charge) return [];
+    if (shooter === null && targeting.begin(this)) return [];
     if (t.ai_class === C.AI_HUMAN && t.selected_weapon === 31 && t.has_ammo(31) && t.batteries > 0 &&
         !this.plasmaChoices.has(t) && (this.phase === AIM || this.phase === SIM_LIVE)) {
       this.plasma_charge = { tank: t, value: 0, max: Math.min(10, t.batteries) };
@@ -875,6 +881,19 @@ export class GameState {
       slot = weapons.SLOT_BABY_MISSILE;
       weapon = weapons.ITEMS[slot];
     }
+    const guidanceSlot = targeting.usable(t, slot, this.cfg.play_mode);
+    // Snapshot/attach before consuming: a multi-turret salvo uses one accessory.
+    t.selected_guidance = guidanceSlot;
+    if (guidanceSlot === 34) {
+      const solved = guidance.solve_ballistic_power_launch(this.cfg, t, weapon);
+      if (solved !== null) t.power = solved;
+    }
+    const finish = (): void => {
+      if (guidanceSlot !== null) t.consume(guidanceSlot);
+      t.selected_guidance = null;
+      t.guidance_target = null; t.guidance_target_pt = null;
+      this._enter_firing();
+    };
     t.consume(slot);
     // Auto-switch off a depleted weapon (FUN_38b5_145b.c:16-20): fall the selection
     // back to Baby Missile (slot 0), not the next owned weapon.
@@ -911,7 +930,7 @@ export class GameState {
       // does NOT consume batteries.  The 0x28/px beam bleed gives range ~ energy/40.
       proj.state["energy"] = Math.max(200, t.power) * 10;
       wb.fire_laser(this as unknown as wb.BState, proj as unknown as wb.BProjectile);
-      this._enter_firing();
+      finish();
       return [proj];
     }
     if (beh === "plasma") {
@@ -922,14 +941,14 @@ export class GameState {
       t.inventory[weapons.SLOT_BATTERY] -= charge;
       proj.state.plasmaCharge = charge;
       wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, t.x, t.y);
-      this._enter_firing();
+      finish();
       return [proj];
     }
 
     if (beh === "riot_wedge") {
       const proj = physics.launch(t, this.cfg as unknown as physics.PhysicsCfg, weapon);
       wb.detonate(this as unknown as wb.BState, proj as unknown as wb.BProjectile, t.x, t.y);
-      this._enter_firing();
+      finish();
       return [proj];
     }
 
@@ -961,7 +980,7 @@ export class GameState {
     if (spawned.length > 0) {
       sfx.start_fly(this.cfg.FLY_SOUND, this.cfg.is_on("SOUND"));
     }
-    this._enter_firing();
+    finish();
     return spawned;
   }
 
@@ -1456,6 +1475,11 @@ export class GameState {
         continue;
       }
 
+      const g = proj.guidance as guidance.Guidance | null;
+      if (g?.type === "lazyboy" && g.point) {
+        this._step_lazy(proj, g);
+        continue;
+      }
       const prev_vy = proj.vy;
       physics.step(
         proj,
@@ -1463,6 +1487,10 @@ export class GameState {
         undefined,
         this.tanks,
       ); // guidance steering hook
+      if (g?.arrival) {
+        this._resolve_hit(proj, { 0: "guided", 1: null, 2: proj.sx, 3: proj.sy });
+        continue;
+      }
       sfx.fly_tone(this.cfg.FLY_SOUND, proj, this.cfg.is_on("SOUND"));
       const _bc = proj.bounce_count ?? 0;
       if (
@@ -1486,6 +1514,10 @@ export class GameState {
       this._collect_trace(proj); // TRACE-gated persistent path
       if (hit && !force) {
         this._resolve_hit(proj, hit);
+        continue;
+      }
+      if (g?.arrival && proj.active) {
+        this._resolve_hit(proj, { 0: "guided", 1: null, 2: proj.sx, 3: proj.sy });
         continue;
       }
       // MIRV/Death's Head split at apogee (vy crosses + -> <=0)
@@ -1513,6 +1545,33 @@ export class GameState {
       }
     }
     this.projectiles = this.projectiles.filter((p) => p.active);
+  }
+
+  private _step_lazy(proj: Projectile, g: guidance.Guidance): void {
+    // 2e50:00cf moves independently of the ballistic integrator. Fractional
+    // work is carried across our fixed substeps instead of rounding each up.
+    g.travel = (g.travel ?? 0) + guidance.LAZY_SPEED * C.PHYSICS_DT;
+    while (g.travel >= 1 && proj.active) {
+      g.travel -= 1;
+      const point = guidance.lazyStep(proj, this);
+      if (point) {
+        const [x, y] = point;
+        if (x < 0 || x >= this.w || y < 0 || y >= this.h - 1) {
+          this._resolve_off_field(proj); break;
+        }
+        const tank = this.tanks.find((t) => t.alive && Math.abs(t.x - x) <= t.half_width && y <= t.y && y >= t.y - 10);
+        if (tank) { this._resolve_hit(proj, { 0: "tank", 1: tank, 2: x, 3: y }); break; }
+        if (this.terrain.is_dirt(x, y)) {
+          this.terrain.write(x, y, C.COL_SKY);
+          this.soilDirty = true;
+        }
+        this._collect_trace(proj);
+      }
+      if (g.arrival) {
+        this._resolve_hit(proj, { 0: "guided", 1: null, 2: proj.sx, 3: proj.sy });
+        break;
+      }
+    }
   }
 
   _resolve_off_field(proj: Projectile): void {
@@ -1686,6 +1745,7 @@ export class GameState {
       if (0 <= x && x < this.w && 0 <= y && y < this.h && this.terrain.is_dirt(x, y)) {
         return { 0: "terrain", 1: null, 2: x, 3: y };
       }
+      if (guidance.visit(proj, this, x, y)) return null;
     }
     return null;
   }

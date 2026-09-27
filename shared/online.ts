@@ -28,6 +28,7 @@ export interface Control {
 }
 
 export interface ControllerView {
+  targeting?: boolean;
   context: number;
   enabled: boolean;
   screen: string;

@@ -1499,7 +1499,7 @@ export class Renderer {
         this._draw_weapon_readout(surf, t, state);
       }
     }
-    if (_inChooseTarget(state)) {
+    if (!this.htmlDialogs && _inChooseTarget(state)) {
       const ct = "Choose Target";
       const ctw = this.font.size(ct)[0];
       this._text(surf, ct, Math.floor(this.w / 2) - Math.floor(ctw / 2), Renderer.BAR_H + 6, [255, 255, 120]);

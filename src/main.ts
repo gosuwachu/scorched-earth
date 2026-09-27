@@ -68,7 +68,7 @@ import * as C from "./constants";
 import * as _pal from "./palette";
 import { sfx } from "./sound";
 import { Config } from "./config";
-import { Renderer } from "./render";
+import { Renderer, setChooseTargetPredicate } from "./render";
 import { Screen } from "./screen";
 import type { ScreenEvent } from "./screen";
 import {
@@ -1169,6 +1169,10 @@ class GameScreen extends Screen {
 
   override handle(event: ScreenEvent): string | null {
     const gs = this.gs;
+    if ((gs as unknown as import("./game").GameState).pendingTarget) {
+      ingame.handle_game_event(gs as never, event as never);
+      return null;
+    }
     if (handleCharge(gs as unknown as ChargeState, event)) return null;
     if (event.type === pygame.KEYDOWN && (event.key === pygame.K_F1 || event.key === pygame.K_ESCAPE)) {
       return "push:system";
@@ -1201,7 +1205,7 @@ class GameScreen extends Screen {
         _keyGetPressed(),
         dt,
       );
-    } else if (this._is_human_turn()) {
+    } else if (this._is_human_turn() && !(gs as unknown as import("./game").GameState).pendingTarget) {
       if (this.app.online) ui.HumanController.update_continuous(gs as never, this.app.online.keys, dt);
       else ingame.update_game_input(gs as never, dt, _keyGetPressed() as never);
     }
@@ -1657,10 +1661,8 @@ export async function boot(): Promise<App> {
   } else {
     diag.log.warning("assets: no sprites bundle wired; sprite cells render empty (chrome only)");
   }
-  // Choose Target gate: render.ts reads ingame._in_choose_target via a predicate.
-  // _in_choose_target is module-private in ingame.ts (only the higher-level
-  // weapon_needs_target/in_target_mode are exported), so the integrator wires the
-  // render predicate from the engine; left at its default here.
+  // Legacy canvas rendering and production HTML read the same pending request.
+  setChooseTargetPredicate((state) => !!(state as unknown as import("./game").GameState).pendingTarget);
 
   // 6. input.
   const pageCanvas = document.getElementById("game") as HTMLCanvasElement;

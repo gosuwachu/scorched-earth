@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { checkOptionHelp } from "./option_help.mjs";
+import { checkGuidance } from "./guidance_ui.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.UI_TEST_URL || "http://127.0.0.1:4320";
 let server, browser;
@@ -249,6 +250,7 @@ try {
     const t = window.onlineApp.gs.current_shooter;
     return [t.shield_push, t.shield_deflect, t.shield_laserproof, t.shield_failproof];
   }), [false, false, false, false]);
+  await checkGuidance(page, { shot });
   // Sell, reassign and team dialogs use the same HTML adapter and real mutations.
   await page.evaluate(async () => { const app = window.onlineApp; const s = await import("/src/screens.ts"); const w = await import("/src/weapons.ts"); app.push(new s.SellScreen(app.gs, app.gs.current_shooter, w.SLOT_BATTERY, app.w, app.h)); });
   await settled(); const sellCash = await page.evaluate(() => window.onlineApp.gs.current_shooter.cash);

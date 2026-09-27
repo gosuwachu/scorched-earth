@@ -973,6 +973,7 @@ export function load(bytes: Uint8Array, name = ""): SaveData {
  * rebuild branch reconstructs the player array from the saved names/classes);
  * a mismatch is reported rather than silently mis-restored. Returns the host. */
 export function apply(data: SaveData, state: SaveGameState): SaveGameState {
+  (state as SaveGameState & { pendingTarget?: unknown }).pendingTarget = null;
   const w = Math.trunc(data.w);
   const h = Math.trunc(data.h);
   const tankDicts = data.tanks;

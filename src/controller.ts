@@ -51,7 +51,7 @@ export function startController(roomId: string): void {
     for (const b of heldButtons.values()) b.dataset.held = "false";
   };
   const key = (code: string, down: boolean): void => {
-    if (!allowed() || (down && held.has(code))) return;
+    if (!allowed() || (view?.targeting && code !== "Escape" && !code.startsWith("Digit")) || (down && held.has(code))) return;
     if (down) held.add(code); else held.delete(code);
     send({ kind: "key", key: code, down });
     const b = heldButtons.get(code);
@@ -62,11 +62,15 @@ export function startController(roomId: string): void {
     if (ended) return;
     status.textContent = !connection.connected ? "Connection lost. Reconnecting…" : !room?.hostConnected ?
       "Host unavailable. Waiting for the original host page to reconnect…" : view?.message ?? "Choose your tank and get ready.";
-    for (const b of heldButtons.values()) b.disabled = !allowed();
+    for (const [code, b] of heldButtons) b.disabled = !allowed() || (!!view?.targeting && code !== "Escape");
+    const invalidTarget = ["target-0", "target-1"].some((id) => {
+      const field = controlNodes.get(id)?.field;
+      return field instanceof HTMLInputElement && (!field.value || !field.validity.valid);
+    });
     for (const [id, record] of controlNodes) {
       const c = view?.controls.find((c) => c.id === id);
       if (record.field) record.field.disabled = !allowed() || !!c?.disabled;
-      if (record.button) record.button.disabled = !allowed() || !!c?.disabled;
+      if (record.button) record.button.disabled = !allowed() || !!c?.disabled || (id === "target-fire" && invalidTarget);
     }
     if (readyButton) readyButton.disabled = !connection.connected || !room?.hostConnected;
   }
@@ -153,8 +157,12 @@ export function startController(roomId: string): void {
         const label = el("label"); const text = el("span");
         const field = c.kind === "select" ? el("select") : el("input");
         if (field instanceof HTMLInputElement) field.type = c.kind === "toggle" ? "checkbox" : "number";
-        field.onchange = () => send({ kind: "control", id: c.id, value:
-          field instanceof HTMLInputElement && field.type === "checkbox" ? field.checked : Number(field.value) });
+        field.oninput = () => updateStatus();
+        field.onchange = () => {
+          if (field instanceof HTMLInputElement && field.type === "number" && (!field.value || !field.validity.valid)) return;
+          send({ kind: "control", id: c.id, value:
+            field instanceof HTMLInputElement && field.type === "checkbox" ? field.checked : Number(field.value) });
+        };
         label.append(text, field); node.append(label);
         record.field = field; record.label = text;
       }

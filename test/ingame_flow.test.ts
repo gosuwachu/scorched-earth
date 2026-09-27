@@ -584,7 +584,8 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
   });
 
   it("the Guidance selector arms the first guidance slot", () => {
-    const { cp, t } = panelFor({ selected_guidance: null });
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0); inv[FIRST_GUID] = 1;
+    const { cp, t } = panelFor({ selected_guidance: null, inv });
     cp.handle(md(center(byLabel(cp.panel, "~Guidance")), 1)); // cycle +1: None -> first guidance
     expect(t.selected_guidance).toBe(FIRST_GUID);
   });
@@ -781,6 +782,7 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     inv[weapons.SLOT_SUPER_MAG] = 1;
     inv[weapons.SLOT_BATTERY] = 3;
     inv[weapons.SLOT_FUEL] = 2;
+    inv[FIRST_GUID] = 1;
     const { cp, t } = panelFor({ inv, health: 70, x: 100, y: 299, parachute_deployed: false });
     cp.handle(md(center(byLabel(cp.panel, "Shields")), 1));
     cp.dispatchAction("discharge");
@@ -906,11 +908,11 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     expect(esc.cp.handle(kd(pygame.K_ESCAPE))).toBe("back");
   });
 
-  it("wants_target is set on close iff a guidance is armed with no target chosen", () => {
-    // Guidance remains live; closing still records its target requirement.
+  it("closing equipment never enters targeting; Fire owns the request", () => {
+    // Guidance remains selected, but the picker starts only on Fire.
     const armed = panelFor({ selected_guidance: FIRST_GUID });
     armed.cp.handle(md(center(byLabel(armed.cp.panel, "Engage")), 1));
-    expect(armed.cp.wants_target).toBe(true);
+    expect(armed.cp.wants_target).toBe(false);
 
     // no guidance -> false
     const none = panelFor({ selected_guidance: null });

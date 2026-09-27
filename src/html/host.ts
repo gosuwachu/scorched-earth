@@ -1,4 +1,5 @@
 /** Synchronizes persistent HTML views with the game's screen stack. */
+import { TargetView } from "./targeting";
 import type { App } from "../main";
 import * as S from "../screens";
 import * as I from "../ingame";
@@ -51,6 +52,7 @@ export class UiHost {
   private syncing = false;
   private chargeKey: object | null = null;
   private activeKey: object | null = null;
+  private targetView: TargetView;
   constructor(private app: App, private canvas: HTMLCanvasElement, private releaseInput: () => void) {
     installTheme(); this.element.dataset.uiOwner = "true";
     document.body.append(this.element);
@@ -58,6 +60,7 @@ export class UiHost {
     window.addEventListener("resize", () => this.layout(), { signal: this.abort.signal });
     window.addEventListener("keydown", (event) => this.keydown(event), { signal: this.abort.signal });
     window.addEventListener("blur", releaseInput, { signal: this.abort.signal });
+    this.targetView = new TargetView(app, canvas, releaseInput);
     this.layout(); this.sync();
   }
   get transitioning(): boolean { return this.animations.size > 0; }
@@ -153,6 +156,7 @@ export class UiHost {
         }
       });
       this.syncCharge();
+      this.targetView.update();
       this.layout();
     } finally { this.syncing = false; }
   }
@@ -358,6 +362,7 @@ export class UiHost {
     if (view.dialog?.open) this.animate(view, false, dispose); else dispose();
   }
   dispose(): void {
+    this.targetView.dispose();
     this.abort.abort(); this.resizing.disconnect(); this.finishTransition();
     for (const view of this.views.values()) { view.dialog?.close(); view.content?.dispose(); view.widgets?.dispose(); view.element.remove(); }
     this.views.clear(); this.element.remove(); this.releaseInput();

@@ -135,3 +135,13 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
 .ui-weapon-options h2 { margin: 0; font-size: 15px; }
 .ui-weapon-options-list { margin-top: 12px; display: grid; gap: 6px; }
 .ui-weapon-options-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+/* Target selection stays visible without taking clicks away from the world. */
+.ui-target-layer { position: fixed; z-index: 3; pointer-events: none; background: transparent; border: 0; }
+.ui-target-layer[hidden] { display: none; }
+.ui-target-banner { position: absolute; top: 28px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); box-sizing: border-box; padding: 12px 18px; color: #fff9b0; background: #19152bf2; border: 2px solid #ffe16b; box-shadow: 0 4px 20px #0009; text-align: center; font-size: 15px; pointer-events: auto; }
+.ui-target-banner strong { display: block; font-size: 22px; }
+.ui-target-banner p { margin: 8px 0; }
+.ui-target-tank { position: absolute; transform: translate(-50%, -100%); padding: 2px 5px; border: 1px solid #ffe16b; color: #fff9b0; background: #19152be6; font: bold 12px sans-serif; white-space: nowrap; }
+.ui-target-marker { position: absolute; transform: translate(-50%, -50%); color: #fff36b; text-shadow: 1px 1px #000, -1px -1px #000; font: bold 30px monospace; }
+canvas.is-targeting { cursor: crosshair; }

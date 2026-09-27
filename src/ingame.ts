@@ -59,6 +59,9 @@
  *   "clear_screen", "mass_kill", "quit_game", "reassign_players",
  *   "reassign_teams", "save_game", "restore_game", "new_game", "back"
  */
+import * as targeting from "./targeting";
+import { compatible, needsTarget } from "./guidance";
+import type { GameState as EngineState } from "./game";
 import { UI_ACTION } from "./screen";
 import { startShieldFade, stopShieldFade, type ShieldVisualState } from "./shields";
 import * as pygame from "./pygame";
@@ -153,6 +156,7 @@ export interface GameState extends ShieldVisualState {
   terrain: movement.MovementTerrain;
   // transient round flags (created/cleared by this module + the renderer)
   target_mode?: boolean;
+  pendingTarget?: targeting.TargetRequest | null;
   move_mode?: boolean;
   info_box?: InfoBox | null;
   speech?: unknown;
@@ -425,6 +429,28 @@ export function handle_game_event(state: GameState, event: IngameEvent): string 
     return null;
   }
 
+  if (state.pendingTarget) {
+    const gs = state as unknown as EngineState;
+    if (event.type === pygame.KEYDOWN) {
+      if (event.key === pygame.K_ESCAPE) { targeting.cancel(gs); return "target_cancel"; }
+      const n = event.key === pygame.K_0 ? 10 : (event.key as number) - pygame.K_0;
+      if (n >= 1 && n <= 10) {
+        const t = targeting.tanks(gs)[n - 1];
+        if (t && targeting.selectTank(gs, t) && targeting.confirm(gs)) return "target_set";
+      }
+    }
+    if (event.type === pygame.MOUSEBUTTONDOWN && (event.button === 1 || event.button === 3)) {
+      const [x, y] = event.pos as pygame.Point;
+      const t = event.button === 3 ? targeting.tanks(gs).reduce<import("./objects").Tank | null>((best, tank) => {
+        const d = Math.hypot(tank.x - x, tank.y - y);
+        return d <= 100 && (!best || d <= Math.hypot(best.x - x, best.y - y)) ? tank : best;
+      }, null) : null;
+      const selected = event.button === 3 ? !!t && targeting.selectTank(gs, t) : targeting.setPoint(gs, Math.trunc(x), Math.trunc(y));
+      if (selected && targeting.confirm(gs)) return "target_set";
+    }
+    return null;
+  }
+
   if (event.type === pygame.MOUSEBUTTONDOWN && (event.button === 1 || event.button === 3)) {
     // 0. BOTH buttons at once = FIRE (mask 3; DOC:L201,L491).  Checked first so
     //    the second of the two presses fires rather than aiming.
@@ -501,7 +527,7 @@ export function handle_game_event(state: GameState, event: IngameEvent): string 
  *  mouse button held over the Power/Angle word is folded in via a key proxy so the
  *  bar's press-and-hold ramps identically to the arrow keys (TABLE A). */
 export function update_game_input(state: GameState, dt: number, keys: KeyState): void {
-  if (state.phase !== "aim" || state.current_shooter === null) {
+  if (state.pendingTarget || state.phase !== "aim" || state.current_shooter === null) {
     return;
   }
   if (state.current_shooter.ai_class !== C.AI_HUMAN) {
@@ -623,24 +649,17 @@ export function weapon_needs_target(state: GameState): boolean {
   if (t === null) {
     return false;
   }
-  return t.selected_guidance !== null && _TARGETABLE_GUIDANCE.has(t.selected_guidance);
+  return state.cfg.play_mode !== C.PLAYMODE_SIMULTANEOUS && needsTarget(t.selected_guidance) &&
+    t.inventory[t.selected_guidance!] > 0 && compatible(weapons.ITEMS[t.selected_weapon]);
 }
 
 export function in_target_mode(state: GameState): boolean {
-  return Boolean(state.target_mode);
+  return Boolean(state.pendingTarget || state.target_mode);
 }
 
-/** True while the Choose Target sub-mode is live: either a caller explicitly
- *  entered it, OR a guided weapon is armed and play mode is not Simultaneous (the
- *  entry gate in FUN_38b5_0fe1.c:15-24, INTERACTION.md TABLE E). */
+/** Selection is explicit; merely equipping guidance must not capture input. */
 function _in_choose_target(state: GameState): boolean {
-  if (in_target_mode(state)) {
-    return true;
-  }
-  if (state.cfg.play_mode === C.PLAYMODE_SIMULTANEOUS) {
-    return false;
-  }
-  return weapon_needs_target(state);
+  return in_target_mode(state);
 }
 
 /** Begin the Choose Target picker explicitly.  Returns true if a human shooter is
@@ -1069,6 +1088,7 @@ export class ControlPanelScreen implements Screen {
     const opts: string[] = ["None"];
     const slots: (number | null)[] = [null];
     for (const slot of _GUIDANCE_SLOTS) {
+      if (this.state.cfg.play_mode === C.PLAYMODE_SIMULTANEOUS || this.tank.inventory[slot] <= 0) continue;
       opts.push(weapons.ITEMS[slot].name);
       slots.push(slot);
     }
@@ -1083,7 +1103,9 @@ export class ControlPanelScreen implements Screen {
   }
 
   _g_set(i: number): void {
-    this.tank.selected_guidance = this._g_slots[pyMod(i, this._g_slots.length)];
+    if (!Number.isInteger(i) || i < 0 || i >= this._g_slots.length) return;
+    const slot = this._g_slots[i];
+    if (slot === null || this.tank.inventory[slot] > 0) this.tank.selected_guidance = slot;
   }
 
   // ---- shields: preview owned/active shields (+ None); Engage deploys ----
@@ -1316,11 +1338,9 @@ export class ControlPanelScreen implements Screen {
     return null;
   }
 
-  /** On close, flag whether a guidance is armed that wants a target and none is
-   *  set yet (additive; the caller MAY act on self.wants_target). */
+  /** Retained for legacy panel callers; selection now starts on Fire. */
   _note_target_need(): void {
-    const g = this.tank.selected_guidance;
-    this.wants_target = g !== null && _TARGETABLE_GUIDANCE.has(g) && this.tank.guidance_target === null;
+    this.wants_target = false; // Targeting begins at Fire, never at panel close.
   }
 
   update(_dt: number): void {

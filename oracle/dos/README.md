@@ -15,6 +15,9 @@ when investigating missing evidence, a mismatch, or a different machine profile.
 Small calibration variation between boots is expected; do not retune the browser
 constant after every measurement.
 
+Guidance evidence and its static numerical fixtures are documented in
+[GUIDANCE_FIDELITY.md](../GUIDANCE_FIDELITY.md).
+
 The original DOS executable is the sole fidelity reference. Use its runtime
 captures and directly checked binary/disassembly evidence for new comparisons.
 Do not generate reference behavior or images by running the Python game port.

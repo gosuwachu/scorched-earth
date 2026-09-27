@@ -507,29 +507,19 @@ describe("ingame: cycle_weapon (owned offensive rotation)", () => {
   });
 });
 
-describe("ingame: Choose Target gate (needs_target / in_target_mode / _in_choose_target)", () => {
-  for (let i = 0; i < vec.target.gate.length; i++) {
-    const g = vec.target.gate[i];
-    it(`#${i} ${g.name}`, () => {
-      const t = new MockTank({ selected_guidance: g.guidance });
-      const st = new MockState({ tanks: [t], shooter: t, cfg: new MockCfg(g.play_mode) });
-      st.target_mode = g.target_mode;
-      expect(ingame.weapon_needs_target(st), `${g.name} needs_target`).toBe(g.needs_target);
-      expect(ingame.in_target_mode(st), `${g.name} in_target_mode`).toBe(g.in_target_mode);
-      // _in_choose_target is module-private; reach it via the public router by
-      // checking it through enter/handle would mutate -- instead assert the
-      // equivalent composite (target_mode || (!simul && needs_target)) the oracle
-      // recorded, which IS what _in_choose_target computes.
-      const simul = g.play_mode === C.PLAYMODE_SIMULTANEOUS;
-      const composite = g.target_mode || (!simul && ingame.weapon_needs_target(st));
-      expect(composite, `${g.name} in_choose_target`).toBe(g.in_choose_target);
+// The Python gate implicitly targeted even Heat, without checking ownership.
+// DOS target requirements and the explicit Fire flow supersede those vectors.
+describe("ingame: owned guidance target requirements", () => {
+  for (const slot of [33, 34, 35, 36, 37]) for (const mode of [0, 1, 2]) {
+    it(`slot ${slot}, mode ${mode}`, () => {
+      const t = new MockTank({ selected_guidance: slot });
+      const st = new MockState({ tanks: [t], shooter: t, cfg: new MockCfg(mode) });
+      expect(ingame.weapon_needs_target(st)).toBe(false);
+      t.inventory[slot] = 1;
+      expect(ingame.weapon_needs_target(st)).toBe(slot !== 33 && mode !== 2);
+      expect(ingame.in_target_mode(st)).toBe(false);
     });
   }
-
-  it("weapon_needs_target with no shooter is false", () => {
-    const st = new MockState({ tanks: [], shooter: null });
-    expect(ingame.weapon_needs_target(st)).toBe(vec.target.needs_target_no_shooter);
-  });
 });
 
 describe("ingame: enter/exit target mode", () => {

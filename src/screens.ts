@@ -2066,7 +2066,8 @@ export class InventoryScreen extends Screen {
     // weapon set == the HUD weapon-cycle set (offensive AND owned/has_ammo).
     this.weapon_slots = _owned_offensive(tank);
     // owned guidance items (count > 0); the panel always offers a "None" row.
-    this.guidance_slots = InventoryScreen._GUIDANCE_SLOTS.filter((s) => tank.inventory[s] > 0);
+    this.guidance_slots = (state as { cfg?: { play_mode?: number } })?.cfg?.play_mode === C.PLAYMODE_SIMULTANEOUS ? [] :
+      InventoryScreen._GUIDANCE_SLOTS.filter((s) => tank.inventory[s] > 0);
     this.panel = new Panel(20, 16, w - 40, h - 32, "Inventory", false, "pop");
     this._wrows = []; // (slot, y) for the clickable weapon rows
     this._grows = []; // (slot_or_None, y) for the guidance rows
@@ -2088,7 +2089,8 @@ export class InventoryScreen extends Screen {
 
   _select_guidance(slot: number | null): void {
     // the "None" row clears guidance; otherwise arm the chosen guidance item.
-    this.tank.selected_guidance = slot;
+    if (slot === null || (weapons.ITEMS[slot]?.category === "guidance" && this.tank.inventory[slot] > 0 &&
+        (this.state as { cfg?: { play_mode?: number } })?.cfg?.play_mode !== C.PLAYMODE_SIMULTANEOUS)) this.tank.selected_guidance = slot;
   }
 
   _weapon_array_index(): number {

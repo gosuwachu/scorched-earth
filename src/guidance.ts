@@ -1,45 +1,9 @@
-/**
- * In-flight weapon guidance -- the projectile's +0x4c per-step predicate.
- * Faithful TypeScript port of scorch-py/scorch/guidance.py (the fidelity oracle,
- * itself byte-verified against 1.5/SCORCH.EXE). The differential gate
- * (test/guidance.test.ts) asserts every result against the Python-dumped vectors.
- *
- * Ground truth (READ-ONLY RE, binary never executed):
- *   FUN_2a4a_0763.c:99-110  spawn seeds the +0x4a/+0x4c slots; only the guidance
- *                           weapon class installs a +0x4c callback.
- *   FUN_2a4a_0b1f.c:40-46   the integrator calls that callback BEFORE the
- *                           magnitude clamp / move step: the predicate steers
- *                           (mutates vx/vy in place) and returns nonzero to keep
- *                           the shell live; the step then proceeds.
- *
- * Guidance TYPES (catalog 02 section A, slots 33-37; DOC L1289-L1330):
- *   Heat        - within range of ANY enemy tank, steer in a STRAIGHT LINE to it.
- *   Ballistic   - keep the firing angle; auto-solve the POWER (acts at LAUNCH).
- *   Horizontal  - once EVEN WITH the target (same y), fly horizontally at it.
- *   Vertical    - once OVER the target (same x), drop straight DOWN onto it.
- *   Lazy Boy    - fly to the exact clicked point and detonate there.
- *
- * Weapons that ignore ALL guidance (DOC L1286): MIRVs, Death's Heads, Riot
- * Charges, Riot Blasts, Plasma Blasts. attach() returns null for those.
- *
- * NUMERIC NOTE: the steering math uses Math.hypot/atan-free unit-vector blends
- * (hypot, division), so steered vx/vy are asserted within a TIGHT epsilon
- * (toBeCloseTo(.,12)); arming booleans / armed-latch / axis snaps are exact.
- * The Ballistic power solve returns an INTEGER (asserted exact). See
- * test/guidance.test.ts.
- *
- * IMPORT CYCLE: guidance -> ai -> physics -> guidance. ai is imported as a
- * namespace and its functions are only called at RUNTIME (apply/solve), never at
- * module-load time, so ES module init never reads a half-initialized binding.
- */
-import * as ai from "./ai";
-import { pyRound } from "./objects";
-import type { Projectile } from "./objects";
-import type { Tank } from "./objects";
+/** DOS 1.5 guidance. See oracle/GUIDANCE_FIDELITY.md for addresses and limits.
+ * The historical Python blend-based steering is deliberately superseded. */
+import { PHYSICS_DT, EFF_GRAVITY_FACTOR, EFF_WIND_FACTOR, PLAYMODE_SIMULTANEOUS } from "./constants";
+import { pyRound, type Projectile, type Tank } from "./objects";
 import type { Item } from "./weapons";
 
-/** Minimal Config shape guidance reads (forwarded to ai._solve_power /
- * ai._simulate_landing, which need the same fields physics.PhysicsCfg has). */
 export interface GuidanceCfg {
   GRAVITY: number;
   wind: number;
@@ -47,16 +11,9 @@ export interface GuidanceCfg {
   EDGES_EXTEND: number;
   live_elastic?: number;
   elastic?: number;
+  play_mode?: number;
 }
-
-/** A state with world dims, used by the wind-correcting solve (not by attach). */
-export interface GuidanceState {
-  cfg: GuidanceCfg;
-  w: number;
-  h: number;
-}
-
-/** proj.guidance shape (or null when unguided). Mirrors the Python dict. */
+export interface GuidanceState { cfg: GuidanceCfg; w: number; h: number; }
 export interface Guidance {
   type: "heat" | "ballistic" | "horizontal" | "vertical" | "lazyboy";
   target: Tank | null;
@@ -65,364 +22,167 @@ export interface Guidance {
   armed: boolean;
   _last_x: number | null;
   _last_y: number | null;
+  directionX?: number;
+  directionY?: number;
+  arrival?: boolean;
+  travel?: number;
 }
-
-// Item-index -> guidance type. Slots 33-37 (weapons.ITEMS), catalog 02 A.
-const _SLOT_TYPE: { [k: number]: Guidance["type"] } = {
-  33: "heat",
-  34: "ballistic",
-  35: "horizontal",
-  36: "vertical",
-  37: "lazyboy",
-};
-
-// Behaviors that ignore ALL guidance (DOC L1286). Keyed by weapons.Item.behavior.
-export const _IGNORES_GUIDANCE: ReadonlySet<string> = new Set([
-  "mirv",
-  "riot_wedge",
-  "riot_sphere",
-  "plasma",
-]);
-
-// Heat acquisition range (px). DOC L1289; concrete range scalar BLOCKED in RE.
-// RECONSTRUCTED: a generous fixed radius.
-export const HEAT_RANGE = 80.0;
-
-// Per-step turn aggression for the straight-line steers (port choice; the RE
-// callback body that would pin them is BLOCKED behind the +0x4c indirect call).
-const _HEAT_TURN = 0.35; // fraction of speed redirected toward the tank per step
-
-/** Build and install proj.guidance from the firing tank's selection.
- *
- * Called from physics.launch after the projectile exists. Returns the guidance
- * dict it installed (also stored on proj.guidance), or null when unguided.
- */
-export function attach(
-  tank: Tank,
-  cfg: GuidanceCfg,
-  weapon: Item,
-  proj: Projectile,
-): Guidance | null {
-  const slot = (tank as { selected_guidance?: unknown }).selected_guidance;
-  if (slot === null || slot === undefined) {
+const types: Guidance["type"][] = ["heat", "ballistic", "horizontal", "vertical", "lazyboy"];
+export const _IGNORES_GUIDANCE: ReadonlySet<string> = new Set(["mirv", "riot_wedge", "riot_sphere", "plasma"]);
+/** DS:5186; acquisition is round(distance) < 40, in tank-array order. */
+export const HEAT_RANGE = 40;
+export const LAZY_SPEED = 500; // DS:31fc
+export const GUIDANCE_ACCEL = 10000; // DS:3224; horizontal uses DS:3228 = 15000
+export function compatible(weapon: Item): boolean { return !_IGNORES_GUIDANCE.has(weapon.behavior); }
+export function isGuidance(slot: unknown): slot is number {
+  return typeof slot === "number" && Number.isInteger(slot) && slot >= 33 && slot <= 37;
+}
+export function needsTarget(slot: unknown): boolean { return isGuidance(slot) && slot !== 33; }
+export function team_mode_active(a: unknown, b: unknown): boolean {
+  const ta = (a as { team_id?: number } | null)?.team_id ?? 0;
+  return ta !== 0 && ta === ((b as { team_id?: number } | null)?.team_id ?? 0);
+}
+export function attach(tank: Tank, cfg: GuidanceCfg, weapon: Item, proj: Projectile): Guidance | null {
+  const slot = tank.selected_guidance;
+  if (!isGuidance(slot) || !compatible(weapon) || cfg.play_mode === PLAYMODE_SIMULTANEOUS || !(tank.inventory[slot] > 0)) {
     proj.guidance = null;
     return null;
   }
-  const gtype = _SLOT_TYPE[slot as number];
-  if (gtype === undefined) {
-    proj.guidance = null;
-    return null;
-  }
-  if (_IGNORES_GUIDANCE.has(weapon.behavior)) {
-    // DOC L1286: these ignore guidance; no callback is installed.
-    proj.guidance = null;
-    return null;
-  }
-
+  const target = tank.guidance_target as Tank | null;
+  const point = tank.guidance_target_pt as [number, number] | null;
   const g: Guidance = {
-    type: gtype,
-    target: ((tank as { guidance_target?: unknown }).guidance_target ??
-      null) as Tank | null,
-    point: ((tank as { guidance_target_pt?: unknown }).guidance_target_pt ??
-      null) as [number, number] | null,
-    tanks: null, // populated by the game hook
-    armed: false,
-    _last_x: null, // px/py seen on the previous apply() (crossing test)
-    _last_y: null,
+    type: types[slot - 33], target,
+    point: point ? [...point] : target ? [target.x, target.y] : null,
+    tanks: null, armed: false, _last_x: null, _last_y: null,
   };
   proj.guidance = g;
   return g;
 }
 
-/** The +0x4c predicate: steer proj in place for one physics step.
- *
- * Mirrors FUN_2a4a_0b1f.c:40-46 ordering -- runs BEFORE the magnitude clamp and
- * the position/velocity integration.
- *
- * Returns true to keep the shell live; no guidance type self-terminates.
- */
-export function apply(
-  proj: Projectile,
-  _cfg: GuidanceCfg,
-  tanks: Tank[] | null = null,
-): boolean {
+/** 2e50:099c / 0c30: acceleration toward a fixed point, not a velocity snap.
+ * Crossing either enabled axis ends Heat's callback, or detonates Horz/Vert. */
+export function apply(proj: Projectile, _cfg: GuidanceCfg, tanks: Tank[] | null = null, dt = PHYSICS_DT): boolean {
   const g = proj.guidance as Guidance | null;
-  if (!g) {
-    return true;
+  if (!g) return true;
+  if (tanks) g.tanks = tanks;
+  if (!g.armed || !g.point || g.type === "lazyboy" || g.type === "ballistic") return true;
+  const dx = g.point[0] - proj.px, dy = g.point[1] - proj.py;
+  if ((g.directionX && dx * g.directionX > 0) || (g.directionY && dy * g.directionY > 0)) {
+    if (g.type === "heat") proj.guidance = null;
+    else g.arrival = true;
+    return !g.arrival;
   }
-  if (tanks !== null && tanks !== undefined) {
-    g.tanks = tanks;
+  const d2 = dx * dx + dy * dy;
+  if (d2 >= 0.001) {
+    const scale = (g.type === "horizontal" ? 15000 : GUIDANCE_ACCEL) * dt / Math.sqrt(Math.sqrt(d2));
+    proj.vx += dx * scale;
+    proj.vy -= dy * scale;
   }
-
-  // apply() runs BEFORE the move, so proj.prev_px == proj.px; track the position
-  // seen on the PREVIOUS apply() call here for the crossing test.
-  const last_x = g._last_x;
-  const last_y = g._last_y;
-
-  const gtype = g.type;
-  if (gtype === "heat") {
-    _steer_heat(proj, g);
-  } else if (gtype === "horizontal") {
-    _steer_horizontal(proj, g, last_x, last_y);
-  } else if (gtype === "vertical") {
-    _steer_vertical(proj, g, last_x, last_y);
-  } else if (gtype === "lazyboy") {
-    _steer_lazyboy(proj, g);
-  }
-  // "ballistic": no in-flight steering (solved at launch).
-
-  g._last_x = proj.px;
-  g._last_y = proj.py;
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Per-type steering. Each mutates proj.vx / proj.vy in place.
-// Screen Y grows downward; vy > 0 means "up" (physics.step: py -= vy*dt).
-// ---------------------------------------------------------------------------
-function _speed(proj: Projectile): number {
-  return Math.hypot(proj.vx, proj.vy);
+export interface GuidanceWorld {
+  tanks: Tank[];
+  w: number;
+  h: number;
+  cfg: GuidanceCfg;
+  terrain: { is_dirt(x: number, y: number): boolean };
 }
 
-/** Nearest LIVE enemy tank within HEAT_RANGE of the shell, else null. */
-function _heat_target(proj: Projectile, g: Guidance): Tank | null {
-  const tanks = g.tanks;
-  if (!tanks || tanks.length === 0) {
-    return null;
-  }
-  const owner = proj.owner;
-  const own_team = (owner as { team_id?: unknown } | null)?.team_id ?? null;
-  let best: Tank | null = null;
-  let bd = HEAT_RANGE;
-  for (const t of tanks) {
-    if (!t.alive || t === owner) {
-      continue;
+/** 4bac:010c/022c: on ascent a horizontal lane must be unobstructed.
+ * Descending shells select the direct lane (or shorter open wrap lane). */
+function horizontalDirection(world: GuidanceWorld, proj: Projectile, tx: number, x: number, y: number): number {
+  const wrap = (world.cfg.live_elastic ?? world.cfg.elastic) === 1;
+  let dir = x >= tx ? 1 : -1; // +0x66 is origin-minus-target sign
+  const clear = (sign: number): boolean => {
+    for (let xx = x - sign, n = 0; n < world.w; xx -= sign, n++) {
+      if (xx < 0 || xx >= world.w) { if (!wrap) return false; xx = (xx + world.w) % world.w; }
+      if (xx === tx) return true;
+      if (world.tanks.some((t) => t.alive && Math.abs(t.x - xx) <= t.half_width && y <= t.y && y >= t.y - 10)) return true;
+      if (world.terrain.is_dirt(xx, y)) return false;
     }
-    if (
-      own_team !== null &&
-      ((t as { team_id?: unknown }).team_id ?? null) === own_team &&
-      team_mode_active(t, owner)
-    ) {
-      continue;
-    }
-    const d = Math.hypot(t.x - proj.px, t.y - 4 - proj.py);
-    if (d <= bd) {
-      best = t;
-      bd = d;
-    }
-  }
-  return best;
+    return false;
+  };
+  if (wrap && Math.abs(x - tx) > world.w / 2) dir = -dir;
+  if (proj.vy < 0 && !wrap) return dir;
+  if (clear(dir)) return dir;
+  return wrap && clear(-dir) ? -dir : 0;
 }
 
-/** True when a and b are on the same NON-zero team (teams enabled). */
-export function team_mode_active(a: unknown, b: unknown): boolean {
-  const ta = (a as { team_id?: number } | null)?.team_id ?? 0;
-  const tb = (b as { team_id?: number } | null)?.team_id ?? 0;
-  return ta !== 0 && ta === tb;
+/** Called at each swept pixel AFTER ordinary collision checks (2a4a:1791).
+ * A true return stops the sweep at the activation/arrival pixel. */
+export function visit(proj: Projectile, world: GuidanceWorld, x: number, y: number): boolean {
+  const g = proj.guidance as Guidance | null;
+  if (!g || g.type === "ballistic" || g.type === "lazyboy") return false;
+  if (g.armed) {
+    if (g.point?.[0] === x && g.point[1] === y) { g.arrival = true; return true; }
+    return false;
+  }
+  if (g.type === "heat") {
+    // 2e50:0001 excludes only the owner and dead tanks, not team-mates.
+    const target = world.tanks.find((t) => t.alive && t !== proj.owner && pyRound(Math.hypot(t.x - x, t.y - y)) < HEAT_RANGE);
+    if (!target) return false;
+    g.target = target; g.point = [target.x, target.y];
+  } else if (!g.point || (g.type === "horizontal" ? y !== g.point[1] : x !== g.point[0])) return false;
+  const [tx, ty] = g.point!;
+  g.directionX = g.type === "vertical" ? 0 : g.type === "horizontal" ? horizontalDirection(world, proj, tx, x, y) : x >= tx ? 1 : -1;
+  if (g.type === "horizontal" && g.directionX === 0) return false;
+  g.directionY = g.type === "horizontal" ? 0 : y >= ty ? 1 : -1;
+  g.armed = true;
+  proj.px = proj.sx = x; proj.py = proj.sy = y;
+  return true;
 }
 
-function _steer_heat(proj: Projectile, g: Guidance): void {
-  const tgt = _heat_target(proj, g);
-  if (tgt === null) {
-    return; // out of range: fly ballistic
-  }
-  const sp = _speed(proj);
-  if (sp < 1e-6) {
-    return;
-  }
-  const dx = tgt.x - proj.px;
-  const dy = tgt.y - 4 - proj.py; // toward the tank body
-  const d = Math.hypot(dx, dy);
-  if (d < 1e-6) {
-    return;
-  }
-  const ux = dx / d;
-  const uy = -dy / d; // screen-down dy -> vy-down
-  const nx = proj.vx + (ux * sp - proj.vx) * _HEAT_TURN;
-  const ny = proj.vy + (uy * sp - proj.vy) * _HEAT_TURN;
-  const nsp = Math.hypot(nx, ny);
-  if (nsp < 1e-6) {
-    return;
-  }
-  proj.vx = (nx / nsp) * sp;
-  proj.vy = (ny / nsp) * sp;
-}
-
-function _steer_horizontal(
-  proj: Projectile,
-  g: Guidance,
-  _last_x: number | null,
-  last_y: number | null,
-): void {
-  const tgt = g.target;
-  const pt = g.point;
-  const ty = tgt !== null ? tgt.y - 4 : pt ? pt[1] : null;
-  const tx = tgt !== null ? tgt.x : pt ? pt[0] : null;
-  if (ty === null || tx === null) {
-    return;
-  }
-  if (!g.armed) {
-    // arm once the shell crossed the target altitude over the last step, or is
-    // already at/below it on the descending leg.
-    if (last_y !== null && (last_y - ty) * (proj.py - ty) <= 0) {
-      g.armed = true;
+/** 2e50:00cf uses DDA steps of <=1px on the major axis, 500 steps/second.
+ * The game checks each step for tank contact and target arrival. */
+export function lazyStep(proj: Projectile, world: GuidanceWorld): [number, number] | null {
+  const g = proj.guidance as Guidance | null;
+  if (!g?.point) return null;
+  const [tx, ty] = g.point;
+  const dx = tx - proj.px, dy = ty - proj.py, major = Math.max(Math.abs(dx), Math.abs(dy));
+  if (major === 0) { g.arrival = true; return null; }
+  let ux = dx / major, uy = dy / major;
+  let x = pyRound(proj.px + ux), y = pyRound(proj.py + uy);
+  // DOS treats both soil and intervening tank pixels as obstacles, except
+  // pixels belonging to the chosen tank. Shields are not part of this callback.
+  const tank = world.tanks.find((t) => t.alive && Math.abs(x - t.x) <= t.half_width && y >= t.y - 10 && y <= t.y);
+  if (tank ? tank !== g.target : world.terrain.is_dirt(x, y)) {
+    if (x !== proj.sx) {
+      if (proj.sy <= 0) uy = 0;
+      else { ux = 0; uy = -1; }
     }
+    x = pyRound(proj.px + ux); y = pyRound(proj.py + uy);
+    // A dirt pixel remaining in the escape direction is excavated by the game hook.
   }
-  if (!g.armed) {
-    return;
-  }
-  // horizontal flight toward tx: redirect the whole speed onto the x axis and
-  // zero vy so the shell flies level (DOC L1311).
-  const sp = _speed(proj);
-  const dirx = tx >= proj.px ? 1.0 : -1.0;
-  proj.vx = dirx * sp;
-  proj.vy = 0.0;
+  proj.prev_px = proj.px; proj.prev_py = proj.py;
+  proj.px += ux; proj.py += uy; proj.sx = x; proj.sy = y;
+  proj.saved_vx = proj.vx = ux; proj.saved_vy = proj.vy = -uy;
+  if (x === tx && y === ty) g.arrival = true;
+  return [x, y];
 }
 
-function _steer_vertical(
-  proj: Projectile,
-  g: Guidance,
-  last_x: number | null,
-  _last_y: number | null,
-): void {
-  const tgt = g.target;
-  const pt = g.point;
-  const tx = tgt !== null ? tgt.x : pt ? pt[0] : null;
-  if (tx === null) {
-    return;
+/** Algebraic form of 2e50:05e9's acceleration-axis rotation. DOS flag=0
+ * takes abs(v²) for an impossible trajectory; UI power adjustment then caps it.
+ * Use the port's launch geometry and acceleration units, including wind. */
+export function solve_ballistic_power_launch(cfg: GuidanceCfg, tank: Tank, _weapon: Item): number | null {
+  const target = tank.guidance_target as Tank | null;
+  const pt = tank.guidance_target_pt as [number, number] | null;
+  if (!pt && !target) return null;
+  const [tx, ty] = pt ?? [target!.x, target!.y];
+  let angle = tank.angle;
+  for (let tries = 0; tries < 2; tries++, angle++) {
+    const rad = angle * 0.017453293, c = Math.cos(rad), s = Math.sin(rad);
+    const dx = tx - (tank.x + 12 * c), up = tank.y - 4 - 12 * s - ty;
+    const gravity = EFF_GRAVITY_FACTOR * cfg.GRAVITY, wind = EFF_WIND_FACTOR * cfg.wind;
+    const time2 = 2 * (dx * s - up * c) / (gravity * c + wind * s);
+    const cap = Math.max(0, Math.min(1000, tank.health * 10));
+    if (!Number.isFinite(time2) || Math.abs(time2) < 1e-12) continue;
+    const t = Math.sqrt(Math.abs(time2));
+    const speed = Math.abs(c) > 1e-8 ? Math.abs((dx - wind * time2 / 2) / (t * c)) : Math.abs((up + gravity * time2 / 2) / (t * s));
+    return Math.min(cap, Math.max(0, pyRound(speed)));
   }
-  if (!g.armed) {
-    // arm when the shell crossed the target column over the last step.
-    if (last_x !== null && (last_x - tx) * (proj.px - tx) <= 0) {
-      g.armed = true;
-      proj.px = tx; // snap onto the column (over it)
-    }
-  }
-  if (!g.armed) {
-    return;
-  }
-  // straight down: zero horizontal, redirect the whole speed downward (vy<0 =
-  // down on screen), and hold the target column (DOC L1316).
-  const sp = _speed(proj);
-  proj.vx = 0.0;
-  proj.vy = -sp;
-  proj.px = tx;
+  return Math.max(0, Math.min(1000, tank.health * 10));
 }
-
-function _steer_lazyboy(proj: Projectile, g: Guidance): void {
-  let pt = g.point;
-  if (pt === null) {
-    // no click point: fall back to the chosen tank if one was stored.
-    const tgt = g.target;
-    if (tgt === null) {
-      return;
-    }
-    pt = [tgt.x, tgt.y - 4];
-  }
-  const sp = _speed(proj);
-  if (sp < 1e-6) {
-    return;
-  }
-  const dx = pt[0] - proj.px;
-  const dy = pt[1] - proj.py;
-  const d = Math.hypot(dx, dy);
-  if (d < 1e-6) {
-    return;
-  }
-  const ux = dx / d;
-  const uy = -dy / d;
-  // tighter blend than Heat: Lazy Boy is the "ultimate" guidance (DOC L1324).
-  const blend = 0.6;
-  const nx = proj.vx + (ux * sp - proj.vx) * blend;
-  const ny = proj.vy + (uy * sp - proj.vy) * blend;
-  const nsp = Math.hypot(nx, ny);
-  if (nsp < 1e-6) {
-    return;
-  }
-  proj.vx = (nx / nsp) * sp;
-  proj.vy = (ny / nsp) * sp;
-}
-
-// ---------------------------------------------------------------------------
-// Ballistic: solved at LAUNCH (not in flight).
-// ---------------------------------------------------------------------------
-/** Power to land on the chosen target at the tank's CURRENT angle, with full
- * wind correction (DOC L1300). Returns an int power (0..1000), or null if no
- * target is selected. */
-export function solve_ballistic_power(
-  state: GuidanceState,
-  tank: Tank,
-  _weapon: Item,
-): number | null {
-  const tgt = ((tank as { guidance_target?: unknown }).guidance_target ??
-    null) as Tank | null;
-  const pt = ((tank as { guidance_target_pt?: unknown }).guidance_target_pt ??
-    null) as [number, number] | null;
-  let tx: number;
-  let ty: number;
-  if (tgt !== null) {
-    tx = tgt.x;
-    ty = tgt.y - 4;
-  } else if (pt !== null) {
-    tx = pt[0];
-    ty = pt[1];
-  } else {
-    return null;
-  }
-  const angle = tank.angle;
-  const elev = angle <= 90 ? angle : 180 - angle;
-  const base = ai._solve_power(state.cfg, tank.x, tank.y, tx, ty, elev);
-  if (base === null) {
-    return 1000; // "confused": fire at full power
-  }
-  // wind-correcting refinement: range ~ power^2, refine against the real
-  // integrator (which includes wind), reusing ai._simulate_landing.
-  let power = base;
-  const target_range = Math.max(1.0, Math.abs(tx - tank.x));
-  for (let i = 0; i < 8; i++) {
-    const land_x = ai._simulate_landing(state, tank, angle, power, ty);
-    if (land_x === null) {
-      power = Math.min(1000.0, power * 1.15);
-      continue;
-    }
-    const cur_range = Math.max(1.0, Math.abs(land_x - tank.x));
-    if (Math.abs(land_x - tx) < 3.0) {
-      break;
-    }
-    power *= Math.sqrt(target_range / cur_range);
-    power = Math.max(30.0, Math.min(1000.0, power));
-  }
-  return pyRound(power);
-}
-
-/** Self-contained Ballistic power for use INSIDE physics.launch (cfg only, no
- * world dims): the drag/wind-free closed form at the fixed angle. Returns int
- * power (0..1000), or null if no target. */
-export function solve_ballistic_power_launch(
-  cfg: GuidanceCfg,
-  tank: Tank,
-  _weapon: Item,
-): number | null {
-  const tgt = ((tank as { guidance_target?: unknown }).guidance_target ??
-    null) as Tank | null;
-  const pt = ((tank as { guidance_target_pt?: unknown }).guidance_target_pt ??
-    null) as [number, number] | null;
-  let tx: number;
-  let ty: number;
-  if (tgt !== null) {
-    tx = tgt.x;
-    ty = tgt.y - 4;
-  } else if (pt !== null) {
-    tx = pt[0];
-    ty = pt[1];
-  } else {
-    return null;
-  }
-  const angle = tank.angle;
-  const elev = angle <= 90 ? angle : 180 - angle;
-  const base = ai._solve_power(cfg, tank.x, tank.y, tx, ty, elev);
-  if (base === null) {
-    return 1000;
-  }
-  return pyRound(Math.max(30.0, Math.min(1000.0, base)));
+export function solve_ballistic_power(state: GuidanceState, tank: Tank, weapon: Item): number | null {
+  return solve_ballistic_power_launch(state.cfg, tank, weapon);
 }

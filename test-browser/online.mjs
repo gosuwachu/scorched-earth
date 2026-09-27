@@ -95,7 +95,7 @@ try {
   await until(async () => await cash() < beforeCash, "purchase applies on host");
   const purchasedCash = await cash();
   await a.getByLabel("Category", { exact: true }).selectOption("1");
-  for (const item of ["Battery", "Fuel Tank", "Heat Guidance", "Shield", "Parachute"]) {
+  for (const item of ["Battery", "Fuel Tank", "Heat Guidance", "Lazy Boy", "Shield", "Parachute"]) {
     const previousCash = await cash();
     await a.locator(".lan-controls button:enabled").filter({ hasText: new RegExp(`^(▶ )?${item} ·`) }).click();
     await until(async () => await cash() < previousCash, `${item} purchased`);
@@ -113,6 +113,9 @@ try {
   await a.screenshot({ path: `${root}/test-browser/out/online-shopping.png`, fullPage: true });
   await click(a, "Done");
   await until(() => enabled(b, "Done"), "Bob shopping");
+  await b.getByLabel("Category", { exact: true }).selectOption("1");
+  await b.locator(".lan-controls button:enabled").filter({ hasText: /^(▶ )?Lazy Boy ·/ }).click();
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]) > 0, "Bob buys guidance");
   await click(b, "Done");
   await until(() => enabled(a, "Space / Fire"), "Alice aiming");
   // Observe real adjustment tone playback on the host, without replacing it.
@@ -180,34 +183,61 @@ try {
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].health) === 100, "battery discharge");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[39]), 8);
   await a.getByLabel(/^Parachutes/).check();
-  await a.getByLabel("Guidance", { exact: true }).selectOption({ label: "Heat Guidance" });
-  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].selected_guidance) === 33, "guidance equipped");
+  await a.getByLabel("Guidance", { exact: true }).selectOption({ label: "Lazy Boy" });
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].selected_guidance) === 37, "guidance equipped");
   await click(a, "Engage");
   await until(() => enabled(a, "Space / Fire"), "back to battle");
-  await a.getByLabel("Choose target", { exact: true }).selectOption("1");
-  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].guidance_target?.name) === "Bob", "target selection");
-  // Inventory selection and canceled retreat must preserve the chosen target.
+  assert.equal(await a.getByLabel("Target X", { exact: true }).count(), 0);
+  // Equipping guidance permits inventory, retreat and aiming before Fire.
   await click(a, "Inventory");
-  await a.getByLabel("Guidance", { exact: true }).selectOption("1");
+  await a.getByLabel("Guidance", { exact: true }).selectOption("2");
   await click(a, "Done");
   await until(() => enabled(a, "Space / Fire"), "inventory closes");
   await click(a, "Retreat");
   await a.getByRole("button", { name: "Yes", exact: true }).waitFor();
   await click(a, "Back / Esc");
+  await a.getByRole("heading", { name: /Alice · Battle/ }).waitFor();
   await until(() => enabled(a, "Space / Fire"), "retreat canceled");
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].selected_guidance), 37);
+  const guidanceStock = await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[37]);
+  await click(a, "Space / Fire");
+  await a.getByLabel("Target X", { exact: true }).waitFor();
+  assert.equal(await enabled(a, "Fire at target"), false);
+  assert.equal(await enabled(a, "← Angle"), false);
+  assert.equal(await enabled(b, "Fire at target"), false);
+  await host.locator("[data-targeting]").waitFor({ state: "visible" });
+  await a.getByRole("button", { name: /^\d+: Bob$/ }).click();
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.pendingTarget?.target?.name) === "Bob", "target draft");
+  const xField = a.getByLabel("Target X", { exact: true });
+  for (const value of ["", "-1", "99999", "1.5"]) {
+    await xField.fill(value);
+    assert.equal(await enabled(a, "Fire at target"), false);
+  }
+  await xField.fill("200"); await xField.press("Tab");
+  await a.getByLabel("Target Y", { exact: true }).fill("100");
+  await a.getByLabel("Target Y", { exact: true }).press("Tab");
+  await until(async () => await host.evaluate(() => JSON.stringify(window.onlineApp.gs.pendingTarget?.point)) === "[200,100]", "coordinate draft");
+  await a.screenshot({ path: `${root}/test-browser/out/online-guidance.png`, fullPage: true });
+  await host.screenshot({ path: `${root}/test-browser/out/online-guidance-host.png` });
   // Lost network on the active player's turn leaves the game waiting.
   await contextA.setOffline(true);
   await pause(800);
   assert.equal(await host.evaluate(() => window.onlineApp.gs.current_shooter.name), "Alice");
   await contextA.setOffline(false);
   await a.reload();
-  await until(() => enabled(a, "Space / Fire"), "rejoin active turn");
+  await until(() => enabled(a, "Fire at target"), "rejoin target selection");
+  assert.equal(await a.getByLabel("Target X", { exact: true }).inputValue(), "200");
+  assert.equal(await a.getByLabel("Target Y", { exact: true }).inputValue(), "100");
   const replacement = await contextA.newPage(); wireErrors(replacement);
   await replacement.goto(joinUrl);
-  await until(() => enabled(replacement, "Space / Fire"), "replacement controller");
+  await until(() => enabled(replacement, "Fire at target"), "replacement controller");
   await until(async () => (await a.locator(".lan-status").textContent()).includes("another tab"), "old controller replaced");
   await a.close(); a = replacement;
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks.length), 3);
+  await click(a, "Cancel targeting");
+  await until(() => enabled(a, "Space / Fire"), "targeting canceled");
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[37]), guidanceStock);
+  assert.equal(await host.locator("[data-targeting]").isVisible(), false);
   // Plasma's charge is host state; cancellation and reconnect preserve ammo.
   await host.evaluate(() => {
     const t = window.onlineApp.gs.tanks[0];
@@ -252,6 +282,20 @@ try {
   await a.reload(); await until(() => enabled(a, "Done"), "rejoin purchasing");
   await click(a, "Done"); await until(() => enabled(b, "Done"), "next shopper"); await click(b, "Done");
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "battle");
+  await host.waitForFunction(() => window.onlineApp.gs.phase === "aim");
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.current_shooter.name), "Bob");
+  await host.evaluate(() => { window.onlineApp.gs.current_shooter.selected_guidance = 37; });
+  const bobStock = await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]);
+  await until(() => enabled(b, "Space / Fire"), "second-round aiming");
+  await click(b, "Space / Fire");
+  await b.getByLabel("Target X", { exact: true }).waitFor();
+  await b.getByRole("button", { name: /^\d+: Alice$/ }).click();
+  await until(() => enabled(b, "Fire at target"), "target ready");
+  const count = await host.evaluate(() => window.shotCount);
+  await click(b, "Fire at target");
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]) === bobStock - 1, "guided shot spends one accessory");
+  assert.equal(await host.evaluate(() => window.shotCount), count + 1);
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.pendingTarget), null);
   await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
   await click(host, "Continue to purchasing");
@@ -267,6 +311,10 @@ try {
   console.error(error);
   for (const context of browser?.contexts() ?? []) {
     for (const page of context.pages()) {
+      if (page.url().includes("online_host.html")) console.error("Host state:", JSON.stringify(await page.evaluate(() => {
+        const gs = window.onlineApp.gs, t = gs.current_shooter;
+        return { phase: gs.phase, mode: gs.cfg.play_mode, pending: !!gs.pendingTarget, selected: t?.selected_guidance, stock: t?.inventory.slice(33, 38) };
+      }).catch(() => null)));
       console.error("Page:", page.url(), (await page.locator("body").innerText().catch(() => "")).slice(0, 2500));
     }
   }

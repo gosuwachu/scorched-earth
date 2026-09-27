@@ -6,7 +6,7 @@ import * as pg from "./pygame";
 import * as W from "./widgets";
 import * as ingame from "./ingame";
 import * as weapons from "./weapons";
-import { HumanController } from "./ui";
+import * as targeting from "./targeting";
 import { ShopScreen, InventoryScreen, SellScreen } from "./screens";
 
 const keyCodes: Record<string, number> = {
@@ -72,13 +72,12 @@ export class RemoteAdapter {
       }
       return;
     }
-    // The phone's explicit target selector completes targeting. The canvas
-    // keyboard router otherwise intercepts every key while guidance is armed,
-    // even after a target is chosen; resume normal aim/fire keys on the phone.
-    if (down && this.app.onlineScreen === "battle" && gs.current_shooter?.guidance_target &&
-      !ingame.in_target_mode(gs as never) && !ingame.in_move_mode(gs as never) &&
-      ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "Enter", "Tab", "BracketLeft", "KeyP", "KeyB", "Minus"].includes(name)) {
-      HumanController.handle(gs as never, { type: pg.KEYDOWN, key: code });
+    if (gs?.pendingTarget) {
+      if (down && name.startsWith("Digit")) {
+        const n = name === "Digit0" ? 10 : Number(name.slice(5));
+        const t = targeting.tanks(gs)[n - 1];
+        if (t) targeting.selectTank(gs, t);
+      }
       return;
     }
     this.app.handleRemote({ type: down ? pg.KEYDOWN : pg.KEYUP, key: code, mod: 0 });
@@ -147,7 +146,7 @@ export class RemoteAdapter {
     this.owner = owner?.ai === 0 ? owner.id : undefined;
     this.enabled = !!this.owner && !!owner?.connected && !this.app.transitioning &&
       (kind === "player" || (kind === "battle" && gs?.phase === "aim"));
-    const identity = [top, panel, gs?.plasma_charge, gs?.phase, gs?.current_shooter, this.owner, this.enabled];
+    const identity = [top, panel, gs?.pendingTarget, gs?.plasma_charge, gs?.phase, gs?.current_shooter, this.owner, this.enabled];
     if (identity.some((v, i) => v !== this.identity[i])) {
       this.identity = identity;
       this.context++;
@@ -165,20 +164,29 @@ export class RemoteAdapter {
         this.add({ id: "plasma-cancel", label: "Cancel", kind: "button" }, () => gs.cancel_plasma_charge());
         return;
       }
+      if (gs.pendingTarget) {
+        const p = gs.pendingTarget;
+        this.add({ id: "target-instructions", kind: "label", label: "Choose a tank or enter a point. Confirm to fire." });
+        for (const [i, tank] of targeting.tanks(gs).entries()) {
+          this.add({ id: `target-tank-${tank.player_index}`, kind: "button", label: `${i + 1}: ${tank.name}` },
+            () => targeting.selectTank(gs, tank));
+        }
+        for (const [axis, label, max, value] of [[0, "Target X", gs.w - 1, p.point?.[0] ?? Math.floor(gs.w / 2)],
+          [1, "Target Y", gs.h - 2, p.point?.[1] ?? Math.floor(gs.h / 2)]] as const) {
+          this.add({ id: `target-${axis}`, kind: "number", label, min: 0, max, step: 1, value }, (v) => {
+            if (typeof v !== "number") return;
+            const point: [number, number] = p.point ? [...p.point] : [Math.floor(gs.w / 2), Math.floor(gs.h / 2)];
+            point[axis] = v; targeting.setPoint(gs, ...point);
+          });
+        }
+        this.add({ id: "target-fire", kind: "button", label: "Fire at target", disabled: !p.point }, () => targeting.confirm(gs));
+        this.add({ id: "target-cancel", kind: "button", label: "Cancel targeting" }, () => targeting.cancel(gs));
+        return;
+      }
       for (const [id, label, key] of [
         ["inventory", "Inventory", "KeyI"], ["tank", "Tank controls", "KeyT"],
         ["move", "Move / stop moving", "KeyF"], ["retreat", "Retreat", "KeyR"],
       ]) this.add({ id, label, kind: "button" }, () => this.key(key, true));
-      if (ingame.weapon_needs_target(gs as never) || ingame.in_target_mode(gs as never)) {
-        this.add({ id: "target", label: "Choose target", kind: "select", value: gs.current_shooter?.guidance_target ?
-          gs.tanks.findIndex((t) => t === gs.current_shooter?.guidance_target) : -1,
-          options: gs.tanks.map((t) => t.name) }, (v) => {
-          if (typeof v === "number" && Number.isInteger(v) && v >= 0 && v < gs.tanks.length) {
-            ingame.enter_target_mode(gs as never);
-            ingame.target_by_number(gs as never, v + 1);
-          }
-        });
-      }
       return;
     }
     if (panel) this.panelControls(panel);
@@ -215,7 +223,7 @@ export class RemoteAdapter {
     const top = this.app.top;
     const title = top instanceof ShopScreen ? "Purchasing" : top instanceof InventoryScreen ? "Inventory" :
       top instanceof ingame.ControlPanelScreen ? "Tank controls" : top instanceof ingame.RetreatScreen ? "Retreat" :
-      screen === "battle" ? "Battle" : screen === "rankings" ? "Round results" : screen === "finished" ? "Final results" : "Host setup";
+      screen === "battle" ? (gs?.pendingTarget ? "Choose Target" : "Battle") : screen === "rankings" ? "Round results" : screen === "finished" ? "Final results" : "Host setup";
     const active = roster.find((p) => p.id === this.owner);
     const result: Record<string, ControllerView> = {};
     roster.forEach((p, i) => {
@@ -224,11 +232,11 @@ export class RemoteAdapter {
       const enabled = this.enabled && p.id === this.owner;
       const message = screen === "rankings" ? "Round complete. Waiting for the host to continue." :
         screen === "finished" ? "Match complete." : screen === "admin" ? "Waiting for the host." :
-        enabled ? (title === "Purchasing" ? "Your shopping turn" : "Your turn") :
+        enabled ? (gs?.pendingTarget ? `Choose Target — ${weapons.ITEMS[gs.pendingTarget.guidance].name}` : title === "Purchasing" ? "Your shopping turn" : "Your turn") :
         active && !active.connected ? `Waiting for ${active.name} to reconnect.` :
         gs?.phase === "aim" || title === "Purchasing" ? `Waiting for ${active?.name ?? gs?.current_shooter?.name ?? "the host"}.` : "Shot in progress…";
       result[p.id] = {
-        context: this.context, enabled, screen: title, message, round: (gs?.round_index ?? 0) + 1,
+        context: this.context, enabled, targeting: !!gs?.pendingTarget, screen: title, message, round: (gs?.round_index ?? 0) + 1,
         tank: t ? { name: t.name, icon: t.tank_icon, health: t.health, cash: t.cash,
           angle: t.angle, power: t.power, weapon: weapons.ITEMS[t.selected_weapon]?.name ?? "",
           ammo: t.inventory[t.selected_weapon] } : undefined,
