@@ -585,7 +585,7 @@ export class MainMenuScreen extends Screen {
     this.cfg = cfg;
     this.w = w;
     this.h = h;
-    // LEFT button column (verbatim label set).  The panel title bar reads
+    // LEFT button column.  The panel title bar reads
     // "Main Menu" (04_menus_ui.md:43); the big title now lives on the right panel.
     const panel_w = 340;
     this.panel = new Panel(40, 40, panel_w, h - 110, "Main Menu", true);
@@ -605,12 +605,12 @@ export class MainMenuScreen extends Screen {
     // 1. ~Start (tag 0) -> begin game
     p.add(new Button(x, y, "~Start", "start_game", null, true));
     y += dy;
-    // Submenu items (push:<name>); labels verbatim with the `...`
+    // Submenu items (push:<name>), retaining the original accelerators.
     const submenuItems: [string, string][] = [
-      ["S~ound...", "sound"], ["~Hardware...", "hardware"],
-      ["~Economics...", "economics"], ["~Landscape...", "landscape"],
-      ["Ph~ysics...", "physics"], ["Play Op~tions...", "play_options"],
-      ["~Weapons...", "weapons"],
+      ["S~ound", "sound"], ["~Hardware", "hardware"],
+      ["~Economics", "economics"], ["~Landscape", "landscape"],
+      ["Ph~ysics", "physics"], ["Play Op~tions", "play_options"],
+      ["~Weapons", "weapons"],
     ];
     for (const [label, name] of submenuItems) {
       p.add(new Label(x, y, label, W.C_TEXT, 15, false, "push:" + name));

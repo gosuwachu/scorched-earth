@@ -38,7 +38,7 @@ export async function checkOptionHelp(page, { click, settled, shot }) {
   ]) {
     await page.setViewportSize(viewport);
     for (const menu of menus) {
-      await click(`${menu}...`);
+      await click(menu);
       assert.ok(await dialog.locator(".ui-option-help").count() > 0, `${menu} has inline help`);
       const bindings = await page.evaluate(() => [...window.onlineApp.top.optionKeys.values()]);
       for (const [key, label] of removedOptions[menu] ?? []) {
@@ -79,14 +79,14 @@ export async function checkOptionHelp(page, { click, settled, shot }) {
       assert.ok(await lastRow.isVisible());
       assert.ok(await lastRow.evaluate((node) => node.getBoundingClientRect().bottom <= node.parentElement.getBoundingClientRect().bottom + 1), "last setting can be scrolled into view");
       await click("Done");
-      assert.equal(await page.evaluate(() => document.activeElement.textContent), `${menu}...`);
+      assert.equal(await page.evaluate(() => document.activeElement.textContent), menu);
     }
   }
 
   await page.setViewportSize(originalViewport);
   for (const [menu, options] of Object.entries(removedOptions)) {
     for (const [key, , shortcut] of options) {
-      await click(`${menu}...`);
+      await click(menu);
       await dialog.getByRole("button", { name: "Done", exact: true }).focus();
       await page.keyboard.press(shortcut);
       await settled();
@@ -102,7 +102,7 @@ export async function checkOptionHelp(page, { click, settled, shot }) {
   }, Object.keys(storedValues));
   assert.deepEqual(roundTripped, storedValues, "hidden settings survive configuration save/load");
 
-  await click("Hardware...");
+  await click("Hardware");
   for (const label of ["Graphics Mode:", "Pointer:", "Firing Delay:"]) {
     assert.ok(await dialog.getByRole("group", { name: label, exact: true }).isVisible());
   }
@@ -112,7 +112,7 @@ export async function checkOptionHelp(page, { click, settled, shot }) {
   assert.equal(await page.evaluate(() => window.onlineApp.cfg.FIRE_DELAY), firingDelay + 1);
   assert.match(await dialog.getByRole("group", { name: "Firing Delay:", exact: true }).getAttribute("aria-describedby"), /^ui-help-/);
   await close();
-  await click("Play Options...");
+  await click("Play Options");
   for (const label of ["Attack File:", "Die File:"]) {
     assert.ok(await dialog.getByRole("textbox", { name: label, exact: true }).isVisible());
   }
@@ -127,7 +127,7 @@ export async function checkOptionHelp(page, { click, settled, shot }) {
     ["Play Options", "Teams:", "TEAM_MODE", ["NONE", "STANDARD", "CORPORATE", "VICIOUS"], ["None:", "Standard:", "Corporate:", "Vicious:"]],
   ]) {
     await page.evaluate(({ key, first }) => { window.onlineApp.cfg[key] = first; }, { key, first: tokens[0] });
-    await click(`${menu}...`);
+    await click(menu);
     const next = page.getByRole("button", { name: `Increase ${label}`, exact: true });
     await next.focus();
     const handle = await next.elementHandle();
@@ -146,7 +146,7 @@ export async function checkOptionHelp(page, { click, settled, shot }) {
   }
 
   await page.setViewportSize({ width: 390, height: 480 });
-  await click("Weapons...");
+  await click("Weapons");
   const list = dialog.locator(".ui-weapon-options-list");
   assert.equal(await list.getByRole("checkbox").count(), 8);
   await click("↓ More weapons");

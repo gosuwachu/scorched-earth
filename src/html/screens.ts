@@ -23,6 +23,24 @@ export class ScreenContent implements Component<boolean> {
     const add = (node: HTMLElement, x: number, y: number, width: number, height?: number) => {
       position(node, p, x, y, width, height); view.body.append(node); this.owned.push(node); return node;
     };
+    if (screen instanceof S.MainMenuScreen) {
+      view.element.classList.add("ui-menu-panel");
+      const menu = el("div", "", "ui-menu-actions");
+      const start = el("div");
+      const settings = el("div", "", "ui-menu-settings");
+      settings.setAttribute("role", "group"); settings.setAttribute("aria-label", "Settings");
+      const save = el("div");
+      const about = el("div");
+      menu.append(start, settings, save, about);
+      view.body.append(menu); this.owned.push(menu);
+      for (const widget of p.widgets) {
+        if (widget.action === "start_game") view.place(widget, start);
+        else if (widget.action === "save_changes") view.place(widget, save);
+        else if (widget.action === "register") view.place(widget, about);
+        else if (typeof widget.action === "string" && widget.action.startsWith("push:")) view.place(widget, settings);
+      }
+      for (const control of settings.querySelectorAll("button")) control.classList.remove("ui-flat");
+    }
     if (screen instanceof S.RegistrationScreen) {
       const text = el("div", S.REGISTRATION_LINES.join("\n"), "ui-status");
       add(text, screen._text_x, screen._text_y, p.rect.w - 48);

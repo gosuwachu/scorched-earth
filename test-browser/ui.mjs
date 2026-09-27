@@ -6,6 +6,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { checkOptionHelp } from "./option_help.mjs";
 import { checkGuidance } from "./guidance_ui.mjs";
+import { checkMenuLayout, checkPlayerGrid } from "./menu_ui.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.UI_TEST_URL || "http://127.0.0.1:4320";
 let server, browser;
@@ -34,13 +35,14 @@ try {
   const shot = async (name) => page.screenshot({ path: `${root}/test-browser/out/ui-${name}.png` });
   mkdirSync(`${root}/test-browser/out`, { recursive: true });
   assert.equal(await page.getByRole("group", { name: /^(Players|Rounds):$/ }).count(), 0);
+  await checkMenuLayout(page);
   await shot("menu");
   await page.keyboard.press("F11");
   await page.waitForFunction(() => document.fullscreenElement === document.documentElement);
   assert.ok(await page.getByRole("button", { name: "Start", exact: true }).isVisible());
   await page.keyboard.press("F11"); await page.waitForFunction(() => !document.fullscreenElement);
   // Every option screen uses native controls and returns focus to its opener.
-  for (const name of ["Sound...", "Hardware...", "Economics...", "Landscape...", "Physics...", "Play Options...", "Weapons..."]) {
+  for (const name of ["Sound", "Hardware", "Economics", "Landscape", "Physics", "Play Options", "Weapons"]) {
     await click(name);
     assert.equal(await page.locator("dialog[open]").count(), 1);
     await shot(name.toLowerCase().replace(/[^a-z]/g, ""));
@@ -48,8 +50,13 @@ try {
     assert.equal(await page.locator("dialog[open]").count(), 0);
     assert.equal(await page.evaluate(() => document.activeElement.textContent), name);
   }
+  await page.getByRole("button", { name: "Sound", exact: true }).focus();
+  await page.keyboard.press("o"); await settled();
+  assert.ok(await page.getByRole("dialog", { name: "Sound", exact: true }).isVisible());
+  await page.keyboard.press("Escape"); await settled();
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), "Sound");
   await checkOptionHelp(page, { click, settled, shot });
-  await click("Play Options...");
+  await click("Play Options");
   const tunneling = page.getByRole("checkbox", { name: "Tunneling", exact: true });
   assert.ok(await tunneling.isChecked(), "tunneling defaults ON");
   await tunneling.uncheck();
@@ -63,17 +70,18 @@ try {
   await shot("tunneling"); await click("Done");
   await click("About"); assert.ok(await page.getByText("Register Scorched Earth", { exact: true }).isVisible()); await click("OK");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await click("Sound..."); assert.equal(await page.evaluate(() => window.onlineApp.transitioning), false);
+  await click("Sound"); assert.equal(await page.evaluate(() => window.onlineApp.transitioning), false);
   await page.keyboard.press("Tab"); assert.equal(await page.evaluate(() => document.activeElement.type), "checkbox");
   await page.keyboard.press("Shift+Tab"); assert.equal(await page.evaluate(() => document.activeElement.textContent), "Done");
   await page.keyboard.press("Escape");
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  // Match settings live in the mode/local dialogs and reject invalid integers.
+  // Match settings live in the mode/local dialogs; rounds reject invalid integers.
   await page.evaluate(() => { Object.assign(window.onlineApp.cfg, { MAXPLAYERS: 2, INITIAL_CASH: 100000, MAXROUNDS: 2, PLAY_ORDER: "ROUND-ROBIN", SOUND: "OFF", FALLING_TANKS: "OFF" }); });
   const newGame = page.getByRole("dialog", { name: "New game", exact: true });
   const localGame = page.getByRole("dialog", { name: "Local game", exact: true });
   const rounds = page.getByRole("spinbutton", { name: "Rounds", exact: true });
-  const players = page.getByRole("spinbutton", { name: "Players", exact: true });
+  const players = localGame.getByRole("group", { name: "Players", exact: true });
+  const playerCount = (count) => players.getByRole("radio", { name: String(count), exact: true });
   await click("Start");
   assert.equal(await rounds.inputValue(), "2");
   assert.equal(await players.count(), 0);
@@ -113,26 +121,38 @@ try {
   }
   await click("Local");
   assert.equal(await rounds.count(), 0);
-  assert.equal(await players.inputValue(), "2");
+  assert.ok(await playerCount(2).isChecked());
   assert.equal(await page.evaluate(() => document.activeElement.textContent), "Continue");
-  await players.fill("3");
+  await checkPlayerGrid(page);
+  await playerCount(3).check();
   for (const cancel of ["Back", "Escape"]) {
     if (cancel === "Back") await click("Back"); else await page.keyboard.press("Escape");
     assert.equal(await page.locator("dialog[open]").count(), 0);
     assert.equal(await page.evaluate(() => document.activeElement.textContent), "Start");
-    await click("Start"); await click("Local"); assert.equal(await players.inputValue(), "3");
+    await click("Start"); await click("Local"); assert.ok(await playerCount(3).isChecked());
   }
-  for (const value of ["", "1", "11", "2.5"]) {
-    await players.fill(value); await players.press("Enter");
-    assert.ok(await localGame.isVisible());
-    assert.equal(await page.evaluate(() => window.onlineApp.cfg.MAXPLAYERS), 3);
+  for (let count = 2; count <= 10; count++) {
+    // Click the label text, away from the native radio itself.
+    await players.locator("label span").filter({ hasText: new RegExp(`^${count}$`) }).click();
+    assert.ok(await playerCount(count).isChecked());
+    assert.equal(await players.locator("input:checked").count(), 1);
+    assert.equal(await page.evaluate(() => window.onlineApp.cfg.MAXPLAYERS), count);
   }
-  for (const value of ["2", "10", "3"]) {
-    await players.fill(value);
-    assert.equal(await page.evaluate(() => window.onlineApp.cfg.MAXPLAYERS), Number(value));
-  }
+  await playerCount(3).check();
+  await localGame.getByRole("button", { name: "Continue", exact: true }).focus();
+  await page.keyboard.press("Shift+Tab");
+  assert.ok(await playerCount(3).evaluate((node) => node === document.activeElement));
+  await page.keyboard.press("Shift+Tab"); assert.equal(await page.evaluate(() => document.activeElement.textContent), "Back");
+  await page.keyboard.press("Tab");
+  assert.ok(await playerCount(3).evaluate((node) => node === document.activeElement), "Tab wraps to the selected radio");
+  await page.keyboard.press("ArrowRight"); assert.ok(await playerCount(4).isChecked());
+  assert.equal(await page.evaluate(() => window.onlineApp.cfg.MAXPLAYERS), 4);
+  await page.keyboard.press("ArrowLeft"); assert.ok(await playerCount(3).isChecked());
+  await playerCount(5).focus(); await page.keyboard.press("Space"); assert.ok(await playerCount(5).isChecked());
+  await playerCount(3).check();
+  await page.keyboard.press("Tab"); assert.equal(await page.evaluate(() => document.activeElement.textContent), "Continue");
   await shot("local-game");
-  await players.press("Enter"); await settled();
+  await playerCount(3).press("Enter"); await settled();
   assert.equal(await page.evaluate(() => window.onlineApp.top.player_index), 0);
   assert.ok(await page.getByRole("heading", { name: "Player 1 (of 3)", exact: true }).isVisible());
   // Native typing, selection and paste do not trigger menu accelerators.
@@ -299,16 +319,21 @@ try {
   await page.evaluate(() => { window.onlineApp._act("to_menu"); window.onlineApp.cfg.PLAY_MODE = "SEQUENTIAL"; });
   // Narrow layouts keep all controls reachable without horizontal page scrolling.
   await page.evaluate(() => window.onlineApp._act("to_menu")); await settled();
+  for (const [width, height] of [[320, 568], [390, 844], [800, 480]]) {
+    await page.setViewportSize({ width, height });
+    await checkMenuLayout(page); await shot(`menu-${width}x${height}`);
+  }
   await page.setViewportSize({ width: 390, height: 844 });
-  await click("Economics..."); await shot("mobile-options");
+  await click("Economics"); await shot("mobile-options");
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   const done = page.getByRole("button", { name: "Done", exact: true }); await done.scrollIntoViewIfNeeded(); await done.click(); await settled();
   await click("Start"); await shot("mobile-new-game");
   await page.setViewportSize({ width: 800, height: 480 }); await shot("short-new-game");
-  await page.setViewportSize({ width: 390, height: 844 }); await rounds.press("Enter"); await shot("mobile-local-game");
+  await page.setViewportSize({ width: 390, height: 844 }); await rounds.press("Enter"); await checkPlayerGrid(page); await shot("mobile-local-game");
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-  await page.setViewportSize({ width: 800, height: 480 }); await shot("short-local-game");
-  await page.setViewportSize({ width: 390, height: 844 }); await players.fill("2"); await click("Continue"); await shot("mobile-setup");
+  await page.setViewportSize({ width: 800, height: 480 }); await checkPlayerGrid(page); await shot("short-local-game");
+  await page.setViewportSize({ width: 320, height: 568 }); await checkPlayerGrid(page); await shot("narrow-local-game");
+  await page.setViewportSize({ width: 390, height: 844 }); await playerCount(2).check(); await click("Continue"); await shot("mobile-setup");
   assert.ok(await nameInput.isVisible());
   await page.setViewportSize({ width: 800, height: 480 }); await shot("short-setup"); await click("Done"); await click("Done");
   await shot("short-shop");

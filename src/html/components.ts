@@ -67,8 +67,14 @@ export function dialog(title: string, options: { wide?: boolean; cancel?: () => 
   if (options.className) element.classList.add(...options.className.split(" "));
   element.addEventListener("keydown", (event) => {
     if (event.key !== "Tab") return;
-    const controls = Array.from(element.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex='0']"))
+    const visible = Array.from(element.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex='0']"))
       .filter((node) => node.getClientRects().length > 0);
+    // Native radio groups contribute one Tab stop: the selected (or first) input.
+    const controls = visible.filter((node) => {
+      if (!(node instanceof HTMLInputElement) || node.type !== "radio" || !node.name) return true;
+      const group = visible.filter((other): other is HTMLInputElement => other instanceof HTMLInputElement && other.type === "radio" && other.name === node.name && other.form === node.form);
+      return node === (group.find((input) => input.checked) ?? group[0]);
+    });
     const first = controls[0];
     const last = controls[controls.length - 1];
     if (event.shiftKey && (document.activeElement === first || document.activeElement === element)) {

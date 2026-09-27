@@ -117,6 +117,36 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
 
 .ui-local-dialog::backdrop { background: rgb(0 0 0 / 55%); }
 
+/* The main menu keeps its widget actions while laying them out in normal flow. */
+.ui-menu-panel { display: flex; flex-direction: column; }
+.ui-menu-panel > .ui-panel-body { display: block; flex: 1; min-height: 0; padding: 16px; overflow: auto; }
+.ui-menu-actions { width: min(280px, 100%); margin: 0 auto; display: grid; gap: 16px; }
+.ui-menu-settings { display: grid; gap: 4px; }
+.ui-menu-actions .ui-widget {
+  position: static !important; width: 100% !important; max-width: none !important;
+  min-height: 28px !important; padding: 3px 8px; text-align: center;
+}
+.ui-menu-actions [data-ui-action=start_game] {
+  min-height: 44px !important; color: white; background: #226b32;
+  border-color: #79b785 #123e1c #123e1c #79b785;
+}
+.ui-menu-actions [data-ui-action=start_game]:hover:not(:disabled) { background: #2b7b3e; }
+.ui-menu-actions [data-ui-action=start_game]:active:not(:disabled) {
+  background: #195426; border-color: #123e1c #79b785 #79b785 #123e1c;
+}
+
+.ui-player-count { margin: 0; padding: 0; border: 0; min-width: 0; }
+.ui-player-count legend { padding: 0; margin-bottom: 8px; }
+.ui-player-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ui-player-choices label {
+  display: flex; align-items: center; justify-content: center; min-height: 44px; margin: 0; padding: 6px;
+  border: 2px solid; border-color: var(--ui-hi) var(--ui-lo) var(--ui-lo) var(--ui-hi);
+  cursor: pointer; touch-action: manipulation;
+}
+.ui-player-choices label:hover { background: var(--ui-hi); }
+.ui-player-choices label:has(:checked) { background: var(--ui-hi); border-color: var(--ui-selection); }
+.ui-player-choices label:has(:focus-visible) { outline: 2px solid var(--ui-selection); outline-offset: 2px; }
+
 /* Settings use normal flow so help text can wrap at every game resolution. */
 .ui-options { inset: 0; margin: auto; width: min(600px, calc(100vw - 16px)); overflow: hidden; }
 .ui-options[open] { display: flex; }

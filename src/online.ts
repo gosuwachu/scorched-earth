@@ -259,10 +259,20 @@ function gameDialogShortcuts(box: OnlineDialog, actions: Record<string, HTMLButt
 function showLocalGame(app: App, returnFocus: HTMLElement | null): void {
   const cancel = () => { box.close(); returnFocus?.focus(); };
   const box = dialog("Local game", { cancel });
-  const players = gameNumberInput(app.cfg.MAXPLAYERS, 2, 10, (value) => { app.cfg.MAXPLAYERS = value; });
-  box.body.append(field("Players", players));
+  const players = el("fieldset", "", "ui-player-count");
+  const choices = el("div", "", "ui-player-choices");
+  const inputs = Array.from({ length: 9 }, (_, i) => {
+    const count = i + 2;
+    const input = el("input"); input.type = "radio";
+    input.name = `${box.element.getAttribute("aria-labelledby")}-players`;
+    input.value = String(count); input.required = true; input.checked = app.cfg.MAXPLAYERS === count;
+    input.onchange = () => { if (input.checked) app.cfg.MAXPLAYERS = count; };
+    const label = el("label"); label.append(input, el("span", String(count))); choices.append(label);
+    return input;
+  });
+  players.append(el("legend", "Players"), choices); box.body.append(players);
   const next = button("Continue", () => {
-    if (!players.reportValidity()) return;
+    if (!inputs[0].reportValidity()) return;
     box.close(); app.startLocal();
   }, "c");
   const back = button("Back", cancel, "b");
