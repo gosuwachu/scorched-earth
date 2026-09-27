@@ -1051,6 +1051,7 @@ export class ControlPanelScreen implements Screen {
   // private selection-state mirrors built each _build()
   private _g_slots: (number | null)[] = [];
   private _s_slots: number[] = [];
+  private _shield_selector!: widgets.Selector;
 
   constructor(state: GameState, tank: Tank) {
     this.state = state;
@@ -1083,11 +1084,15 @@ export class ControlPanelScreen implements Screen {
     this.tank.selected_guidance = this._g_slots[pyMod(i, this._g_slots.length)];
   }
 
-  // ---- shields: cycle owned shield slots (+ None); arm the chosen one ----
+  // ---- shields: cycle owned/active shields (+ None); spend one to deploy ----
   _shield_options(): string[] {
     const opts: string[] = ["None"];
     const slots: number[] = [0];
     for (const slot of weapons.SHIELD_SLOTS) {
+      if (!(this.tank.inventory[slot] > 0 ||
+            (this.tank.shield_item === slot && this.tank.shield_hp > 0))) {
+        continue;
+      }
       opts.push(weapons.ITEMS[slot].name);
       slots.push(slot);
     }
@@ -1096,28 +1101,42 @@ export class ControlPanelScreen implements Screen {
   }
 
   _s_index(): number {
-    const cur = this.tank.shield_item;
+    const cur = this.tank.shield_hp > 0 ? this.tank.shield_item : 0;
     const i = this._s_slots.indexOf(cur);
     return i >= 0 ? i : 0;
   }
 
   _s_set(i: number): void {
-    const slot = this._s_slots[pyMod(i, this._s_slots.length)];
+    if (!Number.isInteger(i) || i < 0 || i >= this._s_slots.length) {
+      return;
+    }
+    const slot = this._s_slots[i];
     const t = this.tank;
     if (slot === 0) {
       stopShieldFade(this.state, t);
       t.shield_item = 0;
       t.shield_hp = 0;
-      return;
+      t.shield_push = false;
+      t.shield_deflect = false;
+      t.shield_laserproof = false;
+      t.shield_failproof = false;
+    } else if (slot !== t.shield_item || t.shield_hp <= 0) {
+      // Recheck live stock: the options may have been built before it changed.
+      // Reselecting an active shield must neither spend another nor repair it.
+      if (t.inventory[slot] > 0) {
+        const p = weapons.ITEMS[slot].params;
+        t.inventory[slot] -= 1;
+        t.shield_item = slot;
+        t.shield_hp = typeof p["hp"] === "number" ? (p["hp"] as number) : 100;
+        t.shield_push = Boolean(p["push"]);
+        t.shield_deflect = Boolean(p["deflect"]);
+        t.shield_laserproof = Boolean(p["laserproof"]);
+        t.shield_failproof = Boolean(p["failproof"]);
+        startShieldFade(this.state, t, +1);
+      }
     }
-    const p = weapons.ITEMS[slot].params;
-    t.shield_item = slot;
-    t.shield_hp = typeof p["hp"] === "number" ? (p["hp"] as number) : 100;
-    t.shield_push = Boolean(p["push"]);
-    t.shield_deflect = Boolean(p["deflect"]);
-    t.shield_laserproof = Boolean(p["laserproof"]);
-    t.shield_failproof = Boolean(p["failproof"]);
-    startShieldFade(this.state, t, +1);
+    // Keep the widget instance so native controls retain keyboard focus.
+    this._shield_selector.options = this._shield_options();
   }
 
   // ---- battery discharge: spend one battery for +10 health (section 7) ----
@@ -1227,18 +1246,17 @@ export class ControlPanelScreen implements Screen {
       ),
     );
     y += row;
-    // Shields: cycle owned shields and arm the chosen one
-    p.add(
-      new widgets.Selector(
-        x,
-        y,
-        "Shields",
-        this._shield_options(),
-        () => this._s_index(),
-        (i: number) => this._s_set(i),
-        pw - 32,
-      ),
+    // Shields: cycle owned/active shields and deploy the chosen one.
+    this._shield_selector = new widgets.Selector(
+      x,
+      y,
+      "Shields",
+      this._shield_options(),
+      () => this._s_index(),
+      (i: number) => this._s_set(i),
+      pw - 32,
     );
+    p.add(this._shield_selector);
     y += row + 6;
 
     // exit / commit buttons: ~Launch / Engage / ~Quit  (NO ~Go)

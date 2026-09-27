@@ -166,6 +166,60 @@ try {
   assert.equal(await page.evaluate(() => window.onlineApp.gs.current_shooter.health), 90);
   assert.equal(await page.evaluate(() => document.activeElement.dataset.uiAction), "discharge");
   await shot("tank-controls"); await click("Quit");
+  // Shield choices track stock; deploying spends one and keeps keyboard focus.
+  await page.evaluate(async () => {
+    const app = window.onlineApp, tank = app.gs.current_shooter;
+    const w = await import("/src/weapons.ts");
+    for (const slot of w.SHIELD_SLOTS) tank.inventory[slot] = 0;
+    tank.shield_item = tank.shield_hp = 0;
+    tank.shield_push = tank.shield_deflect = tank.shield_laserproof = tank.shield_failproof = false;
+    app._act("push:control");
+  });
+  await settled();
+  const shields = page.getByRole("group", { name: "Shields", exact: true });
+  const shieldOutput = shields.locator("output");
+  const shieldState = () => page.evaluate(async () => {
+    const t = window.onlineApp.gs.current_shooter, w = await import("/src/weapons.ts");
+    return { item: t.shield_item, hp: t.shield_hp, stock: w.SHIELD_SLOTS.map((slot) => t.inventory[slot]) };
+  });
+  for (const action of ["Increase Shields", "Decrease Shields"]) {
+    await click(action);
+    assert.equal(await shieldOutput.textContent(), "None");
+    assert.deepEqual(await shieldState(), { item: 0, hp: 0, stock: [0, 0, 0, 0, 0] });
+  }
+  await click("Quit");
+  await page.evaluate(async () => {
+    const app = window.onlineApp, w = await import("/src/weapons.ts");
+    app.gs.current_shooter.inventory[w.SLOT_FORCE_SHIELD] = 1;
+    app.gs.current_shooter.inventory[w.SLOT_SUPER_MAG] = 1;
+    app._act("push:control");
+  });
+  await click("Increase Shields");
+  assert.equal(await shieldOutput.textContent(), "Force Shield");
+  assert.deepEqual(await shieldState(), { item: 42, hp: 100, stock: [0, 0, 0, 0, 1] });
+  // Reopening must display a damaged active shield even with no spares.
+  await page.evaluate(() => { window.onlineApp.gs.current_shooter.shield_hp = 37; });
+  await click("Quit");
+  await page.evaluate(() => window.onlineApp._act("push:control")); await settled();
+  assert.equal(await shieldOutput.textContent(), "Force Shield");
+  assert.deepEqual(await shieldState(), { item: 42, hp: 37, stock: [0, 0, 0, 0, 1] });
+  const increaseShields = page.getByRole("button", { name: "Increase Shields", exact: true });
+  await increaseShields.focus(); await page.keyboard.press("ArrowRight");
+  assert.equal(await shieldOutput.textContent(), "Super Mag");
+  assert.deepEqual(await shieldState(), { item: 44, hp: 200, stock: [0, 0, 0, 0, 0] });
+  assert.ok(await increaseShields.evaluate((node) => node === document.activeElement));
+  await shot("shield-inventory");
+  await page.keyboard.press("ArrowLeft");
+  assert.equal(await shieldOutput.textContent(), "None");
+  assert.ok(await increaseShields.evaluate((node) => node === document.activeElement));
+  await page.keyboard.press("ArrowRight");
+  assert.equal(await shieldOutput.textContent(), "None");
+  assert.deepEqual(await shieldState(), { item: 0, hp: 0, stock: [0, 0, 0, 0, 0] });
+  assert.deepEqual(await page.evaluate(() => {
+    const t = window.onlineApp.gs.current_shooter;
+    return [t.shield_push, t.shield_deflect, t.shield_laserproof, t.shield_failproof];
+  }), [false, false, false, false]);
+  await click("Quit");
   // Sell, reassign and team dialogs use the same HTML adapter and real mutations.
   await page.evaluate(async () => { const app = window.onlineApp; const s = await import("/src/screens.ts"); const w = await import("/src/weapons.ts"); app.push(new s.SellScreen(app.gs, app.gs.current_shooter, w.SLOT_BATTERY, app.w, app.h)); });
   await settled(); const sellCash = await page.evaluate(() => window.onlineApp.gs.current_shooter.cash);

@@ -29,7 +29,8 @@
  *   scorch/ingame.py (the TS is a line-for-line port of it). Each test asserts a
  *   concrete RESULT: the action string returned AND the exact state mutation (tank
  *   fields, cfg, state.fired / state.retreated / state.info_box, shield arming,
- *   discharge math). No assertion is a bare "it ran"; coverage is the byproduct.
+ *   discharge math). Shield inventory enforcement also covers the browser panel's
+ *   corrected deployment rules. No assertion is a bare "it ran".
  *
  * EPSILON POLICY: every asserted value is an integer, a string, a boolean, null, or
  *   an exact rect -- all .toBe / .toEqual. The only geometry is integer //-layout
@@ -586,13 +587,131 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     expect(t.selected_guidance).toBe(FIRST_GUID);
   });
 
-  it("the Shields selector arms the first owned shield and copies its HP + push flag", () => {
-    const { cp, t } = panelFor({ shield_item: 0, shield_hp: 0 });
-    cp.handle(md(center(byLabel(cp.panel, "Shields")), 1)); // None -> first shield
-    expect(t.shield_item).toBe(FIRST_SHIELD);
-    const params = weapons.ITEMS[FIRST_SHIELD].params;
-    expect(t.shield_hp).toBe(typeof params["hp"] === "number" ? params["hp"] : 100);
-    expect(t.shield_push).toBe(Boolean(params["push"]));
+  it("the Shields selector stays at None with no inventory in either direction", () => {
+    const { cp, t } = panelFor();
+    const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
+    expect(selector.options).toEqual(["None"]);
+    cp.handle(md(center(selector), 1));
+    cp.handle(md(center(selector), 3));
+    expect([t.shield_item, t.shield_hp, selector.get_idx()]).toEqual([0, 0, 0]);
+    expect(t.inventory).toEqual(new Array<number>(weapons.NUM_ITEMS).fill(0));
+  });
+
+  it.each([
+    { slot: weapons.SLOT_MAG_DEFLECTOR, hp: 55, push: true, deflect: false, laserproof: false },
+    { slot: weapons.SLOT_SHIELD, hp: 100, push: false, deflect: false, laserproof: false },
+    { slot: weapons.SLOT_FORCE_SHIELD, hp: 100, push: false, deflect: true, laserproof: false },
+    { slot: weapons.SLOT_HEAVY_SHIELD, hp: 150, push: false, deflect: false, laserproof: false },
+    { slot: weapons.SLOT_SUPER_MAG, hp: 200, push: true, deflect: false, laserproof: true },
+  ])("deploying shield $slot consumes one and sets its HP and flags", ({ slot, hp, push, deflect, laserproof }) => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[slot] = 2;
+    inv[weapons.SLOT_BATTERY] = 3;
+    const { cp, t } = panelFor({ inv });
+    t.shield_push = t.shield_deflect = t.shield_laserproof = t.shield_failproof = true;
+    const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
+    expect(selector.options).toEqual(["None", weapons.ITEMS[slot].name]);
+    cp.handle(md(center(selector), 1));
+    expect(t).toMatchObject({
+      shield_item: slot, shield_hp: hp, shield_push: push, shield_deflect: deflect,
+      shield_laserproof: laserproof, shield_failproof: false,
+    });
+    inv[slot] -= 1;
+    expect(t.inventory).toEqual(inv);
+    expect(selector.options[selector.get_idx()]).toBe(weapons.ITEMS[slot].name);
+  });
+
+  it("cycles only owned shields in catalog order, forward and backward", () => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SHIELD] = 2;
+    inv[weapons.SLOT_SUPER_MAG] = 2;
+    const { cp, t } = panelFor({ inv });
+    const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
+    expect(selector.options).toEqual(["None", "Shield", "Super Mag"]);
+    for (const [button, slot] of [[1, weapons.SLOT_SHIELD], [1, weapons.SLOT_SUPER_MAG],
+      [3, weapons.SLOT_SHIELD], [3, 0], [3, weapons.SLOT_SUPER_MAG]]) {
+      cp.handle(md(center(selector), button));
+      expect(t.shield_item).toBe(slot);
+    }
+    expect([t.inventory[weapons.SLOT_SHIELD], t.inventory[weapons.SLOT_SUPER_MAG]]).toEqual([0, 0]);
+    expect(selector.options).toEqual(["None", "Super Mag"]);
+  });
+
+  it.each([0, 2])("keeps a damaged active shield with %i spares without spending or repairing on reselection", (spares) => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_FORCE_SHIELD] = spares;
+    const { cp, t } = panelFor({ inv, shield_item: weapons.SLOT_FORCE_SHIELD, shield_hp: 37 });
+    t.shield_deflect = true;
+    const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
+    expect(selector.options).toEqual(["None", "Force Shield"]);
+    expect(selector.get_idx()).toBe(1);
+    selector.set_idx(selector.get_idx());
+    expect([t.shield_item, t.shield_hp, t.shield_deflect]).toEqual([weapons.SLOT_FORCE_SHIELD, 37, true]);
+    expect(t.inventory).toEqual(inv);
+  });
+
+  it.each([0, 1])("treats a depleted shield as inactive with %i spares", (spares) => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SHIELD] = spares;
+    const { cp, t } = panelFor({ inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 0 });
+    const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
+    expect(selector.get_idx()).toBe(0);
+    expect(selector.options).toEqual(spares ? ["None", "Shield"] : ["None"]);
+    cp.handle(md(center(selector), 1));
+    expect([t.shield_item, t.shield_hp]).toEqual(spares ? [weapons.SLOT_SHIELD, 100] : [0, 0]);
+    expect(t.inventory[weapons.SLOT_SHIELD]).toBe(0);
+  });
+
+  it("replaces and removes shields without refunding or restoring consumed stock", () => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SHIELD] = inv[weapons.SLOT_SUPER_MAG] = 1;
+    const { cp, t } = panelFor({ inv });
+    const panel = cp.panel;
+    const selector = byLabel(panel, "Shields") as widgets.Selector;
+    cp.handle(md(center(selector), 1)); // last Shield is active
+    expect(selector.options).toEqual(["None", "Shield", "Super Mag"]);
+    cp.handle(md(center(selector), 1)); // replace it with the last Super Mag
+    expect(selector.options).toEqual(["None", "Super Mag"]);
+    expect(selector.get_idx()).toBe(1);
+    cp.handle(md(center(selector), 3)); // None discards the active shield
+    expect(selector.options).toEqual(["None"]);
+    expect(selector.get_idx()).toBe(0);
+    cp.handle(md(center(selector), 1));
+    cp.handle(md(center(selector), 3));
+    expect(t).toMatchObject({
+      shield_item: 0, shield_hp: 0, shield_push: false, shield_deflect: false,
+      shield_laserproof: false, shield_failproof: false,
+    });
+    expect(t.inventory).toEqual(new Array<number>(weapons.NUM_ITEMS).fill(0));
+    expect(cp.panel).toBe(panel);
+    expect(byLabel(cp.panel, "Shields")).toBe(selector);
+  });
+
+  it("redeploying after None spends a spare", () => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SHIELD] = 1;
+    const { cp, t } = panelFor({ inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 37 });
+    const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
+    cp.handle(md(center(selector), 3));
+    expect(t.inventory[weapons.SLOT_SHIELD]).toBe(1);
+    cp.handle(md(center(selector), 1));
+    expect([t.shield_hp, t.inventory[weapons.SLOT_SHIELD]]).toEqual([100, 0]);
+  });
+
+  it("rejects stale unavailable selections and invalid indices without changing the tank", () => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SUPER_MAG] = 1;
+    const { cp, t } = panelFor({ inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 37 });
+    const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
+    t.inventory[weapons.SLOT_SUPER_MAG] = 0;
+    const before = { ...t, inventory: t.inventory.slice() };
+    selector.set_idx(2);
+    expect({ ...t }).toEqual(before);
+    expect(selector.options).toEqual(["None", "Shield"]);
+    for (const i of [-1, 2, 0.5, NaN, Infinity]) {
+      selector.set_idx(i);
+      expect({ ...t }).toEqual(before);
+    }
   });
 
   it("Parachutes / Triggers toggles flip the tank flags", () => {
