@@ -883,13 +883,14 @@ function startShieldDemo(item: number, scenario: string): void {
   gs.tanks.forEach((t, i) => { t.x = i ? W >> 1 : 100; t.y = ground - 1; });
   const target = gs.tanks[1];
   const launched = scenario.startsWith("launch-");
-  if (launched) target.x = scenario === "launch-slow" ? 160 : 430;
+  if (launched) target.x = scenario === "launch-slow" ? 160 : scenario === "launch-medium" ? 430 : 790;
   target.shield_hp = 0; target.inventory.fill(0);
   if (item) {
     target.inventory[item] = 1;
     if (launched) {
       const panel = new ingame.ControlPanelScreen(gs as unknown as ingame.GameState, target);
       panel._s_set(panel._shield_options().indexOf(ITEMS[item].name));
+      panel.dispatchAction("engage");
     } else gs._arm_best_shield(target, false);
   }
   // Flight captures start with an already deployed shield; palette captures
@@ -901,13 +902,13 @@ function startShieldDemo(item: number, scenario: string): void {
   let p: Projectile;
   if (launched) {
     const shooter = gs.current_shooter;
-    shooter.angle = scenario === "launch-slow" ? 60 : 70;
-    shooter.power = scenario === "launch-slow" ? 180 : 499;
+    shooter.angle = scenario === "launch-slow" ? 60 : scenario === "launch-medium" ? 70 : 80;
+    shooter.power = scenario === "launch-slow" ? 180 : scenario === "launch-medium" ? 499 : 1000;
     shooter.selected_weapon = 0; gs.phase = AIM;
     [p] = gs.fire();
   } else p = new Projectile(gs.current_shooter, ITEMS[0], target.x + (side ? side * 16 : top ? 0 : -4),
     target.y - (side ? 0 : 40), side ? -side * 300 : top ? 0 : 10,
-    side ? 0 : scenario === "fast" ? -400 : top ? -300 : -100);
+    side ? 0 : scenario === "fast" ? -800 : top ? -300 : -100);
   gs.projectiles = [p];
   shieldDemo = { gs, p, renderer: freshRenderer(gs), surf: newSurf(), frame: 0, descending: false, lifted: false };
   advanceShieldDemo(0);
@@ -949,6 +950,7 @@ function advanceShieldVisualDemo(action: string, value = 0): StateMeta {
     if (value) t.inventory[value] = 1;
     const panel = new ingame.ControlPanelScreen(gs as unknown as ingame.GameState, t);
     panel._s_set(value ? panel._shield_options().indexOf(ITEMS[value].name) : 0);
+    panel.dispatchAction("engage");
   }
   if (action === "team") t.color = value;
   if (action === "move") t.x += value;

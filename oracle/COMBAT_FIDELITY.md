@@ -6,9 +6,10 @@ The installed game and DOSBox configuration were not modified. Runtime checks
 used a disposable copy under `/tmp`. The address convention is documented in
 [WEAPON_FIDELITY.md](WEAPON_FIDELITY.md).
 
-The original Python port misidentified several handlers. Its vectors remain
-useful for unchanged subsystems, but incorrect instant explosions and guessed
-weapon effects are no longer treated as reference behavior.
+The original DOS executable is the sole fidelity reference. The Python port
+misidentified several handlers; its remaining vectors are legacy regression
+coverage, not evidence of DOS accuracy. New comparisons use original DOS runtime
+captures or directly checked executable/disassembly evidence.
 
 ## Weapons and shared effects
 
@@ -103,8 +104,9 @@ does not retain laser protection.
 `2a4a:28b4..2a0d` applies magnetic lift to enemy shells with nonzero horizontal
 velocity inside `abs(round(px - tank.x)) <= 15` and
 `0 < round(tank.y - py) <= (height - 1) / 4` (integer height division).
-Each callback adds `50 / FIRE_DELAY` to upward velocity, or 50 when the delay
-is zero. Both magnetic tiers use the same push. Slow descending shots can turn
+Each DOS callback adds `50 / FIRE_DELAY` to upward velocity, or 50 when the delay
+is zero. This must be converted to the browser timestep as described below; it
+is not an impulse to apply once per browser step. Both magnetic tiers use the same push. Slow descending shots can turn
 upward; a fast shot can penetrate the field. Mag Deflector's arcs do not stop
 that shot, while Super Mag's ring can intercept it. Neither is a radial bounce.
 The flight loop runs swept contact/Force reflection first, magnetic callbacks
@@ -125,10 +127,10 @@ a later incoming return reflects and pays again.
 
 `extract_shield_reference.py` verifies the executable checksum and generates
 `test/fixtures/dos_shields.json` using independent static transcriptions of
-magnetic motion and DOS's trigonometric reflection. These are **not DOS runtime
-traces**. Magnetic samples explicitly use the existing browser timestep of
-1/1920 second; the original CPU-adaptive cadence is not emulated, so identical
-magnetic trajectories across arbitrary DOS machine speeds are not claimed.
+raw magnetic increments and DOS's trigonometric reflection. These are **not DOS
+runtime traces**. The old synthetic flight vectors, which incorrectly applied
+a DOS impulse at browser cadence, have been removed. Actual runtime timing and
+flight observations are now retained separately in `dos_magnet.json`.
 Tests cover all tiers, field boundaries, complete slow/fast flights, reflection
 and re-entry, depletion, laser recharge, and repeatable trajectories in all
 three play modes. The shield browser gate captures actual successive frames
@@ -169,29 +171,68 @@ manual disable, round reset and save restoration discard obsolete animations.
 The fixture extractor now records base colors, strength samples and every fade
 sample directly from the checked executable and these static transcriptions.
 
-The magnetic force itself did not need a magnitude change. New tests launch
-actual enemy Baby Missiles instead of only injecting projectiles above a tank.
-With default gravity, no wind, equal tank heights and shooter X=100:
+Normal-launch tests use default gravity, no wind, equal tank heights and shooter
+X=100. With the corrected magnetic timing:
 
-- Target X=160, angle 60 degrees, power 180: an unshielded tank is hit; both
-  magnetic tiers turn the descending shot upward and preserve full shield HP.
-- Target X=430, angle 70 degrees, power 499: the shot penetrates the magnetic
-  field. Mag Deflector's tank is hit; Super Mag intercepts it and loses 10 HP.
+- Target X=160, angle 60 degrees, power 180: both magnetic tiers turn the
+  descending shot upward and preserve full shield HP.
+- Target X=430, angle 70 degrees, power 499: this medium shot also turns upward.
+  The earlier per-browser-step impulse incorrectly let it penetrate.
+- Target X=790, angle 80 degrees, power 1000: the fast shot penetrates. Mag's
+  tank is hit; Super Mag intercepts it and loses 10 HP.
+- Unshielded targets are hit in all three scenarios.
 
 The unit tests exercise these flights in all three play modes. The browser gate
 arms through the real control panel, fires through the normal launch path, and
 records trajectories and successive frames. Faster shots can receive upward
 acceleration yet keep descending, making the field less obvious during play.
-The earlier caveat about DOS's machine-dependent callback cadence still applies.
+DOS's machine-dependent timing is resolved against the fixed reference below.
 
-The expanded shield browser gate passes 19 flight scenarios, all five palettes
-and both 51-sample fades, plus manual deployment, damage, laser recharge,
-replacement, collapse removal and terrain clipping. Pixel checks cover both the
-outline and status swatch and confirm that changing team color leaves shield
-color unchanged. Captures and `palette.json` are in `test-browser/out/shields/`.
-Verification on 2026-09-27: `npm test` passed 15,923 tests across 64 files;
-`npm run build` passed; the complete browser render gate passed all 44 states
-with no exceptions or blank frames.
+## Magnetic timing correction
+
+The original recalculates `L = MIPS * FireDelay / (N * 100)` and
+`dtDOS = 1 / (50 * L)` at `2a4a:01c4` when projectiles are added or removed.
+Dividing the magnetic impulse `50 / FireDelay` by that timestep gives upward
+acceleration **25 * MIPS / N**. Positive Fire Delay cancels; MIPS and the live
+projectile count do not. The zero-delay branch uses `dtDOS=0.02` and impulse 50,
+giving 2500 pixels/s² independently of N.
+
+Five fresh, unmodified DOS 1.5 boots in DOSBox 0.74-3, normal core, fixed 20,000
+cycles, SVGA S3, 360×480, measured calibrations **202, 201, 201, 202, 204**. The
+browser freezes their median, **202**, and applies `5050 / N * PHYSICS_DT` for
+positive delay. This is about **5.26 times** the old default single-shell lift.
+It never benchmarks the player's machine, so replays and online peers use the
+same constant. Field dimensions, guards, callback order, HP and rendering remain
+as recovered; no decorative field or arbitrary strength multiplier was added.
+Live rollers/tunnelers count toward N; inactive shots and browser `weaponEffect`
+controllers do not. N is evaluated at the callback so earlier splits/removals
+in the same substep take effect immediately.
+
+`dos_magnet.json` retains the independent runtime evidence: the five timing
+measurements, Mag/Super Mag/unshielded continuous flight windows before terrain
+contact, and DOS timestep changes for N=1→5→4→3→2 during a real MIRV flight.
+The browser matches the recorded flight positions within two logical pixels.
+The comparison uses elapsed simulation time from constant horizontal velocity,
+not SDL wall-clock timestamps. See [dos/README.md](dos/README.md) for capture
+instructions and sampler limitations.
+
+This freezes one DOS machine profile, not every historical machine's magnetic
+strength. The three DOS trajectory windows are from steep power-1000 shots;
+complete slow/medium reversals and fast penetration are additionally exercised
+through actual browser launches in all three play modes. Zero-delay behavior is
+verified against the recovered timestep/impulse, not a recorded zero-delay DOS
+flight; its coarse 0.02-second Euler trajectory need not match the fine browser
+integrator pixel for pixel. Positive-delay and substep-invariance tests prevent
+the old cadence bug from returning.
+
+Verification: the shield browser gate passes **22 flight scenarios**, all five
+DOS palettes and both fades; the render gate passes **44 states**, with no page
+errors or blank canvases. Captures and trajectory samples are written under
+`test-browser/out/shields/`. `npm test` passes **15,953 tests in 64 files** and
+`npm run build` passes. The calibration reproduction helper also completed five
+fresh boots successfully; the measured values varied from 200 to 203, consistent
+with the original capture's small BIOS-clock variation. The frozen reference
+remains 202, matching the retained trajectory recordings.
 
 ## Deaths, weather and sound
 

@@ -43,6 +43,7 @@ import * as widgets from "../src/widgets";
 import * as movement from "../src/movement";
 import * as C from "../src/constants";
 import * as weapons from "../src/weapons";
+import { startShieldFade, type ShieldFade } from "../src/shields";
 import type { GameState, Tank, Cfg, IngameEvent, MouseState, InfoBox } from "../src/ingame";
 
 // ---------------------------------------------------------------------------
@@ -226,6 +227,7 @@ class MockState implements GameState {
   speech: unknown = null;
   _hud_hitboxes: { [k: string]: pygame.Rect } | null = null;
   fired = 0;
+  shield_fades: Record<number, ShieldFade> = {};
   mass_killed = 0;
   retreated: Tank[] = [];
   settled: Tank[] = [];
@@ -561,7 +563,7 @@ describe("ingame_flow: update_game_input hold-ramp (mouse-over-bar == keyboard, 
 
 // ===========================================================================
 // ControlPanelScreen -- the real modal: value widgets mutate the live tank,
-// discharge (direct + count-modal), move strip, fire/back/esc, wants_target.
+// staged shield selection, discharge, move strip, engage/back/esc, wants_target.
 // ===========================================================================
 describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)", () => {
   function panelFor(over: TankOpts = {}): { cp: ingame.ControlPanelScreen; st: MockState; t: MockTank } {
@@ -603,15 +605,19 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     { slot: weapons.SLOT_FORCE_SHIELD, hp: 100, push: false, deflect: true, laserproof: false },
     { slot: weapons.SLOT_HEAVY_SHIELD, hp: 150, push: false, deflect: false, laserproof: false },
     { slot: weapons.SLOT_SUPER_MAG, hp: 200, push: true, deflect: false, laserproof: true },
-  ])("deploying shield $slot consumes one and sets its HP and flags", ({ slot, hp, push, deflect, laserproof }) => {
+  ])("Engage deploys shield $slot, consuming one and setting its HP and flags", ({ slot, hp, push, deflect, laserproof }) => {
     const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
     inv[slot] = 2;
     inv[weapons.SLOT_BATTERY] = 3;
-    const { cp, t } = panelFor({ inv });
+    const { cp, t, st } = panelFor({ inv });
     t.shield_push = t.shield_deflect = t.shield_laserproof = t.shield_failproof = true;
+    const before = { ...t, inventory: t.inventory.slice() };
     const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
     expect(selector.options).toEqual(["None", weapons.ITEMS[slot].name]);
     cp.handle(md(center(selector), 1));
+    expect(t).toEqual(before);
+    expect(st.shield_fades).toEqual({});
+    expect(cp.handle(md(center(byLabel(cp.panel, "Engage")), 1))).toBe("back");
     expect(t).toMatchObject({
       shield_item: slot, shield_hp: hp, shield_push: push, shield_deflect: deflect,
       shield_laserproof: laserproof, shield_failproof: false,
@@ -619,35 +625,48 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     inv[slot] -= 1;
     expect(t.inventory).toEqual(inv);
     expect(selector.options[selector.get_idx()]).toBe(weapons.ITEMS[slot].name);
+    expect(st.shield_fades[t.player_index]).toMatchObject({ item: slot, hp, dir: 1, frame: 0 });
   });
 
-  it("cycles only owned shields in catalog order, forward and backward", () => {
+  it("cycles owned shields without spending and deploys only the final choice", () => {
     const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
     inv[weapons.SLOT_SHIELD] = 2;
     inv[weapons.SLOT_SUPER_MAG] = 2;
     const { cp, t } = panelFor({ inv });
+    const before = { ...t, inventory: t.inventory.slice() };
     const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
     expect(selector.options).toEqual(["None", "Shield", "Super Mag"]);
     for (const [button, slot] of [[1, weapons.SLOT_SHIELD], [1, weapons.SLOT_SUPER_MAG],
       [3, weapons.SLOT_SHIELD], [3, 0], [3, weapons.SLOT_SUPER_MAG]]) {
       cp.handle(md(center(selector), button));
-      expect(t.shield_item).toBe(slot);
+      expect(selector.options[selector.get_idx()]).toBe(slot ? weapons.ITEMS[slot].name : "None");
+      expect(t).toEqual(before);
     }
-    expect([t.inventory[weapons.SLOT_SHIELD], t.inventory[weapons.SLOT_SUPER_MAG]]).toEqual([0, 0]);
-    expect(selector.options).toEqual(["None", "Super Mag"]);
+    cp.dispatchAction("engage");
+    expect([t.shield_item, t.shield_hp]).toEqual([weapons.SLOT_SUPER_MAG, 200]);
+    expect([t.inventory[weapons.SLOT_SHIELD], t.inventory[weapons.SLOT_SUPER_MAG]]).toEqual([2, 1]);
   });
 
   it.each([0, 2])("keeps a damaged active shield with %i spares without spending or repairing on reselection", (spares) => {
     const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
     inv[weapons.SLOT_FORCE_SHIELD] = spares;
-    const { cp, t } = panelFor({ inv, shield_item: weapons.SLOT_FORCE_SHIELD, shield_hp: 37 });
+    inv[weapons.SLOT_SUPER_MAG] = 1;
+    const { cp, t, st } = panelFor({ inv, shield_item: weapons.SLOT_FORCE_SHIELD, shield_hp: 37 });
     t.shield_deflect = true;
+    startShieldFade(st, t, 1);
+    st.shield_fades[t.player_index].frame = 17;
+    const fade = { ...st.shield_fades[t.player_index] };
     const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
-    expect(selector.options).toEqual(["None", "Force Shield"]);
+    expect(selector.options).toEqual(["None", "Force Shield", "Super Mag"]);
     expect(selector.get_idx()).toBe(1);
     selector.set_idx(selector.get_idx());
+    cp.handle(md(center(selector), 1)); // preview Super Mag
+    cp.handle(md(center(selector), 1)); // preview None
+    cp.handle(md(center(selector), 1)); // back to the active shield
+    cp.dispatchAction("engage");
     expect([t.shield_item, t.shield_hp, t.shield_deflect]).toEqual([weapons.SLOT_FORCE_SHIELD, 37, true]);
     expect(t.inventory).toEqual(inv);
+    expect(st.shield_fades[t.player_index]).toEqual(fade);
   });
 
   it.each([0, 1])("treats a depleted shield as inactive with %i spares", (spares) => {
@@ -658,6 +677,9 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     expect(selector.get_idx()).toBe(0);
     expect(selector.options).toEqual(spares ? ["None", "Shield"] : ["None"]);
     cp.handle(md(center(selector), 1));
+    expect(t.inventory).toEqual(inv);
+    expect(t.shield_hp).toBe(0);
+    cp.dispatchAction("engage");
     expect([t.shield_item, t.shield_hp]).toEqual(spares ? [weapons.SLOT_SHIELD, 100] : [0, 0]);
     expect(t.inventory[weapons.SLOT_SHIELD]).toBe(0);
   });
@@ -665,36 +687,41 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
   it("replaces and removes shields without refunding or restoring consumed stock", () => {
     const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
     inv[weapons.SLOT_SHIELD] = inv[weapons.SLOT_SUPER_MAG] = 1;
-    const { cp, t } = panelFor({ inv });
+    const { cp, t, st } = panelFor({ inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 37 });
     const panel = cp.panel;
     const selector = byLabel(panel, "Shields") as widgets.Selector;
-    cp.handle(md(center(selector), 1)); // last Shield is active
-    expect(selector.options).toEqual(["None", "Shield", "Super Mag"]);
-    cp.handle(md(center(selector), 1)); // replace it with the last Super Mag
-    expect(selector.options).toEqual(["None", "Super Mag"]);
-    expect(selector.get_idx()).toBe(1);
-    cp.handle(md(center(selector), 3)); // None discards the active shield
-    expect(selector.options).toEqual(["None"]);
-    expect(selector.get_idx()).toBe(0);
-    cp.handle(md(center(selector), 1));
-    cp.handle(md(center(selector), 3));
+    cp.handle(md(center(selector), 1)); // preview Super Mag
+    expect(cp.panel).toBe(panel);
+    expect(byLabel(cp.panel, "Shields")).toBe(selector);
+    cp.dispatchAction("engage");
+    expect([t.shield_item, t.shield_hp]).toEqual([weapons.SLOT_SUPER_MAG, 200]);
+    expect([t.inventory[weapons.SLOT_SHIELD], t.inventory[weapons.SLOT_SUPER_MAG]]).toEqual([1, 0]);
+    const remove = new ingame.ControlPanelScreen(st, t);
+    const removeSelector = byLabel(remove.panel, "Shields") as widgets.Selector;
+    expect(removeSelector.options).toEqual(["None", "Shield", "Super Mag"]);
+    remove.handle(md(center(removeSelector), 1)); // preview None
+    expect(t.shield_item).toBe(weapons.SLOT_SUPER_MAG);
+    expect(st.shield_fades[t.player_index]).toBeDefined();
+    remove.dispatchAction("engage");
     expect(t).toMatchObject({
       shield_item: 0, shield_hp: 0, shield_push: false, shield_deflect: false,
       shield_laserproof: false, shield_failproof: false,
     });
-    expect(t.inventory).toEqual(new Array<number>(weapons.NUM_ITEMS).fill(0));
-    expect(cp.panel).toBe(panel);
-    expect(byLabel(cp.panel, "Shields")).toBe(selector);
+    expect([t.inventory[weapons.SLOT_SHIELD], t.inventory[weapons.SLOT_SUPER_MAG]]).toEqual([1, 0]);
+    expect(st.shield_fades).toEqual({});
   });
 
-  it("redeploying after None spends a spare", () => {
+  it("redeploying after confirming None in a previous panel spends a spare", () => {
     const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
     inv[weapons.SLOT_SHIELD] = 1;
-    const { cp, t } = panelFor({ inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 37 });
+    const { cp, t, st } = panelFor({ inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 37 });
     const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
     cp.handle(md(center(selector), 3));
+    cp.dispatchAction("engage");
     expect(t.inventory[weapons.SLOT_SHIELD]).toBe(1);
-    cp.handle(md(center(selector), 1));
+    const next = new ingame.ControlPanelScreen(st, t);
+    next.handle(md(center(byLabel(next.panel, "Shields")), 1));
+    next.dispatchAction("engage");
     expect([t.shield_hp, t.inventory[weapons.SLOT_SHIELD]]).toEqual([100, 0]);
   });
 
@@ -712,6 +739,69 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
       selector.set_idx(i);
       expect({ ...t }).toEqual(before);
     }
+    cp.dispatchAction("engage");
+    expect(t).toEqual(before);
+  });
+
+  it("leaves the active shield and animation intact if stock disappears before Engage", () => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SUPER_MAG] = 1;
+    const { cp, t, st } = panelFor({ inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 37 });
+    startShieldFade(st, t, 1);
+    const fades = structuredClone(st.shield_fades);
+    cp.handle(md(center(byLabel(cp.panel, "Shields")), 1));
+    t.inventory[weapons.SLOT_SUPER_MAG] = 0;
+    const before = { ...t, inventory: t.inventory.slice() };
+    cp.dispatchAction("engage");
+    expect(t).toEqual(before);
+    expect(st.shield_fades).toEqual(fades);
+  });
+
+  it.each(["quit", "escape", "outside"])("%s discards shield browsing and preserves the live shield", (cancel) => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SUPER_MAG] = 1;
+    const { cp, t, st } = panelFor({ inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 37 });
+    startShieldFade(st, t, 1);
+    const fades = structuredClone(st.shield_fades);
+    const before = { ...t, inventory: t.inventory.slice() };
+    cp.handle(md(center(byLabel(cp.panel, "Shields")), 1)); // Super Mag
+    cp.handle(md(center(byLabel(cp.panel, "Shields")), 1)); // None
+    const event = cancel === "quit" ? md(center(byLabel(cp.panel, "~Quit")), 1)
+      : cancel === "escape" ? kd(pygame.K_ESCAPE) : md([0, 0], 1);
+    expect(cp.handle(event)).toBe("back");
+    expect(t).toEqual(before);
+    expect(st.shield_fades).toEqual(fades);
+    const reopened = new ingame.ControlPanelScreen(st, t);
+    const selector = byLabel(reopened.panel, "Shields") as widgets.Selector;
+    expect(selector.options[selector.get_idx()]).toBe("Shield");
+  });
+
+  it.each(["engage", "back"])("preserves a pending shield through rebuilds; %s leaves other changes applied", (action) => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SUPER_MAG] = 1;
+    inv[weapons.SLOT_BATTERY] = 3;
+    inv[weapons.SLOT_FUEL] = 2;
+    const { cp, t } = panelFor({ inv, health: 70, x: 100, y: 299, parachute_deployed: false });
+    cp.handle(md(center(byLabel(cp.panel, "Shields")), 1));
+    cp.dispatchAction("discharge");
+    cp.discharge_modal!.count = 2;
+    cp.dispatchAction("ok"); // nested dialog spends two batteries immediately
+    cp.dispatchAction("discharge"); // remaining battery discharges directly
+    cp.dispatchAction("move_left");
+    const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
+    expect(selector.options[selector.get_idx()]).toBe("Super Mag");
+    expect(t.shield_hp).toBe(0);
+    (byLabel(cp.panel, "Remaining Power") as widgets.Spinner).set(250);
+    cp.handle(md(center(byLabel(cp.panel, "~Guidance")), 1));
+    cp.handle(md(center(byLabel(cp.panel, "~Parachutes")), 1));
+    cp.handle(md(center(byLabel(cp.panel, "~Triggers")), 1));
+    expect(cp.dispatchAction(action)).toBe("back");
+    expect(t).toMatchObject({ health: 100, x: 99, power: 250, selected_guidance: FIRST_GUID,
+      parachute_deployed: true, contact_trigger: true });
+    expect(t.inventory[weapons.SLOT_BATTERY]).toBe(0);
+    expect(t.fuel).toBeLessThan(20);
+    expect([t.shield_item, t.shield_hp, t.inventory[weapons.SLOT_SUPER_MAG]])
+      .toEqual(action === "engage" ? [weapons.SLOT_SUPER_MAG, 200, 0] : [0, 0, 1]);
   });
 
   it("Parachutes / Triggers toggles flip the tank flags", () => {
@@ -790,10 +880,20 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     expect(cp.panel.widgets.find((w) => w.action === "move_left")).toBeUndefined();
   });
 
-  it("~Launch returns 'fire' and records action; ~Quit/Engage/Esc return 'back'", () => {
-    const { cp } = panelFor();
-    expect(cp.handle(md(center(byLabel(cp.panel, "~Launch")), 1))).toBe("fire");
-    expect(cp.action).toBe("fire");
+  it("Enter engages without firing, Launch is absent, and its old actions do nothing", () => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SHIELD] = 1;
+    const { cp, t, st } = panelFor({ inv });
+    expect(cp.panel.widgets.some((w) => w.action === "fire" || w.label === "~Launch")).toBe(false);
+    cp.handle(md(center(byLabel(cp.panel, "Shields")), 1));
+    expect(cp.handle(kd(pygame.K_l, "l"))).toBeNull();
+    expect(cp.dispatchAction("fire")).toBeNull();
+    expect(cp.action).toBeNull();
+    expect(t.inventory).toEqual(inv);
+    expect(cp.handle(kd(pygame.K_RETURN))).toBe("back");
+    expect(cp.action).toBe("back");
+    expect([t.shield_item, t.shield_hp, t.inventory[weapons.SLOT_SHIELD]]).toEqual([weapons.SLOT_SHIELD, 100, 0]);
+    expect(st.fired).toBe(0);
 
     const q = panelFor();
     expect(q.cp.handle(md(center(byLabel(q.cp.panel, "~Quit")), 1))).toBe("back");
@@ -807,20 +907,20 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
   });
 
   it("wants_target is set on close iff a guidance is armed with no target chosen", () => {
-    // armed guidance, no target -> wants_target true after fire
+    // Guidance remains live; closing still records its target requirement.
     const armed = panelFor({ selected_guidance: FIRST_GUID });
-    armed.cp.handle(md(center(byLabel(armed.cp.panel, "~Launch")), 1));
+    armed.cp.handle(md(center(byLabel(armed.cp.panel, "Engage")), 1));
     expect(armed.cp.wants_target).toBe(true);
 
     // no guidance -> false
     const none = panelFor({ selected_guidance: null });
-    none.cp.handle(md(center(byLabel(none.cp.panel, "~Launch")), 1));
+    none.cp.handle(md(center(byLabel(none.cp.panel, "Engage")), 1));
     expect(none.cp.wants_target).toBe(false);
 
     // guidance armed but a target already chosen -> false
     const done = panelFor({ selected_guidance: FIRST_GUID });
     done.t.guidance_target = new MockTank({ player_index: 7 });
-    done.cp.handle(md(center(byLabel(done.cp.panel, "~Launch")), 1));
+    done.cp.handle(md(center(byLabel(done.cp.panel, "~Quit")), 1));
     expect(done.cp.wants_target).toBe(false);
   });
 
@@ -1087,11 +1187,13 @@ describe("ingame_flow: keyboard router + remaining real branches", () => {
     expect(scr.count).toBe(2); // update() is an inert no-op
   });
 
-  it("ControlPanel Shields selector can cycle back to None (clears shield_item/hp)", () => {
+  it("ControlPanel Shields selector can cycle back to None (Engage clears shield_item/hp)", () => {
     const t = new MockTank({ ai_class: C.AI_HUMAN, shield_item: FIRST_SHIELD, shield_hp: 55 });
     const st = new MockState({ tanks: [t], shooter: t, w: 1024, h: 768 });
     const cp = new ingame.ControlPanelScreen(st, t);
     cp.handle(md(center(byLabel(cp.panel, "Shields")), 3)); // right-click cycle -1 -> None
+    expect([t.shield_item, t.shield_hp]).toEqual([FIRST_SHIELD, 55]);
+    cp.dispatchAction("engage");
     expect(t.shield_item).toBe(0);
     expect(t.shield_hp).toBe(0);
   });

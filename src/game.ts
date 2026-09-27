@@ -34,7 +34,7 @@
  * j = _randbelow(i+1)) against _pyrandom, where _randbelow(i+1) == _pyrandom.pick(i+1).
  */
 import * as C from "./constants";
-import { shieldContains, startShieldFade, SHIELD_FADE_SAMPLES, type ShieldFade } from "./shields";
+import { magneticLift, shieldContains, startShieldFade, SHIELD_FADE_SAMPLES, type ShieldFade } from "./shields";
 import * as physics from "./physics";
 import * as wb from "./weapon_behaviors";
 import { startBlast, startSoil, startDeathFlames } from "./combat_effects";
@@ -1594,12 +1594,12 @@ export class GameState {
     }
   }
 
-  _mag_deflect(proj: Projectile): void {
-    // Mag Deflector / Super Mag (shield flag & 6): a per-step UPWARD velocity bump
-    // on a shell inside an overhead box (2a4a:28b4). The increment is from
-    // DOS; callback cadence uses the browser's fixed physics timestep.
-    const fire_delay = this.cfg.FIRE_DELAY;
-    const bump = fire_delay === 0 ? C.MAG_PUSH_VY_NUM : C.MAG_PUSH_VY_NUM / fire_delay;
+  _mag_deflect(proj: Projectile, dt = C.PHYSICS_DT): void {
+    // Mag and Super Mag share the same upward acceleration and overhead field.
+    // Count live DOS projectile equivalents when the callback runs: earlier
+    // collisions/splits in this step may already have changed N. Rollers and
+    // tunnelers count; browser-only explosion animation records do not.
+    let bump: number | undefined;
     const h_div = floorDiv(this.h - 1, C.MAG_PUSH_HEIGHT_DIV);
     for (const t of this.tanks) {
       if (!(t.alive && t.shield_hp > 0 && t.shield_push)) {
@@ -1622,6 +1622,8 @@ export class GameState {
         // overhead, within (h-1)/4
         continue;
       }
+      bump ??= magneticLift(this.cfg.FIRE_DELAY,
+        this.projectiles.filter((p) => p.active && !p.weaponEffect).length, dt);
       proj.vy += bump;
     }
   }

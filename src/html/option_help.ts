@@ -24,8 +24,7 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
       JOYSTICK: "Joystick: uses a connected, calibrated gamepad for the game's software cursor.",
     },
   },
-  // game._mag_deflect is the only live FIRE_DELAY consumer, despite its label.
-  FIRE_DELAY: { text: "Does not change firing speed here. Higher values weaken the upward push of magnetic shields on incoming shots; 0 gives the strongest push." },
+  FIRE_DELAY: { text: "The original game's firing delay. Browser flight speed is fixed. Positive values preserve magnetic shield strength; 0 uses the original alternate magnetic timing." },
   calibrate: { text: "Measures a connected gamepad's center and range for the joystick pointer. Calibration lasts until the page is reloaded." },
   INTEREST_RATE: { text: "Unspent cash earns interest between rounds: 0.05 means 5%. This rate also affects the price of Auto Defense." },
   FREE_MARKET: { text: "Lets shop prices change between rounds according to demand. Selling equipment returns 65% of its current value instead of the usual 80%." },

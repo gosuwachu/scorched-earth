@@ -36,7 +36,9 @@ browser today. If you want the genuine article, seek out Wendell Hicken's origin
 
 ## How it was built, and how faithful it is
 
-The port combines differential tests with direct checks of the DOS executable:
+The original Scorched Earth DOS executable is the sole reference for behavioral
+and visual fidelity. This project's history explains why some legacy tests still
+refer to a Python port:
 
 1. The original DOS binary was initially reverse-engineered **statically**
    into a function-for-function **Python/pygame port**
@@ -47,22 +49,24 @@ The port combines differential tests with direct checks of the DOS executable:
    agreement with DOS. Funky Bomb, Sandhogs, and multi-layer terrain collapse now
    use corrected DOS-derived behavior; see [the evidence and limitations](oracle/WEAPON_FIDELITY.md).
 
-The verification:
+Current verification uses:
 
-- **Over 15,000 tests** (`npm test`, vitest) cover the corrected mechanics and assert
-  the remaining TypeScript reproduces
-  the Python port's output **exactly** (integers, pixels, bytes) or within a tight
-  epsilon (transcendental math only). The RNG reproduces CPython's Mersenne Twister
-  bit-for-bit; the game engine is checked by 29,814 turn/round state snapshots; the
-  sprites by ~8M pixel assertions.
-- A **visual regression gate** (`visual/`, `bash visual/run_gate.sh`) renders identical
-  seeded game states through both the TypeScript Canvas renderer and the Python pygame
-  renderer and pixel-diffs them. The game **world** - sky, terrain, tanks - comes out
-  **byte-identical** (zero channel delta). Only on-screen text differs, because a
-  browser's font rasterizer is not pygame's; that is expected and reported separately.
+- **DOS evidence:** fixtures extracted directly from the checked executable,
+  independently transcribed routines, and recorded DOSBox runtime samples. Their
+  provenance and limits are documented in [the combat audit](oracle/COMBAT_FIDELITY.md).
+- **Browser checks:** Playwright drives the real simulation and renderer through
+  controlled scenarios, captures successive frames, and checks actual DOM controls.
+  See [the browser testing guide](test-browser/README.md).
+- **Regression tests:** `npm test` covers DOS-backed mechanics, browser behavior
+  and remaining legacy Python-derived fixtures. Those legacy results do not
+  establish DOS fidelity. New reference comparisons use the original DOS game;
+  the [Python visual comparison workflow](visual/README.md) is retired.
 
-The automated test suite does not require DOSBox or the original executable.
-Optional DOSBox captures were used to review the corrected weapon effects.
+Tests against retained DOS fixtures do not require DOSBox or the executable.
+New runtime captures use a disposable copy of the original game; see
+[the DOS testing guide](oracle/dos/README.md). Runtime comparisons currently cover
+documented cases and flight windows, not every encounter or a complete automated
+frame-by-frame comparison of both games.
 
 ## Play
 
@@ -319,7 +323,7 @@ ships above; players never run any of this. It is only for modifying the code.
 npm install
 npm run dev          # dev server at http://localhost:5173
 npm run build        # static bundle into dist/ (what GitHub Pages serves)
-npm test             # the 15,705 differential tests against the Python oracle
+npm test             # DOS-backed tests and remaining legacy regression coverage
 ```
 
 ## The original assets
@@ -350,8 +354,9 @@ engine also runs without them (procedural terrain, gradient title, no taunts).
 | `mtn.ts` | the `.MTN` terrain-photo decoder |
 | `main.ts` | the requestAnimationFrame loop, input, state machine, asset boot, IndexedDB saves |
 
-`oracle/` holds the Python vector dumpers; `test/` the differential suite; `visual/`
-the rendering gate.
+`oracle/` holds DOS capture/extraction tools, evidence and legacy dumpers; `test/`
+the automated suite; `test-browser/` the browser checks; `visual/` the retired
+Python-port comparison scripts.
 
 ## License and use
 

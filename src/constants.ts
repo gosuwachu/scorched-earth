@@ -111,14 +111,20 @@ export const TANK_DEFAULT_HEALTH = 100;    // tank+0xa2 health accumulator
 
 // ---------------------------------------------------------------------------
 // Shield behaviour magnitudes -- RECOVERED byte-exact from the FP-patched image.
-// MAG push (Mag/Super Mag, FUN_2a4a_28b4): per-step upward bump vy += 50.0/FireDelay
+// MAG push (Mag/Super Mag, FUN_2a4a_28b4): per DOS step vy += 50.0/FireDelay
 //   inside an overhead box (|round(px-tank_x)|<=15, 0<round(tank_y-py)<=(h-1)/4,
 //   vx!=0). 50.0 = DAT_5f38_1cf2; FireDelay = DAT_5f38_5140 (cfg.FIRE_DELAY, dflt 100).
 // FORCE-shield reflect (Force Shield, FUN_2a4a_2487): single mirror reflection on
 //   contact with the ring; angle factor 2.0 = DAT_5f38_1d5c, then scale |v| by
 //   0.7 = DAT_5f38_1d60. No fast-fall speed threshold exists on either path
 //   (manual's "falls fast enough" is EMERGENT geometry, not a constant).
-export const MAG_PUSH_VY_NUM = GRAVITY_SCALE;  // 50.0 (DAT_5f38_1cf2); per-step bump = this/FireDelay
+export const MAG_PUSH_VY_NUM = GRAVITY_SCALE;  // 50.0 (DAT_5f38_1cf2); DOS increment numerator
+// Unlike gravity, magnetic acceleration retains MIPS/N after conversion from
+// DOS dt = 2*N/(MIPS*FireDelay). Freeze the reference machine's median calibration
+// for deterministic browser/replay/network play; never benchmark the browser.
+// Five fresh DOSBox boots at fixed 20000 cycles: 202, 201, 201, 202, 204.
+// Capture provenance and timing observations: test/fixtures/dos_magnet.json.
+export const MAG_REFERENCE_CALIBRATION = 202;
 export const MAG_PUSH_HALF_W = 15;         // |round(px - tank_x)| <= 15  (cmp di,0xfff1/0xf)
 export const MAG_PUSH_HEIGHT_DIV = 4;      // 0 < round(tank_y - py) <= (screen_h-1)/4 (sar ax,2)
 export const FORCE_REFLECT_ANGLE_K = 2.0;  // DAT_5f38_1d5c f32: mirror-reflection angle doubling

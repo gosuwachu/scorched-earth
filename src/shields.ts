@@ -2,6 +2,16 @@
  * Render and swept collision share these integer pixels; Canvas arcs must not
  * introduce visible shield pixels which a projectile can pass through. */
 import { ITEMS, SLOT_MAG_DEFLECTOR, SLOT_SHIELD, SLOT_FORCE_SHIELD, SLOT_HEAVY_SHIELD, SLOT_SUPER_MAG } from "./weapons";
+import { MAG_PUSH_VY_NUM, MAG_REFERENCE_CALIBRATION, PHYSICS_DT } from "./constants";
+
+/** Convert 2a4a:28b4's DOS impulse using 2a4a:01c4's DOS timestep.
+ * Positive FireDelay cancels: (50/delay) / (2*N/(MIPS*delay)).
+ * The zero-delay branch instead uses dt=0.02 and an impulse of 50. */
+export function magneticLift(fireDelay: number, liveProjectiles: number, dt = PHYSICS_DT): number {
+  const acceleration = fireDelay === 0 ? MAG_PUSH_VY_NUM / 0.02
+    : MAG_PUSH_VY_NUM * MAG_REFERENCE_CALIBRATION / (2 * Math.max(1, liveProjectiles));
+  return acceleration * dt;
+}
 
 type RGB = [number, number, number];
 // Shield definitions at 5f38:617c..61bc, +6/+8/+a: VGA DAC channels, not team hues.

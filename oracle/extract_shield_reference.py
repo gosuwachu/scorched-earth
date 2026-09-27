@@ -2,8 +2,8 @@
 """DOS 1.5 shield constants and independent static-transcription fixtures.
 
 Usage: python oracle/extract_shield_reference.py /path/to/SCORCH.EXE
-These are NOT DOS execution recordings. Flight samples use the browser's
-1/1920 timestep with DOS's magnetic increment and callback ordering.
+These are NOT DOS execution recordings. Magnetic increments here are per DOS
+step, not per browser step. Runtime timing/flight evidence is in dos_magnet.json.
 """
 import hashlib
 import json
@@ -57,34 +57,6 @@ for overrides in [dict(delay=0), dict(delay=50), dict(delay=200), dict(hp=0), di
     magnetic_steps.append(args | dict(bump=magnetic(**args)))
 
 
-def flight(name, dx, dy, vx, vy, steps, delay=100):
-    args = dict(name=name, dx=dx, dy=dy, vx=vx, vy=vy, steps=steps, delay=delay)
-    x, y, dt = 160 + dx, 159 - dy, 1 / 1920
-    samples = []
-    for tick in range(steps + 1):
-        if tick % 32 == 0:
-            samples.append(dict(tick=tick, x=x, y=y, sx=round(x), sy=round(y), vx=vx, vy=vy))
-        if tick == steps:
-            break
-        speed = math.hypot(vx, vy)
-        if speed > 1000:
-            vx, vy = vx * 1000 / speed, vy * 1000 / speed
-        # 2a4a:0b1f: move, gravity, collision (none in these samples), then
-        # 120b..123c: registered magnetic callbacks, then weapon predicate.
-        x += vx * dt
-        y -= vy * dt
-        vy -= 2500 * 0.2 * dt
-        vy += magnetic(x - 160, 159 - y, vx, delay)
-    return args | dict(samples=samples)
-
-
-flights = [flight("slow descent turns upward", -10, 40, 10, -100, 640),
-           flight("fast descent still approaches the shield", -10, 40, 10, -400, 96),
-           flight("outside field", 16, 60, 20, -50, 640),
-           flight("exactly vertical bypass", 0, 40, 0, -100, 128),
-           flight("zero fire delay", -10, 40, 10, -100, 64, 0)]
-
-
 def force(name, nx, ny, vx, vy, hp=100):
     # 2a4a:25cf..26b5's doubled-angle rotation, independently transcribed.
     # Both velocity and normal have Y positive UP. The browser uses the
@@ -106,6 +78,6 @@ reflections = [force("top", 0, 15, 0, -300), force("left", -15, 0, 300, 0),
                force("very slow", 0, 15, 0, -10)]
 
 out = Path(__file__).resolve().parents[1] / "test/fixtures/dos_shields.json"
-out.write_text(json.dumps(dict(sha256=sha, kind="static transcription; browser timestep", shields=shields,
-                               magnetic_steps=magnetic_steps, flights=flights, reflections=reflections), indent=2) + "\n")
+out.write_text(json.dumps(dict(sha256=sha, kind="static transcription; raw DOS increments", shields=shields,
+                               magnetic_steps=magnetic_steps, reflections=reflections), indent=2) + "\n")
 print(out)

@@ -52,16 +52,16 @@ try {
   }
 
   // Real muzzle-to-impact flights, armed through the player control panel.
-  for (const item of [0, 40, 44]) for (const scenario of ["launch-slow", "launch-fast"]) {
+  for (const item of [0, 40, 44]) for (const scenario of ["launch-slow", "launch-medium", "launch-fast"]) {
     await page.evaluate(([i, s]) => window.startShieldDemo(i, s), [item, scenario]);
     const samples = [];
-    for (let frame = 0; frame <= 150; frame += 5) {
+    for (let frame = 0; frame <= 300; frame += 5) {
       const meta = await page.evaluate((n) => window.advanceShieldDemo(n), frame ? 5 : 0);
       samples.push(meta);
       if (frame % 15 === 0 || !meta.active) await page.locator("#game").screenshot({ path: `${out}/${item}-${scenario}-${frame}.png` });
       if (!meta.active) break;
     }
-    const last = samples.at(-1), slow = scenario === "launch-slow";
+    const last = samples.at(-1), slow = scenario !== "launch-fast";
     assert.equal(last.active, false, `${item}/${scenario} never finished`);
     assert.equal(last.lifted, item !== 0 && slow, `${item}/${scenario} reversal`);
     assert.equal(last.health, item === 0 || (item === 40 && !slow) ? 0 : 100);

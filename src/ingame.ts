@@ -53,8 +53,8 @@
  *                          applied in place: power/angle/weapon change, info box,
  *                          or fire).
  * Action strings returned by ControlPanelScreen.handle:
- *   "fire"  - ~Launch pressed (the caller should run state.fire())
- *   "back"  - Engage / ~Quit / Esc (leave the panel without firing)
+ *   "back"  - Engage applies the shield choice; ~Quit / Esc discard it.
+ *             Other controls apply immediately. The panel never fires.
  * Action strings returned by SystemMenuScreen.handle:
  *   "clear_screen", "mass_kill", "quit_game", "reassign_players",
  *   "reassign_teams", "save_game", "restore_game", "new_game", "back"
@@ -908,8 +908,8 @@ function _handle_hud_click(state: GameState, e: IngameEvent): string | null {
 // --------------------------------------------------------------------------
 // Verbatim control pool [V]: Remaining Power, Energy Left, ~Fuel Remaining,
 // ~Guidance (None when off), ~Parachutes, ~Triggers, ~Batteries, Shields, and the
-// exit buttons ~Launch / Engage / ~Quit (NO "~Go").  Buying-free: it selects/
-// toggles the tank's current defenses and guidance and can fire (~Launch).
+// original exit buttons ~Launch / Engage / ~Quit (NO "~Go"). The browser panel
+// omits Launch and stages shield selection until Engage; other controls are live.
 //
 // DOM: this builds widgets.Panel with font-measured Label/Button, so (like the
 // widgets/ui screens) it can only be CONSTRUCTED in a browser; its Panel.handle
@@ -1052,6 +1052,7 @@ export class ControlPanelScreen implements Screen {
   private _g_slots: (number | null)[] = [];
   private _s_slots: number[] = [];
   private _shield_selector!: widgets.Selector;
+  private _pending_shield: number;
 
   constructor(state: GameState, tank: Tank) {
     this.state = state;
@@ -1059,6 +1060,7 @@ export class ControlPanelScreen implements Screen {
     this.action = null;
     this.wants_target = false;
     this.discharge_modal = null;
+    this._pending_shield = tank.shield_hp > 0 ? tank.shield_item : 0;
     this.panel = this._build();
   }
 
@@ -1084,7 +1086,7 @@ export class ControlPanelScreen implements Screen {
     this.tank.selected_guidance = this._g_slots[pyMod(i, this._g_slots.length)];
   }
 
-  // ---- shields: cycle owned/active shields (+ None); spend one to deploy ----
+  // ---- shields: preview owned/active shields (+ None); Engage deploys ----
   _shield_options(): string[] {
     const opts: string[] = ["None"];
     const slots: number[] = [0];
@@ -1101,8 +1103,7 @@ export class ControlPanelScreen implements Screen {
   }
 
   _s_index(): number {
-    const cur = this.tank.shield_hp > 0 ? this.tank.shield_item : 0;
-    const i = this._s_slots.indexOf(cur);
+    const i = this._s_slots.indexOf(this._pending_shield);
     return i >= 0 ? i : 0;
   }
 
@@ -1111,6 +1112,16 @@ export class ControlPanelScreen implements Screen {
       return;
     }
     const slot = this._s_slots[i];
+    const t = this.tank;
+    if (slot === 0 || t.inventory[slot] > 0 || (t.shield_item === slot && t.shield_hp > 0)) {
+      this._pending_shield = slot;
+    }
+    // Keep the widget instance so native controls retain keyboard focus.
+    this._shield_selector.options = this._shield_options();
+  }
+
+  private _apply_shield(): void {
+    const slot = this._pending_shield;
     const t = this.tank;
     if (slot === 0) {
       stopShieldFade(this.state, t);
@@ -1121,7 +1132,7 @@ export class ControlPanelScreen implements Screen {
       t.shield_laserproof = false;
       t.shield_failproof = false;
     } else if (slot !== t.shield_item || t.shield_hp <= 0) {
-      // Recheck live stock: the options may have been built before it changed.
+      // Recheck live stock: it may have changed since the shield was selected.
       // Reselecting an active shield must neither spend another nor repair it.
       if (t.inventory[slot] > 0) {
         const p = weapons.ITEMS[slot].params;
@@ -1135,8 +1146,6 @@ export class ControlPanelScreen implements Screen {
         startShieldFade(this.state, t, +1);
       }
     }
-    // Keep the widget instance so native controls retain keyboard focus.
-    this._shield_selector.options = this._shield_options();
   }
 
   // ---- battery discharge: spend one battery for +10 health (section 7) ----
@@ -1246,7 +1255,7 @@ export class ControlPanelScreen implements Screen {
       ),
     );
     y += row;
-    // Shields: cycle owned/active shields and deploy the chosen one.
+    // Shields: cycle owned/active shields; only Engage deploys the choice.
     this._shield_selector = new widgets.Selector(
       x,
       y,
@@ -1259,10 +1268,9 @@ export class ControlPanelScreen implements Screen {
     p.add(this._shield_selector);
     y += row + 6;
 
-    // exit / commit buttons: ~Launch / Engage / ~Quit  (NO ~Go)
+    // Engage commits the shield choice; Quit discards it. Enter engages.
     const by = py + ph - 30;
-    p.add(new widgets.Button(px + 14, by, "~Launch", "fire", null, true));
-    p.add(new widgets.Button(px + 130, by, "Engage", "back"));
+    p.add(new widgets.Button(px + 14, by, "Engage", "engage", null, true));
     p.add(new widgets.Button(px + pw - 80, by, "~Quit", "back"));
     return p;
   }
@@ -1299,19 +1307,13 @@ export class ControlPanelScreen implements Screen {
       this.panel = this._build(); // refresh fuel count / drop buttons if empty
       return null;
     }
-    if (act === "fire") {
-      this.action = "fire";
+    if (act === "engage" || act === "back") {
+      if (act === "engage") this._apply_shield();
+      this.action = "back";
       this._note_target_need();
-      return "fire";
+      return "back";
     }
-    if (act === "back" || act === null) {
-      if (act === "back") {
-        this.action = "back";
-        this._note_target_need();
-      }
-      return act;
-    }
-    return act;
+    return null;
   }
 
   /** On close, flag whether a guidance is armed that wants a target and none is

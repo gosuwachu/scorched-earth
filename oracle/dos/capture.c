@@ -50,9 +50,13 @@ int SDL_PollEvent(SDL_Event *event) {
   static int (*real_poll)(SDL_Event *);
   static SDL_Event release;
   static int pending;
+  static Uint32 release_at;
   static long last_id;
   if (!real_poll) real_poll = dlsym(RTLD_NEXT, "SDL_PollEvent");
-  if (pending) { *event = release; pending = 0; return 1; }
+  if (pending) {
+    if ((Sint32)(SDL_GetTicks() - release_at) < 0) { capture(); return real_poll(event); }
+    *event = release; pending = 0; return 1;
+  }
   const char *directory = getenv("SCORCH_CAPTURE");
   if (!directory) return real_poll(event);
   capture();
@@ -86,6 +90,8 @@ int SDL_PollEvent(SDL_Event *event) {
       release.button.state = SDL_RELEASED;
     } else return real_poll(event);
     pending = 1;
+    const char *hold = getenv("SCORCH_KEY_HOLD_MS");
+    release_at = SDL_GetTicks() + (kind == 'k' && fields == 4 ? b : hold ? atoi(hold) : 0);
     return 1;
   }
   return real_poll(event);

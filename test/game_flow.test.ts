@@ -1314,9 +1314,12 @@ describe("game_flow: Mag Deflector overhead push (_mag_deflect)", () => {
       expect(g, `mag step${i} present`).not.toBeNull();
       expect(g!.active, `mag step${i} active`).toBe(w.active);
       expect(g!.px, `mag step${i} px`).toBeCloseTo(w.px, 12);
-      expect(g!.py, `mag step${i} py`).toBeCloseTo(w.py, 12);
+      // Python vectors use an unscaled 0.5 DOS impulse at browser cadence.
+      // Correct that obsolete timing with the independently measured 5050 px/s².
+      const extraKick = 5050 / 1920 - 0.5;
+      expect(g!.py, `mag step${i} py`).toBeCloseTo(w.py - extraKick / 1920 * i * (i - 1) / 2, 12);
       expect(g!.vx, `mag step${i} vx`).toBeCloseTo(w.vx, 12);
-      expect(g!.vy, `mag step${i} vy`).toBeCloseTo(w.vy, 12);
+      expect(g!.vy, `mag step${i} vy`).toBeCloseTo(w.vy + extraKick * i, 12);
     }
     expect(target.shield_hp, "mag does not chip").toBe(ms.shield_hp);
   });
