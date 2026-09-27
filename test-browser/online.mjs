@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
+import { purchaseButton, checkShopRows, checkShopLayout } from "./online_shop.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.ONLINE_TEST_URL || "http://127.0.0.1:4317";
@@ -72,6 +73,10 @@ try {
   const contextB = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true, isMobile: true });
   for (const context of [contextA, contextB]) {
     await context.addInitScript(() => {
+      const Socket = window.WebSocket;
+      window.WebSocket = class extends Socket {
+        constructor(...args) { super(...args); window.onlineSocket = this; }
+      };
       window.audioStarts = 0;
       const start = AudioBufferSourceNode.prototype.start;
       AudioBufferSourceNode.prototype.start = function (...args) {
@@ -93,18 +98,48 @@ try {
   await host.waitForFunction(async () => (await import("/src/sound.ts")).sfx._ctx?.state === "running");
   await until(() => enabled(a, "Done"), "Alice shopping");
   assert.equal(await enabled(b, "Space / Fire"), false);
+  assert.equal(await b.locator(".lan-shop-row:enabled").count(), 0, "Waiting guests cannot purchase");
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.cfg.MAXROUNDS), 2);
+  mkdirSync(`${root}/test-browser/out`, { recursive: true });
+  await checkShopRows(a, host);
+  await checkShopLayout(a, root, "weapons");
+  await host.screenshot({ path: `${root}/test-browser/out/online-shop-host.png` });
   const cash = () => host.evaluate(() => window.onlineApp.gs.tanks[0].cash);
   const beforeCash = await cash();
-  await a.locator(".lan-controls button:enabled").filter({ hasText: /\$/ }).first().click();
-  await until(async () => await cash() < beforeCash, "purchase applies on host");
+  const missile = purchaseButton(a, "Missile");
+  const beforeMissile = await host.evaluate(() => ({
+    owned: window.onlineApp.gs.tanks[0].inventory[1], price: window.onlineApp.gs.economy.price[1],
+  }));
+  await missile.scrollIntoViewIfNeeded();
+  await missile.focus();
+  await missile.evaluate((button) => { window.shopButton = button; window.shopCanvas = button.querySelector("canvas"); window.shopScroll = window.scrollY; });
+  await missile.press("Enter");
+  await until(async () => await cash() === beforeCash - beforeMissile.price, "one keyboard purchase applies on host");
+  await checkShopRows(a, host);
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[1]), beforeMissile.owned + 5);
+  await until(async () => (await a.locator(".lan-stats").innerText()).includes(`Cash $${await cash()}`), "guest cash refreshes");
+  await pause(350);
+  assert.ok(await missile.evaluate((button) => button === window.shopButton && button.querySelector("canvas") === window.shopCanvas &&
+    document.activeElement === button && window.scrollY === window.shopScroll), "Host updates preserve the button, icon, focus, and scroll");
+  // A lost transport disables the existing purchase rows until the guest rejoins.
+  await contextA.setOffline(true);
+  await a.evaluate(() => window.onlineSocket.close());
+  await until(async () => await missile.isDisabled(), "disconnected purchases disabled");
+  assert.equal(await a.locator(".lan-shop-row:enabled").count(), 0);
+  await contextA.setOffline(false);
+  await until(async () => await missile.isEnabled(), "purchase controls restored after reconnect");
+  assert.equal(await cash(), beforeCash - beforeMissile.price);
   const purchasedCash = await cash();
   await a.getByLabel("Category", { exact: true }).selectOption("1");
+  await purchaseButton(a, "Battery").waitFor();
+  await checkShopRows(a, host);
+  await checkShopLayout(a, root, "misc");
   for (const item of ["Battery", "Fuel Tank", "Heat Guidance", "Lazy Boy", "Shield", "Parachute"]) {
     const previousCash = await cash();
-    await a.locator(".lan-controls button:enabled").filter({ hasText: new RegExp(`^(▶ )?${item} ·`) }).click();
+    await purchaseButton(a, item).click();
     await until(async () => await cash() < previousCash, `${item} purchased`);
+    await checkShopRows(a, host);
   }
   const equippedCash = await cash();
   assert.ok(equippedCash < purchasedCash);
@@ -120,7 +155,7 @@ try {
   await click(a, "Done");
   await until(() => enabled(b, "Done"), "Bob shopping");
   await b.getByLabel("Category", { exact: true }).selectOption("1");
-  await b.locator(".lan-controls button:enabled").filter({ hasText: /^(▶ )?Lazy Boy ·/ }).click();
+  await purchaseButton(b, "Lazy Boy").click();
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]) > 0, "Bob buys guidance");
   await click(b, "Done");
   await until(() => enabled(a, "Space / Fire"), "Alice aiming");

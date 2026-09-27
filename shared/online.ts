@@ -25,6 +25,10 @@ export interface Control {
   step?: number;
   options?: string[];
   disabled?: boolean;
+  /** Host shop values; the guest resolves the sprite locally by slot. */
+  purchase?: {
+    slot: number; name: string; owned: number; price: number; bundle: number; selected: boolean;
+  };
 }
 
 export interface ControllerView {

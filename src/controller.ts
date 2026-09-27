@@ -2,7 +2,18 @@ import type { ControllerView, Input, RoomView, ServerMessage, Control } from "..
 import { REMOTE_KEYS } from "../shared/online";
 import { Connection } from "./online_connection";
 import { button, el, installOnlineTheme, Roster, tankIcon } from "./online_ui";
+import { get_sprite, WEAPON_ICON_BASE, weapon_icon_palette } from "./sprites";
 import "./online.css";
+
+interface ControlNode {
+  node: HTMLElement;
+  field?: HTMLInputElement | HTMLSelectElement;
+  button?: HTMLButtonElement;
+  label?: HTMLElement;
+  kind: Control["kind"];
+  options?: string;
+  purchase?: { slot: number; marker: HTMLElement; owned: HTMLElement; name: HTMLElement; price: HTMLElement };
+}
 
 export function startController(roomId: string): void {
   installOnlineTheme();
@@ -39,7 +50,7 @@ export function startController(roomId: string): void {
   let stats: HTMLElement;
   let heading: HTMLElement;
   let controls: HTMLElement;
-  const controlNodes = new Map<string, { node: HTMLElement; field?: HTMLInputElement | HTMLSelectElement; button?: HTMLButtonElement; label?: HTMLElement; kind: string; options?: string }>();
+  const controlNodes = new Map<string, ControlNode>();
 
   const allowed = (): boolean => !ended && !!connection.connected && !!room?.hostConnected && !!view?.enabled;
   const send = (input: Input): void => {
@@ -170,7 +181,38 @@ export function startController(roomId: string): void {
       }
       controlNodes.set(c.id, record);
     }
-    if (record.button) record.button.textContent = c.label;
+    if (record.button) {
+      const b = record.button;
+      const purchase = c.purchase;
+      if (purchase) {
+        // Keep the button and its static sprite mounted as host values change.
+        if (!record.purchase || record.purchase.slot !== purchase.slot) {
+          const marker = el("span"); marker.setAttribute("aria-hidden", "true");
+          const owned = el("span", "", "lan-shop-owned"); owned.title = "Owned";
+          const icon = el("span", "", "lan-shop-icon"); icon.setAttribute("aria-hidden", "true");
+          const sprite = get_sprite("A", purchase.slot, { color: WEAPON_ICON_BASE, pal: weapon_icon_palette(), scale: 2 });
+          if (sprite) icon.append(sprite.canvas);
+          const name = el("span", "", "lan-shop-name");
+          const price = el("span", "", "lan-shop-price");
+          b.replaceChildren(marker, owned, icon, name, price);
+          record.purchase = { slot: purchase.slot, marker, owned, name, price };
+        }
+        const cells = record.purchase;
+        cells.marker.textContent = purchase.selected ? ">" : "";
+        cells.owned.textContent = String(purchase.owned);
+        cells.name.textContent = purchase.name;
+        cells.price.textContent = `$${purchase.price}/${purchase.bundle}`;
+        b.classList.add("lan-shop-row");
+        b.setAttribute("aria-pressed", String(purchase.selected));
+        b.setAttribute("aria-label", `${purchase.name}, owned ${purchase.owned}, $${purchase.price} per ${purchase.bundle}`);
+      } else {
+        b.textContent = c.label;
+        b.classList.remove("lan-shop-row");
+        b.removeAttribute("aria-pressed");
+        b.removeAttribute("aria-label");
+        record.purchase = undefined;
+      }
+    }
     if (record.label) record.label.textContent = c.label;
     if (c.kind === "label") record.node.textContent = c.label;
     const field = record.field;
@@ -232,6 +274,8 @@ export function startController(roomId: string): void {
   });
   window.addEventListener("keydown", (e) => {
     if (!gameBuilt || e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    // Let the focused purchase button perform its native keyboard click.
+    if (e.target instanceof Element && e.target.closest(".lan-shop-row") && (e.code === "Enter" || e.code === "Space")) return;
     if ((REMOTE_KEYS as readonly string[]).includes(e.code)) { e.preventDefault(); if (!e.repeat) key(e.code, true); }
   });
   window.addEventListener("keyup", (e) => { if (held.has(e.code)) { e.preventDefault(); key(e.code, false); } });

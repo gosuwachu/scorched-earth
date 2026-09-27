@@ -303,6 +303,8 @@ export class RemoteAdapter {
         const item = weapons.ITEMS[slot];
         this.add({ id: `buy-${slot}`, kind: "button", disabled: !top._affordable(slot),
           label: `${slot === top._selected_slot() ? "▶ " : ""}${item.name} · $${top.econ.price[slot]} / ${item.bundle} · Owned ${top.tank.inventory[slot]}`,
+          purchase: { slot, name: item.name, owned: top.tank.inventory[slot], price: top.econ.price[slot],
+            bundle: item.bundle, selected: slot === top._selected_slot() },
         }, () => { top.sel_row = top.items.indexOf(slot); top._buy_selected(); });
       }
     } else if (top instanceof InventoryScreen) {

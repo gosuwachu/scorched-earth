@@ -34,6 +34,16 @@ body.lan-phone { min-height: 100dvh; }
 .lan-controls button { display: block; width: 100%; text-align: left; margin: 8px 0; }
 .lan-controls select { width: 100%; }
 .lan-controls input[type=number] { width: 130px; }
+.lan-controls .lan-shop-row {
+  display: grid; grid-template-columns: 12px 3ch 26px minmax(0, 1fr) max-content;
+  align-items: center; column-gap: 6px; min-height: 44px; margin: 0; padding: 6px 4px;
+  border: 0; border-bottom: 1px solid var(--ui-lo); font-size: 14px; line-height: 18px; font-weight: normal;
+}
+.lan-shop-owned, .lan-shop-price { text-align: right; font-variant-numeric: tabular-nums; }
+.lan-shop-icon { display: flex; justify-content: center; }
+.lan-shop-icon canvas { display: block; image-rendering: pixelated; max-width: 100%; height: auto; }
+.lan-shop-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.lan-shop-price { white-space: nowrap; }
 .lan-designs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .lan-designs button { padding: 4px; }
 .lan-designs canvas { display: block; image-rendering: pixelated; }
