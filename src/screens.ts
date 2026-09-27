@@ -381,6 +381,8 @@ function _f2(v: number): string {
 /** A SUBMENUS row: kind tag plus its heterogeneous binding fields. */
 export type SubmenuRow = [string, ...(string | number | null | ((v: number) => string))[]];
 
+// Preserve the original tables for oracle comparisons. OptionsScreen filters
+// settings without browser behavior before creating controls or accelerators.
 export const SUBMENUS: { [spec: string]: [string, SubmenuRow[]] } = {
   // 2a Sound
   sound: ["Sound", [
@@ -475,6 +477,19 @@ export const SUBMENUS: { [spec: string]: [string, SubmenuRow[]] } = {
   ]],
 };
 
+const INERT_BROWSER_OPTIONS = new Set([
+  "BIOS_KEYBOARD",
+  "LOWMEM",
+  "MOUSE_RATE",
+  "FALLING_DELAY",
+  "FAST_COMPUTERS",
+  "LAND2",
+  "DAMAGE_TANKS_ON_IMPACT",
+  "TUNNELLING",
+  "EXTRA_DIRT",
+  "USELESS_ITEMS",
+]);
+
 // Verbatim AI computer-type radio labels.  Byte-verified from the data image
 // (FUN_3014_1bc9 copies these 8 far-ptrs into the tag-8 radio array DAT_5f38_4fe6;
 // pointers DAT_5f38_209c[0..7] resolve to 4f38:2713.. in SCORCH_FP.EXE,
@@ -542,8 +557,8 @@ export function tank_icon_mobile(icon_index: number): boolean {
 export class MainMenuScreen extends Screen {
   /** SCREENS.md s1 + the v1.5 title panel (menu builder FUN_4755_0283).
    *
-   * LEFT: the verbatim button stack (Start / Players / Rounds / the seven
-   * submenu items / Save Changes).  RIGHT: the title art panel
+   * LEFT: the original menu actions, with Players and Rounds moved into the
+   * browser's new-game dialogs. RIGHT: the title art panel
    * (render.makeTitleBackdrop: gradient sky + digitized granite mountain) with the
    * title text composited over it and "Version 1.50" / copyright along the bottom.
    * (See screens.py:319-336 for the full builder + scaling note.)
@@ -591,13 +606,7 @@ export class MainMenuScreen extends Screen {
     // 1. ~Start (tag 0) -> begin game
     p.add(new Button(x, y, "~Start", "start_game", null, true));
     y += dy;
-    // 2. ~Players: inline spinner (range 2-10, cfg MAXPLAYERS)
-    _num_spinner(p, x, y, this.cfg, "MAXPLAYERS", "~Players:", 2, 10, 1, String, 250);
-    y += dy;
-    // 3. ~Rounds: inline spinner (range 1-1000, cfg MAXROUNDS)
-    _num_spinner(p, x, y, this.cfg, "MAXROUNDS", "~Rounds:", 1, 1000, 1, String, 250);
-    y += dy;
-    // 4-10. submenu items (push:<name>); labels verbatim with the `...`
+    // Submenu items (push:<name>); labels verbatim with the `...`
     const submenuItems: [string, string][] = [
       ["S~ound...", "sound"], ["~Hardware...", "hardware"],
       ["~Economics...", "economics"], ["~Landscape...", "landscape"],
@@ -608,11 +617,11 @@ export class MainMenuScreen extends Screen {
       p.add(new Label(x, y, label, W.C_TEXT, 15, false, "push:" + name));
       y += dy;
     }
-    // 11. ~About: open the shareware registration / about panel (STRING_AUDIT
-    // _SYSTEM #1).  Accel 'a' (not 'r'): '~Rounds:' already owns 'r' here.
+    // ~About: open the shareware registration / about panel (STRING_AUDIT
+    // _SYSTEM #1), preserving the original 'a' accelerator.
     p.add(new Button(x, y, "~About", "register"));
     y += dy;
-    // 12. Save ~Changes
+    // Save ~Changes
     p.add(new Button(x, y, "Save ~Changes", "save_changes"));
     y += dy;
   }
@@ -829,7 +838,7 @@ export class OptionsScreen extends Screen {
     this.scroll = 0;
     this.weapon_list = null;
     this.panel = new Panel(Math.trunc(w / 2) - 200, 24, 400, h - 80, title, false, "pop");
-    this._build(fields);
+    this._build(fields.filter((row) => typeof row[1] !== "string" || !INERT_BROWSER_OPTIONS.has(row[1])));
   }
 
   _build(fields: SubmenuRow[]): void {

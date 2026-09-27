@@ -16,8 +16,6 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
   },
   // main.boot reads cfg.resolution once; changing the menu does not resize it.
   GRAPHICS_MODE: { text: "Sets the game's internal resolution. Use Save Changes on the main menu, then reload the page to apply it." },
-  BIOS_KEYBOARD: { text: "An original DOS keyboard option. It has no effect in the browser version." },
-  LOWMEM: { text: "An original DOS memory-saving option. It has no effect in the browser version." },
   POINTER: {
     text: "Selects the pointer used by the game. Browser menus remain usable with the mouse or touch.",
     values: {
@@ -26,12 +24,9 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
       JOYSTICK: "Joystick: uses a connected, calibrated gamepad for the game's software cursor.",
     },
   },
-  MOUSE_RATE: { text: "An original mouse-speed setting. It does not change mouse sensitivity in the browser version." },
   // game._mag_deflect is the only live FIRE_DELAY consumer, despite its label.
   FIRE_DELAY: { text: "Does not change firing speed here. Higher values weaken the upward push of magnetic shields on incoming shots; 0 gives the strongest push." },
-  FALLING_DELAY: { text: "An original falling-animation delay. It has no effect in the browser version." },
   calibrate: { text: "Measures a connected gamepad's center and range for the joystick pointer. Calibration lasts until the page is reloaded." },
-  FAST_COMPUTERS: { text: "An original option for faster computer turns. It has no effect in the browser version." },
   INTEREST_RATE: { text: "Unspent cash earns interest between rounds: 0.05 means 5%. This rate also affects the price of Auto Defense." },
   FREE_MARKET: { text: "Lets shop prices change between rounds according to demand. Selling equipment returns 65% of its current value instead of the usual 80%." },
   SCORING: {
@@ -42,9 +37,8 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
       GREEDY: "Greedy: uses Standard rewards, but ranks by cash plus the resale value of equipment.",
     },
   },
-  // terrain._midpoint ignores LAND2 and overrides LAND1/FLATLAND under RANDOM_LAND.
+  // terrain._midpoint overrides LAND1/FLATLAND under RANDOM_LAND.
   LAND1: { text: "Higher values make generated terrain more rugged. Applies when Random Land is off and a scanned mountain is not chosen." },
-  LAND2: { text: "An original terrain-slope setting. It has no effect in the current terrain generator." },
   FLATLAND: { text: "Limits the height of generated peaks. Applies when Random Land is off and a scanned mountain is not chosen." },
   RANDOM_LAND: { text: "Uses rugged terrain with unflattened peaks, overriding Bumpiness and Flatten Peaks. Scanned mountains are chosen separately." },
   SKY: {
@@ -121,10 +115,6 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
   ATTACK_COMMENTS: { text: "Bundled text file used for firing taunts (normally talk1.cfg). Use Save Changes, then reload the page to load a different file." },
   DIE_COMMENTS: { text: "Bundled text file used for dying taunts (normally talk2.cfg). Use Save Changes, then reload the page to load a different file." },
   HOSTILE_ENVIRONMENT: { text: "Allows environmental lightning to damage tanks. When off, lightning remains visible but does no damage." },
-  // These config fields have no behavioral consumers: game._settle_tank always
-  // applies fall damage on landing; weapon handlers decide tunneling themselves.
-  DAMAGE_TANKS_ON_IMPACT: { text: "An original option for when falling damage is applied. It has no effect here: fall damage is applied on landing regardless of this setting." },
-  TUNNELLING: { text: "This toggle has no effect in the browser version. Whether a shot tunnels through dirt depends on the weapon." },
   EXPLOSION_SCALE: {
     text: "Changes blast sizes and their reach, not the display zoom.",
     values: {
@@ -133,9 +123,6 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
       LARGE: "Large: uses the largest blasts.",
     },
   },
-  EXTRA_DIRT: { text: "An original terrain option. It has no effect in the browser version." },
-  // Economy.refresh_availability deliberately leaves the USELESS_ITEMS gate permissive.
-  USELESS_ITEMS: { text: "Originally hid equipment that would be ineffective under the current rules. This toggle does not filter the shop in the browser version." },
   ARMS: { text: "Limits which equipment tiers the shop offers, from 0 to 4. Higher levels allow more advanced weapons and defenses; 4 allows all tiers." },
   BOMB_ICON: {
     text: "Changes the marker for ordinary projectiles in flight, without changing their damage.",

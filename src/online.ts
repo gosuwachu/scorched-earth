@@ -9,6 +9,7 @@ import { joinOrigin } from "./online_address";
 import { RemoteAdapter } from "./remote";
 import { sfx } from "./sound";
 import { button, el, dialog, installOnlineTheme, Roster, type OnlineDialog } from "./online_ui";
+import { field } from "./html/components";
 import "./online.css";
 
 const AI_NAMES = ["Moron", "Shooter", "Poolshark", "Tosser", "Chooser", "Spoiler", "Cyborg", "Unknown"];
@@ -238,18 +239,58 @@ function showNotice(message: string): void {
   box.footer.append(button("Close", () => box.close()));
 }
 
+function gameNumberInput(value: number, min: number, max: number, update: (value: number) => void): HTMLInputElement {
+  const input = el("input");
+  input.type = "number"; input.inputMode = "numeric"; input.required = true;
+  input.min = String(min); input.max = String(max); input.step = "1"; input.value = String(value);
+  input.oninput = () => { if (input.validity.valid) update(input.valueAsNumber); };
+  return input;
+}
+
+function gameDialogShortcuts(box: OnlineDialog, actions: Record<string, HTMLButtonElement>, defaultButton: HTMLButtonElement): void {
+  box.element.addEventListener("keydown", (event) => {
+    if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+    const editing = event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement;
+    const action = editing ? (event.key === "Enter" ? defaultButton : undefined) : actions[event.key.toLowerCase()];
+    if (action) { event.preventDefault(); event.stopPropagation(); action.click(); }
+  });
+}
+
+function showLocalGame(app: App, returnFocus: HTMLElement | null): void {
+  const cancel = () => { box.close(); returnFocus?.focus(); };
+  const box = dialog("Local game", { cancel });
+  const players = gameNumberInput(app.cfg.MAXPLAYERS, 2, 10, (value) => { app.cfg.MAXPLAYERS = value; });
+  box.body.append(field("Players", players));
+  const next = button("Continue", () => {
+    if (!players.reportValidity()) return;
+    box.close(); app.startLocal();
+  }, "c");
+  const back = button("Back", cancel, "b");
+  box.footer.append(next, back);
+  gameDialogShortcuts(box, { c: next, b: back }, next);
+  next.focus();
+}
+
 export function installOnline(app: App): void {
   installOnlineTheme();
   app.chooseMode = () => {
     let pending = false;
-    const box = dialog("New game", { cancel: () => { if (!pending) box.close(); } });
-    box.body.append(el("p", "Choose how to play."));
-    const local = button("Local", () => { box.close(); app.startLocal(); }, "l");
-    const back = button("Back", () => box.close(), "b");
+    const returnFocus = document.querySelector<HTMLElement>('[data-ui-action="start_game"]');
+    const cancel = () => { if (!pending) { box.close(); returnFocus?.focus(); } };
+    const box = dialog("New game", { cancel });
+    const rounds = gameNumberInput(app.cfg.MAXROUNDS, 1, 1000, (value) => { app.cfg.MAXROUNDS = value; });
+    box.body.append(field("Rounds", rounds), el("p", "Choose how to play."));
+    const local = button("Local", () => {
+      if (!rounds.reportValidity()) return;
+      box.close(); showLocalGame(app, returnFocus);
+    }, "l");
+    const back = button("Back", cancel, "b");
     const info = el("p");
     info.setAttribute("role", "status");
     const online = button("Online", () => {
+      if (!rounds.reportValidity()) return;
       pending = true;
+      rounds.disabled = true;
       info.textContent = "Connecting to the LAN service…";
       for (const b of box.footer.querySelectorAll("button")) b.disabled = true;
       void fetch("/api/lan", { signal: AbortSignal.timeout(5000) }).then(async (response) => {
@@ -259,6 +300,7 @@ export function installOnline(app: App): void {
         box.close(); app.online = new HostSession(app, data.urls);
       }).catch(() => {
         pending = false;
+        rounds.disabled = false;
         info.textContent = "Start the LAN service with npm run lan (or npm run dev:lan), then open the host URL printed in the terminal. Local play remains available here.";
         for (const b of box.footer.querySelectorAll("button")) b.disabled = false;
         online.focus();
@@ -266,11 +308,7 @@ export function installOnline(app: App): void {
     }, "o");
     box.body.append(info);
     box.footer.append(local, online, back);
-    box.element.addEventListener("keydown", (event) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
-      const action = { l: local, o: online, b: back }[event.key.toLowerCase()];
-      if (action) { event.preventDefault(); action.click(); }
-    });
+    gameDialogShortcuts(box, { l: local, o: online, b: back }, local);
     local.focus();
   };
 }

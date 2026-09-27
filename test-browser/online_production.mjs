@@ -62,10 +62,12 @@ try {
   await host.keyboard.press("Enter");
   const mode = host.getByRole("dialog", { name: "New game", exact: true });
   const dimensions = await mode.boundingBox();
-  assert.ok(dimensions.width <= 422 && dimensions.height < 240, "Mode chooser must be compact");
+  assert.ok(dimensions.width <= 422 && dimensions.height < 320, "Mode chooser and rounds field must be compact");
   assert.equal(await mode.evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(170, 170, 170)");
   assert.equal(await mode.locator(".ui-title").evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(0, 0, 160)");
   assert.equal(await host.evaluate(() => document.activeElement.textContent), "Local");
+  await host.keyboard.press("Shift+Tab");
+  assert.ok(await mode.getByRole("spinbutton", { name: "Rounds", exact: true }).evaluate((node) => node === document.activeElement));
   await host.keyboard.press("Shift+Tab");
   assert.equal(await host.evaluate(() => document.activeElement.textContent), "Back");
   await host.keyboard.press("Escape");

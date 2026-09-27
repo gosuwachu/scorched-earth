@@ -90,6 +90,55 @@ random stream. These are **not DOS execution recordings**. Regression tests
 cover these pixels, impact behavior, stage timing and deterministic replays;
 the browser harness captures successive flame rows and all shield tiers.
 
+## Shield flight audit
+
+The five definitions at `5f38:617c..61bc` give Mag Deflector 55 HP, Shield
+100, Force Shield 100, Heavy Shield 150, and Super Mag 200. Equipment activation
+sets the corresponding magnetic/reflection/laser flags. Absorbed blast damage
+can exhaust any tier and overflow into hull damage; ordinary projectile
+interception chips at most ten shield points without overflow. Super Mag
+converts laser energy to shield charge, capped at 200; a depleted Super Mag
+does not retain laser protection.
+
+`2a4a:28b4..2a0d` applies magnetic lift to enemy shells with nonzero horizontal
+velocity inside `abs(round(px - tank.x)) <= 15` and
+`0 < round(tank.y - py) <= (height - 1) / 4` (integer height division).
+Each callback adds `50 / FIRE_DELAY` to upward velocity, or 50 when the delay
+is zero. Both magnetic tiers use the same push. Slow descending shots can turn
+upward; a fast shot can penetrate the field. Mag Deflector's arcs do not stop
+that shot, while Super Mag's ring can intercept it. Neither is a radial bounce.
+The flight loop runs swept contact/Force reflection first, magnetic callbacks
+second (`2a4a:120b..123c`), then the weapon predicate. Magnetic lift can therefore
+prevent a MIRV from reaching apogee and splitting on that step.
+
+Force reflection (`2a4a:2487..273d`) uses an upward-positive normal and the
+incoming movement velocity saved before gravity, wind and drag (`e4dc/e4e4`).
+The old browser path inverted velocity Y, so a top hit was mistaken for an
+outgoing shot. The corrected vector reflection is mathematically equivalent
+to DOS's doubled-angle rotation and preserves exact axial zero components.
+It retains 70% of the speed and charges rounded incoming speed / 100 through
+the ordinary damage gate, including hull overflow if the shield is exhausted.
+The original quadrant guard remains for initial outgoing contacts. The browser
+also suppresses revisiting the last reflected pixel while moving outward,
+because its subpixel swept raster can include that pixel for several steps;
+a later incoming return reflects and pays again.
+
+`extract_shield_reference.py` verifies the executable checksum and generates
+`test/fixtures/dos_shields.json` using independent static transcriptions of
+magnetic motion and DOS's trigonometric reflection. These are **not DOS runtime
+traces**. Magnetic samples explicitly use the existing browser timestep of
+1/1920 second; the original CPU-adaptive cadence is not emulated, so identical
+magnetic trajectories across arbitrary DOS machine speeds are not claimed.
+Tests cover all tiers, field boundaries, complete slow/fast flights, reflection
+and re-entry, depletion, laser recharge, and repeatable trajectories in all
+three play modes. The shield browser gate captures actual successive frames
+for all five tiers, including top and side Force contacts.
+
+Shield audit verification on 2026-09-27: `npm test` passed 15,892 tests in
+64 files; `npm run build` passed; the browser gates passed 13 shield flight
+scenarios, 44 render states, and 66 weapon/terrain sequences. Shield captures
+and trajectory samples are written to `test-browser/out/shields/`.
+
 ## Deaths, weather and sound
 
 The eleven-case roulette at `271b:0005` now dispatches to live controllers:
@@ -141,12 +190,14 @@ own tones as their simulation advances.
 
 ```bash
 python oracle/extract_combat_reference.py /path/to/SCORCH.EXE
+python oracle/extract_shield_reference.py /path/to/SCORCH.EXE
 npm test
 npm run build
 npm run dev
 # In another terminal:
 node test-browser/run.mjs http://localhost:5173
 node test-browser/weapons.mjs http://localhost:5173
+node test-browser/shields.mjs http://localhost:5173
 npm run test:online:browser
 npm run test:online:production
 ```

@@ -46,12 +46,14 @@ try {
   await host.waitForFunction(() => !!window.onlineApp);
   await host.evaluate(() => {
     const app = window.onlineApp;
-    Object.assign(app.cfg, { INITIAL_CASH: 100_000, MAXROUNDS: 2, PLAY_ORDER: "ROUND-ROBIN", PLAY_MODE: "SIMULTANEOUS", MAX_WIND: 0, FALLING_TANKS: "OFF", SOUND: "ON" });
+    Object.assign(app.cfg, { INITIAL_CASH: 100_000, PLAY_ORDER: "ROUND-ROBIN", PLAY_MODE: "SIMULTANEOUS", MAX_WIND: 0, FALLING_TANKS: "OFF", SOUND: "ON" });
     app._act("start_game");
   });
   await click(host, "Local");
+  await click(host, "Continue");
   await host.waitForFunction(() => window.onlineApp.top.result !== undefined);
   await host.evaluate(() => { window.onlineApp._act("to_menu"); window.onlineApp._act("start_game"); });
+  await host.getByRole("spinbutton", { name: "Rounds", exact: true }).fill("2");
   await click(host, "Online");
   await host.getByRole("textbox", { name: "Join link", exact: true }).waitFor();
   const shareUrl = await host.getByRole("textbox", { name: "Join link", exact: true }).inputValue();
@@ -86,6 +88,7 @@ try {
   await until(() => enabled(a, "Done"), "Alice shopping");
   assert.equal(await enabled(b, "Space / Fire"), false);
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.cfg.MAXROUNDS), 2);
   const cash = () => host.evaluate(() => window.onlineApp.gs.tanks[0].cash);
   const beforeCash = await cash();
   await a.locator(".lan-controls button:enabled").filter({ hasText: /\$/ }).first().click();

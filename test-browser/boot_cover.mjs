@@ -9,7 +9,7 @@
 //   * real keyboard + mouse input flowing through the installed window/canvas
 //     listeners into the App and GameScreen.
 //
-// It drives: MainMenu --Enter(Start)--> TankInit(player 1) --Enter(Done)-->
+// It drives: MainMenu -> New game -> Local game -> TankInit(player 1) --Enter(Done)-->
 // TankInit(player 2) --Enter(Done)--> battlefield, then ramps power and fires a few
 // Space shots (best-effort kill); if the round ends it advances the rankings /
 // game-over panels.  Throughout it records V8 coverage and writes the RAW capture to
@@ -79,14 +79,15 @@ async function main() {
   await sleep(400); // let a few rAF frames settle the first menu frame
 
   // --- menu -> 2-player setup -> battlefield -----------------------------------
-  // Each screen here is opaque (no zoom-wipe to swallow a keypress), and the name
-  // TextField starts non-editing, so exactly ONE Enter activates each default
-  // button: Start, then Done, then Done -> App._build_game -> GameScreen.
+  // Enter activates each default button: Start, Local, Continue, then each
+  // player's Done button -> App._build_game -> GameScreen.
   const press = async (key, waitMs) => {
     await page.keyboard.press(key);
     await sleep(waitMs);
   };
-  await press("Enter", 350); // MainMenu ~Start  -> TankInit(player 1)
+  await press("Enter", 350); // MainMenu ~Start  -> New game
+  await press("Enter", 350); // New game Local  -> Local game
+  await press("Enter", 350); // Local Continue  -> TankInit(player 1)
   await press("Enter", 350); // TankInit ~Done   -> TankInit(player 2)
   await press("Enter", 700); // TankInit ~Done   -> build game, GameScreen (turn begins)
   console.log("[play] battlefield reached; firing");

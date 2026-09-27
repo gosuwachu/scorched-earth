@@ -1499,6 +1499,17 @@ export class GameState {
       if ((proj.bounce_count ?? 0) > _bc) {
         sfx.play("bounce", this.cfg.is_on("SOUND"));
       }
+      // 2a4a:0e75..123e: swept contact/Force reflection precedes the
+      // magnetic callbacks, which precede the weapon's flight predicate.
+      const hit = this._check_collision(proj);
+      const force = hit?.[0] === "shield" && hit[1]?.shield_deflect;
+      if (force) this._resolve_hit(proj, hit!);
+      this._mag_deflect(proj);
+      this._collect_trace(proj); // TRACE-gated persistent path
+      if (hit && !force) {
+        this._resolve_hit(proj, hit);
+        continue;
+      }
       // MIRV/Death's Head split at apogee (vy crosses + -> <=0)
       if (
         proj.weapon.behavior === "mirv" &&
@@ -1515,12 +1526,6 @@ export class GameState {
           }
         }
         continue;
-      }
-      this._mag_deflect(proj);
-      this._collect_trace(proj); // TRACE-gated persistent path
-      const hit = this._check_collision(proj);
-      if (hit) {
-        this._resolve_hit(proj, hit);
       }
     }
     // flush completed traced paths into the persistent layer (TRACE-ON only)
@@ -1613,7 +1618,8 @@ export class GameState {
 
   _mag_deflect(proj: Projectile): void {
     // Mag Deflector / Super Mag (shield flag & 6): a per-step UPWARD velocity bump
-    // on a shell inside an overhead box.  Byte-exact port of FUN_2a4a_28b4.
+    // on a shell inside an overhead box (2a4a:28b4). The increment is from
+    // DOS; callback cadence uses the browser's fixed physics timestep.
     const fire_delay = this.cfg.FIRE_DELAY;
     const bump = fire_delay === 0 ? C.MAG_PUSH_VY_NUM : C.MAG_PUSH_VY_NUM / fire_delay;
     const h_div = floorDiv(this.h - 1, C.MAG_PUSH_HEIGHT_DIV);
@@ -1644,19 +1650,23 @@ export class GameState {
 
   private _force_deflect(proj: Projectile, t: Tank, x: number, y: number): void {
     // 2a4a:2487: reflect at the first swept outline pixel, using the tank pivot.
+    // Both the normal and velocity have positive Y upward. DOS uses e4dc/e4e4,
+    // saved before drag/gravity/wind, i.e. the velocity that crossed the ring.
     const ndx = x - t.x, ndy = t.y - y;
-    const evx = proj.vx, evy = -proj.vy;
+    const evx = proj.saved_vx, evy = proj.saved_vy;
+    if (_sgn(ndx) === _sgn(evx) && _sgn(ndy) === _sgn(evy)) return;
     proj.px = proj.sx = x; proj.py = proj.sy = y;
     proj.state.forceContact = [t.player_index, x, y];
-    if (_sgn(ndx) === _sgn(evx) && _sgn(ndy) === _sgn(evy)) return;
-    const delta = (Math.atan2(evy, evx) - Math.atan2(ndy, ndx)) * C.FORCE_REFLECT_ANGLE_K;
-    const cos = Math.cos(delta), sin = Math.sin(delta);
+    // Equivalent to DOS's doubled-angle rotation. The vector form preserves
+    // exact zero components at axial contacts, so the outgoing sign guard
+    // cannot mistake trig roundoff for another incoming shot next step.
+    const projection = 2 * (evx * ndx + evy * ndy) / (ndx * ndx + ndy * ndy);
     // 2a4a:26ba..2713: Force reflection costs round(speed / 100), before
     // multiplying speed by 0.7. It is not the ordinary ten-point impact.
-    const amount = Math.min(t.shield_hp, pyRound(Math.sqrt(evx * evx + evy * evy) / 100));
+    const amount = pyRound(Math.sqrt(evx * evx + evy * evy) / 100);
     damage.apply_tank_damage(this as unknown as damage.State, t, amount);
-    proj.vx = (-cos * evx - sin * evy) * C.FORCE_REFLECT_RESTITUTION;
-    proj.vy = -(sin * evx - cos * evy) * C.FORCE_REFLECT_RESTITUTION;
+    proj.vx = (evx - projection * ndx) * C.FORCE_REFLECT_RESTITUTION;
+    proj.vy = (evy - projection * ndy) * C.FORCE_REFLECT_RESTITUTION;
   }
 
   _check_collision(proj: Projectile): Hit | null {
@@ -1676,8 +1686,17 @@ export class GameState {
             shieldContains(t.shield_item, x - t.x, y - t.y) && !this.terrain.is_dirt(x, y)) {
           // 2a4a:1583: the Mag Deflector's painted arcs do not intercept.
           const last = proj.state.forceContact as number[] | undefined;
+          // A subpixel departure can still rasterize the last contact. Once
+          // reflected, keep passing that pixel while moving outward; an
+          // incoming return to the same pixel is a fresh contact.
+          const leavingContact = last && last[0] === t.player_index && last[1] === x && last[2] === y &&
+            (x - t.x) * proj.saved_vx + (t.y - y) * proj.saved_vy >= 0;
+          // 2a4a:24c4..25c6: an outgoing Force contact keeps walking the
+          // segment. Do not snap a departing shell back onto the ring.
+          const outgoing = t.shield_deflect && _sgn(x - t.x) === _sgn(proj.saved_vx) &&
+            _sgn(t.y - y) === _sgn(proj.saved_vy);
           if (t.shield_item !== weapons.SLOT_MAG_DEFLECTOR &&
-              !(last && x === x0 && y === y0 && last[0] === t.player_index && last[1] === x && last[2] === y))
+              !outgoing && !leavingContact)
             return { 0: "shield", 1: t, 2: x, 3: y };
         }
         if (Math.abs(t.x - x) <= t.half_width && 0 <= t.y - y && t.y - y <= 10 &&

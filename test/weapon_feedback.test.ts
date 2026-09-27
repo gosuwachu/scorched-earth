@@ -3,6 +3,7 @@ import reference from "./fixtures/dos_feedback.json";
 import { Config } from "../src/config";
 import { createGameState, FIRING, SIM_LIVE, SYNC_VOLLEY } from "../src/game";
 import { Projectile } from "../src/objects";
+import { step } from "../src/physics";
 import { ITEMS } from "../src/weapons";
 import { startFluid, stepCombatEffect, type FluidEffect } from "../src/combat_effects";
 import { startFunky, stepWeaponEffect, type FunkyEffect } from "../src/weapon_effects";
@@ -133,7 +134,7 @@ describe("shield pixels and swept contacts", () => {
     gs._resolve_hit(p, gs._check_collision(p)!);
     expect(p.active).toBe(true); expect(p.vx).toBeCloseTo(-210); expect(p.vy).toBeCloseTo(0);
     expect(t.shield_hp).toBe(97); expect(t.health).toBe(100);
-    p.prev_px = p.px; p.prev_py = p.py; p.px = p.sx = 130;
+    step(p, gs.cfg, 1 / 20); // also save the outgoing movement velocity for the next collision scan
     expect(gs._check_collision(p)).toBeNull(); expect(t.shield_hp).toBe(97);
   });
   it("lets shells pass the Mag Deflector arcs", () => {

@@ -869,3 +869,35 @@ for (const [name, idx, frames] of [
   STATES[name] = () => { startWeaponDemo(idx); return advanceWeaponDemo(frames); };
 }
 Object.assign(window, { startWeaponDemo, advanceWeaponDemo, weaponDemoTerrainStats });
+
+// Real flight sequences for the shield gate; setup goes through normal equipment.
+let shieldDemo: { gs: GameState; p: Projectile; renderer: Renderer; surf: pygame.Surface; frame: number };
+function startShieldDemo(item: number, scenario: string): void {
+  const gs = buildState(42, { SKY: "PLAIN", FALLING_TANKS: "OFF", MTN_PERCENT: 0,
+    TRACE: "ON", FLY_SOUND: "OFF", FIRE_DELAY: 100 });
+  driveToAim(gs);
+  gs.terrain.grid.fill(C.COL_SKY);
+  const ground = Math.round(H * 0.65);
+  for (let x = 0; x < W; x++) for (let y = ground; y < H; y++) gs.terrain.write(x, y, C.DIRT_SHADE_LO + 8);
+  gs.tanks.forEach((t, i) => { t.x = i ? W >> 1 : 100; t.y = ground - 1; });
+  const target = gs.tanks[1];
+  target.shield_hp = 0; target.inventory.fill(0); target.inventory[item] = 1;
+  gs._arm_best_shield(target, false);
+  gs.current_shooter = gs.tanks[0]; gs.phase = FIRING;
+  const top = scenario === "top";
+  const side = scenario === "left" ? -1 : scenario === "right" ? 1 : 0;
+  const p = new Projectile(gs.current_shooter, ITEMS[0], target.x + (side ? side * 16 : top ? 0 : -4),
+    target.y - (side ? 0 : 40), side ? -side * 300 : top ? 0 : 10,
+    side ? 0 : scenario === "fast" ? -400 : top ? -300 : -100);
+  gs.projectiles = [p];
+  shieldDemo = { gs, p, renderer: freshRenderer(gs), surf: newSurf(), frame: 0 };
+  advanceShieldDemo(0);
+}
+function advanceShieldDemo(frames: number): StateMeta {
+  const d = shieldDemo;
+  for (let i = 0; i < frames; i++) { d.gs.update(C.DT); d.frame++; }
+  d.renderer.render(d.surf, d.gs); blit(d.surf);
+  return { frame: d.frame, x: d.p.px, y: d.p.py, vx: d.p.vx, vy: d.p.vy, active: d.p.active,
+    shield: d.gs.tanks[1].shield_hp, health: d.gs.tanks[1].health, phase: d.gs.phase };
+}
+Object.assign(window, { startShieldDemo, advanceShieldDemo });
