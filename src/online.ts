@@ -38,9 +38,9 @@ export class HostSession {
   constructor(private app: App, urls: string[]) {
     this.localConfig = app.cfg;
     this.origin = joinOrigin(location.href, urls);
-    this.box = dialog("Online lobby", { wide: true, className: "ui-compact", cancel: () => app._act("to_menu") });
-    this.box.body.append(el("p", "Creating room…"));
-    this.bar.append(this.status);
+    this.box = dialog("Online lobby", { className: "ui-compact", sound: () => app.cfg.is_on("SOUND"), cancel: () => this.closeLobby() });
+    this.status.setAttribute("role", "status");
+    this.box.body.append(this.status);
     const share = button("Join link", () => { this.shareOpen = true; this.renderLobby(); });
     const continueButton = button("Continue", () => {
       if (app.onlineScreen === "rankings") app._act("rankings_done");
@@ -49,12 +49,9 @@ export class HostSession {
     continueButton.dataset.lanContinue = "true";
     continueButton.hidden = true;
     this.bar.append(share, continueButton, button("End online game", () => this.confirmEnd()));
-    document.body.append(this.bar);
-    document.body.classList.add("lan-host");
     this.barSize = new ResizeObserver(() => {
-      document.body.style.setProperty("--lan-bar-height", `${this.bar.offsetHeight}px`);
+      if (this.bar.isConnected) document.body.style.setProperty("--lan-bar-height", `${this.bar.offsetHeight}px`);
     });
-    this.barSize.observe(this.bar);
     this.connection = new Connection(
       () => this.token && this.room ? { type: "host-resume", room: this.room.id, token: this.token } : { type: "create" },
       (m) => this.receive(m),
@@ -106,19 +103,26 @@ export class HostSession {
       for (const p of m.room.players) if (!p.connected) this.adapter?.release(p.id);
     } else if (m.type === "started") {
       this.room = m.room;
-      this.box.close();
-      if (!this.adapter) {
-        this.app.startOnline(m.room.players);
-        this.adapter = new RemoteAdapter(this.app, m.room.players);
-      }
-      this.afterFrame(performance.now());
+      this.box.close(() => {
+        if (this.disposed) return;
+        if (!this.adapter) {
+          this.app.startOnline(m.room.players);
+          this.adapter = new RemoteAdapter(this.app, m.room.players);
+        }
+        this.bar.prepend(this.status);
+        document.body.append(this.bar);
+        document.body.classList.add("lan-host");
+        document.body.style.setProperty("--lan-bar-height", `${this.bar.offsetHeight}px`);
+        this.barSize.observe(this.bar);
+        this.afterFrame(performance.now());
+      });
     } else if (m.type === "release") {
       this.adapter?.release(m.player);
       this.pending = this.pending.filter((input) => input.player !== m.player);
     } else if (m.type === "input") this.pending.push(m);
     else if (m.type === "error") {
       this.status.textContent = m.message;
-      if (m.fatal) { this.app._act("to_menu"); showNotice(m.message); }
+      if (m.fatal) { this.app._act("to_menu"); showNotice(this.app, m.message); }
     } else if (m.type === "ended") {
       this.app._act("to_menu");
     }
@@ -133,23 +137,27 @@ export class HostSession {
 
   private confirmEnd(): void {
     if (this.confirmation) return;
-    const cancel = (): void => { this.confirmation?.close(); this.confirmation = undefined; };
-    this.confirmation = dialog("End online game", { cancel });
+    const cancel = (): void => { this.confirmation?.close(() => { this.confirmation = undefined; }); };
+    this.confirmation = dialog("End online game", { sound: () => this.app.cfg.is_on("SOUND"), cancel });
     this.confirmation.body.append(el("p", "End this online game for everyone?"));
     this.confirmation.footer.append(
       button("Cancel", cancel),
-      button("End game", () => { cancel(); this.app._act("to_menu"); }),
+      button("End game", () => this.confirmation?.close(() => this.app._act("to_menu"))),
     );
+  }
+
+  private closeLobby(): void {
+    if (this.room?.started) {
+      this.shareOpen = false;
+      this.box.close();
+    } else this.box.close(() => this.app._act("to_menu"));
   }
 
   private renderLobby(): void {
     if (!this.room) return;
-    const close = (): void => {
-      if (this.room?.started) { this.shareOpen = false; this.box.close(); }
-      else this.app._act("to_menu");
-    };
+    const close = (): void => this.closeLobby();
     if (!this.box.element.isConnected) {
-      this.box = dialog(this.room.started ? "Join / reconnect" : "Online lobby", { wide: true, className: "ui-compact", cancel: close });
+      this.box = dialog(this.room.started ? "Join / reconnect" : "Online lobby", { className: "ui-compact", sound: () => this.app.cfg.is_on("SOUND"), cancel: close });
       this.roster = undefined;
     }
     // Presence updates only touch the roster and button availability. Preserve
@@ -162,6 +170,7 @@ export class HostSession {
     this.startButton = undefined;
     this.addButton = undefined;
     this.box.body.replaceChildren(el("p", "Players watch this screen and use their own devices as controllers. Keep this host page open and visible."));
+    if (!this.room.started) this.box.body.append(this.status);
     this.box.footer.replaceChildren();
     const layout = el("div", "", "lan-lobby-layout");
     const sharing = el("section");
@@ -227,8 +236,8 @@ export class HostSession {
     this.connection.send({ type: "end" });
     this.connection.close();
     this.adapter?.release();
-    this.confirmation?.close();
-    this.box.close(); this.bar.remove();
+    this.confirmation?.dispose();
+    this.box.dispose(); this.bar.remove();
     this.barSize.disconnect();
     document.body.classList.remove("lan-host");
     document.body.style.removeProperty("--lan-bar-height");
@@ -237,8 +246,8 @@ export class HostSession {
   }
 }
 
-function showNotice(message: string): void {
-  const box = dialog("LAN play", { cancel: () => box.close() });
+function showNotice(app: App, message: string): void {
+  const box = dialog("LAN play", { sound: () => app.cfg.is_on("SOUND"), cancel: () => box.close() });
   box.body.append(el("p", message));
   box.footer.append(button("Close", () => box.close()));
 }
@@ -261,8 +270,8 @@ function gameDialogShortcuts(box: OnlineDialog, actions: Record<string, HTMLButt
 }
 
 function showLocalGame(app: App, returnFocus: HTMLElement | null): void {
-  const cancel = () => { box.close(); returnFocus?.focus(); };
-  const box = dialog("Local game", { className: "ui-compact", cancel });
+  const cancel = () => box.close(() => returnFocus?.focus());
+  const box = dialog("Local game", { className: "ui-compact", sound: () => app.cfg.is_on("SOUND"), cancel });
   const players = el("fieldset", "", "ui-player-count");
   const choices = el("div", "", "ui-player-choices");
   const inputs = Array.from({ length: 9 }, (_, i) => {
@@ -277,7 +286,7 @@ function showLocalGame(app: App, returnFocus: HTMLElement | null): void {
   players.append(el("legend", "Players"), choices); box.body.append(players);
   const next = button("Continue", () => {
     if (!inputs[0].reportValidity()) return;
-    box.close(); app.startLocal();
+    box.close(() => app.startLocal());
   }, "c");
   const back = button("Back", cancel, "b");
   box.footer.append(next, back);
@@ -290,13 +299,13 @@ export function installOnline(app: App): void {
   app.chooseMode = () => {
     let pending = false;
     const returnFocus = document.querySelector<HTMLElement>('[data-ui-action="start_game"]');
-    const cancel = () => { if (!pending) { box.close(); returnFocus?.focus(); } };
-    const box = dialog("New game", { className: "ui-compact", cancel });
+    const cancel = () => { if (!pending) box.close(() => returnFocus?.focus()); };
+    const box = dialog("New game", { className: "ui-compact", sound: () => app.cfg.is_on("SOUND"), cancel });
     const rounds = gameNumberInput(app.cfg.MAXROUNDS, 1, 1000, (value) => { app.cfg.MAXROUNDS = value; });
     box.body.append(field("Rounds", rounds), el("p", "Choose how to play."));
     const local = button("Local", () => {
       if (!rounds.reportValidity()) return;
-      box.close(); showLocalGame(app, returnFocus);
+      box.close(() => showLocalGame(app, returnFocus));
     }, "l");
     const back = button("Back", cancel, "b");
     const info = el("p");
@@ -311,7 +320,8 @@ export function installOnline(app: App): void {
         if (!response.ok) throw new Error();
         const data = await response.json() as { urls?: string[] };
         if (!Array.isArray(data.urls)) throw new Error();
-        box.close(); app.online = new HostSession(app, data.urls);
+        const urls = data.urls;
+        box.close(() => { app.online = new HostSession(app, urls); });
       }).catch(() => {
         pending = false;
         rounds.disabled = false;

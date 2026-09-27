@@ -1,5 +1,6 @@
 /** Shared, framework-free HTML controls. No game-state dependencies. */
 import { C_BG, C_PANEL, C_PANEL_HI, C_PANEL_LO, C_TEXT, C_TEXT_LT, C_ACCEL, C_SEL, C_FIELD } from "./theme";
+import { animateDialog } from "./transitions";
 import "./theme.css";
 
 export interface Component<T = void> {
@@ -40,7 +41,7 @@ export interface Dialog {
   element: HTMLDialogElement;
   body: HTMLElement;
   footer: HTMLElement;
-  close(): void;
+  close(done?: () => void): void;
   dispose(): void;
   update(title: string): void;
 }
@@ -56,8 +57,21 @@ export function modalShell(options: { className?: string; cancel?: () => void } 
 }
 
 /** Native modal behavior supplies an inert background and Escape handling. */
-export function dialog(title: string, options: { wide?: boolean; cancel?: () => void; parent?: HTMLElement; className?: string; defer?: boolean } = {}): Dialog {
-  const element = modalShell({ className: `ui-dialog${options.wide ? " ui-wide" : ""}`, cancel: options.cancel });
+export function dialog(title: string, options: { cancel?: () => void; parent?: HTMLElement; className?: string; sound?: () => boolean } = {}): Dialog {
+  let animation: Animation | null = null;
+  let closing = false;
+  let disposed = false;
+  const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const element = modalShell({ className: "ui-dialog", cancel: () => { if (!closing) options.cancel?.(); } });
+  // Like settings, the first action during an opening wipe only completes it.
+  const guard = (event: Event) => {
+    if (event instanceof KeyboardEvent && (event.key === "F11" || (event.altKey && event.key === "Enter"))) return;
+    if (!closing && !animation) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    animation?.finish();
+  };
+  element.addEventListener("keydown", guard, true);
+  element.addEventListener("click", guard, true);
   const heading = el("h1", title, "ui-title");
   heading.id = `ui-dialog-${++nextDialogId}`;
   element.setAttribute("aria-labelledby", heading.id);
@@ -86,12 +100,31 @@ export function dialog(title: string, options: { wide?: boolean; cancel?: () => 
     }
   });
   (options.parent ?? document.body).append(element);
-  if (!options.defer) element.showModal();
+  element.showModal();
+  animation = animateDialog(element, true, options.sound?.() ?? false, () => { animation = null; });
   queueMicrotask(() => {
     if (element.isConnected && document.activeElement === element) element.querySelector<HTMLElement>("button:not(:disabled), input, select")?.focus();
   });
-  const dispose = () => { element.close(); element.remove(); };
-  return { element, body, footer, close: dispose, dispose, update: (title) => { heading.textContent = title; } };
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    if (animation) {
+      animation.onfinish = animation.oncancel = null;
+      animation.cancel(); animation = null;
+    }
+    element.close(); element.remove();
+    if (returnFocus?.isConnected && !returnFocus.closest("[inert], [hidden]")) returnFocus.focus({ preventScroll: true });
+  };
+  const close = (done?: () => void) => {
+    if (closing || disposed) return;
+    closing = true; element.inert = true;
+    if (animation) {
+      animation.onfinish = animation.oncancel = null;
+      animation.cancel();
+    }
+    animation = animateDialog(element, false, options.sound?.() ?? false, () => { dispose(); done?.(); });
+  };
+  return { element, body, footer, close, dispose, update: (title) => { heading.textContent = title; } };
 }
 
 /** Set a property only when it changes, preserving native input selection. */

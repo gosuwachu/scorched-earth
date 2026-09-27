@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { checkOptionHelp } from "./option_help.mjs";
 import { checkGuidance } from "./guidance_ui.mjs";
 import { checkMenuLayout, checkPlayerGrid } from "./menu_ui.mjs";
+import { checkSetupDialogs, settledDialogs } from "./dialogs.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.UI_TEST_URL || "http://127.0.0.1:4320";
 let server, browser;
@@ -30,12 +31,13 @@ try {
     const { Panel } = await import("/src/widgets.ts");
     Panel.prototype.draw = () => { throw new Error("Production UI must not paint canvas panels"); };
   });
-  const settled = () => page.waitForFunction(() => !window.onlineApp.transitioning);
+  const settled = () => settledDialogs(page);
   const click = async (name) => { await settled(); await page.getByRole("button", { name, exact: true }).click(); await settled(); };
   const shot = async (name) => page.screenshot({ path: `${root}/test-browser/out/ui-${name}.png` });
   mkdirSync(`${root}/test-browser/out`, { recursive: true });
   assert.equal(await page.getByRole("group", { name: /^(Players|Rounds):$/ }).count(), 0);
   await checkMenuLayout(page);
+  await checkSetupDialogs(page, shot);
   await shot("menu");
   await page.keyboard.press("F11");
   await page.waitForFunction(() => document.fullscreenElement === document.documentElement);
@@ -114,7 +116,7 @@ try {
   assert.equal(await rounds.inputValue(), "2");
   await page.unroute("**/api/lan");
   for (const cancel of ["Back", "Escape"]) {
-    if (cancel === "Back") await click("Back"); else await page.keyboard.press("Escape");
+    if (cancel === "Back") await click("Back"); else { await page.keyboard.press("Escape"); await settled(); }
     assert.equal(await page.locator("dialog[open]").count(), 0);
     assert.equal(await page.evaluate(() => document.activeElement.textContent), "Start");
     await click("Start"); assert.equal(await rounds.inputValue(), "2");
@@ -126,7 +128,7 @@ try {
   await checkPlayerGrid(page);
   await playerCount(3).check();
   for (const cancel of ["Back", "Escape"]) {
-    if (cancel === "Back") await click("Back"); else await page.keyboard.press("Escape");
+    if (cancel === "Back") await click("Back"); else { await page.keyboard.press("Escape"); await settled(); }
     assert.equal(await page.locator("dialog[open]").count(), 0);
     assert.equal(await page.evaluate(() => document.activeElement.textContent), "Start");
     await click("Start"); await click("Local"); assert.ok(await playerCount(3).isChecked());
@@ -321,6 +323,8 @@ try {
   await page.evaluate(() => window.onlineApp._act("to_menu")); await settled();
   for (const [width, height] of [[320, 568], [390, 844], [800, 480]]) {
     await page.setViewportSize({ width, height });
+    // Let the canvas ResizeObserver reposition the menu before measuring it.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await checkMenuLayout(page); await shot(`menu-${width}x${height}`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
@@ -329,7 +333,7 @@ try {
   const done = page.getByRole("button", { name: "Done", exact: true }); await done.scrollIntoViewIfNeeded(); await done.click(); await settled();
   await click("Start"); await shot("mobile-new-game");
   await page.setViewportSize({ width: 800, height: 480 }); await shot("short-new-game");
-  await page.setViewportSize({ width: 390, height: 844 }); await rounds.press("Enter"); await checkPlayerGrid(page); await shot("mobile-local-game");
+  await page.setViewportSize({ width: 390, height: 844 }); await rounds.press("Enter"); await settled(); await checkPlayerGrid(page); await shot("mobile-local-game");
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.setViewportSize({ width: 800, height: 480 }); await checkPlayerGrid(page); await shot("short-local-game");
   await page.setViewportSize({ width: 320, height: 568 }); await checkPlayerGrid(page); await shot("narrow-local-game");

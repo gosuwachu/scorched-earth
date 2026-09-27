@@ -5,6 +5,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { WebSocket } from "ws";
+import { checkDialogLayout, checkNoOnlineBar, settledDialogs } from "./dialogs.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const externalBase = process.env.ONLINE_BASE_URL;
@@ -61,8 +62,9 @@ try {
   await host.locator("#loading.done").waitFor({ state: "attached" });
   await host.keyboard.press("Enter");
   const mode = host.getByRole("dialog", { name: "New game", exact: true });
+  await checkDialogLayout(host, "New game");
   const dimensions = await mode.boundingBox();
-  assert.ok(dimensions.width <= 422 && dimensions.height < 320, "Mode chooser and rounds field must be compact");
+  assert.ok(dimensions.height < 320, "Mode chooser retains compact control spacing");
   assert.equal(await mode.evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(170, 170, 170)");
   assert.equal(await mode.locator(".ui-title").evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(0, 0, 160)");
   assert.equal(await host.evaluate(() => document.activeElement.textContent), "Local");
@@ -73,11 +75,14 @@ try {
   await host.keyboard.press("Escape");
   await mode.waitFor({ state: "detached" });
   await host.keyboard.press("Enter");
+  await settledDialogs(host);
   mkdirSync(`${root}/test-browser/out`, { recursive: true });
   await host.screenshot({ path: `${root}/test-browser/out/online-mode.png` });
   await host.keyboard.press("o");
   const link = host.getByRole("textbox", { name: "Join link", exact: true });
   await link.waitFor();
+  await checkDialogLayout(host, "Online lobby");
+  await checkNoOnlineBar(host);
   assert.equal(await host.getByLabel("LAN address", { exact: true }).count(), 0);
   assert.equal(await host.getByLabel("Custom LAN address", { exact: true }).count(), 0);
   const join = await link.inputValue();
@@ -168,8 +173,10 @@ try {
     await phone.screenshot({ path: `${root}/test-browser/out/online-guest-${viewport.width}x${viewport.height}.png`, fullPage: true });
   }
   await phone.setViewportSize({ width: 390, height: 844 });
-  for (const viewport of [{ width: 1024, height: 768 }, { width: 320, height: 568 }, { width: 1200, height: 900 }]) {
+  for (const viewport of [{ width: 1024, height: 768 }, { width: 320, height: 568 }, { width: 800, height: 480 }, { width: 1200, height: 900 }]) {
     await host.setViewportSize(viewport);
+    await checkDialogLayout(host, "Online lobby");
+    await host.screenshot({ path: `${root}/test-browser/out/online-lobby-${viewport.width}x${viewport.height}.png` });
     const footer = await host.locator(".ui-dialog-footer").boundingBox();
     assert.ok(footer.y >= 0 && footer.y + footer.height <= viewport.height, "Dialog actions remain in the viewport");
   }
@@ -179,6 +186,7 @@ try {
   await host.getByRole("button", { name: "Start online game", exact: true }).click();
   await host.getByRole("button", { name: "Join link", exact: true }).click();
   await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor();
+  await checkDialogLayout(host, "Join / reconnect");
   assert.equal(await link.inputValue(), join);
   assert.ok(await link.evaluate((n) => n.readOnly));
   assert.ok(await host.getByRole("button", { name: "Copy link", exact: true }).isVisible());
@@ -199,8 +207,14 @@ try {
   assert.ok(canvas.y + canvas.height <= bar.y + 1, "The host toolbar must not cover the battlefield");
   await host.getByRole("button", { name: "End online game", exact: true }).click();
   await host.getByRole("dialog", { name: "End online game", exact: true }).waitFor();
+  await settledDialogs(host);
   await host.keyboard.press("Escape");
   await host.getByRole("dialog", { name: "End online game", exact: true }).waitFor({ state: "detached" });
+  assert.equal(await host.evaluate(() => document.activeElement.textContent), "End online game");
+  await host.getByRole("button", { name: "End online game", exact: true }).click();
+  await host.getByRole("button", { name: "End game", exact: true }).click();
+  await host.locator(".lan-bar").waitFor({ state: "detached" });
+  await checkNoOnlineBar(host);
   assert.deepEqual(errors, []);
   console.log("PASS: production LAN flow; game-style dialogs; focus/shortcuts; ten-player keyboard, wheel and touch scrolling; stable roster updates; responsive layouts; touch control and refresh recovery");
 } catch (error) {

@@ -6,6 +6,7 @@ import { chromium } from "playwright";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
 import { purchaseButton, checkShopRows, checkShopLayout } from "./online_shop.mjs";
+import { checkNoOnlineBar, settledDialogs } from "./dialogs.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.ONLINE_TEST_URL || "http://127.0.0.1:4317";
@@ -26,7 +27,11 @@ const wireErrors = (page) => {
   page.on("pageerror", (error) => errors.push(String(error)));
   page.on("response", (r) => { if (r.status() >= 400 && /\/(src|assets)\//.test(r.url())) errors.push(`${r.status()} ${r.url()}`); });
 };
-const click = (page, name) => page.getByRole("button", { name, exact: true }).click();
+const click = async (page, name) => {
+  await settledDialogs(page);
+  await page.getByRole("button", { name, exact: true }).click();
+  await settledDialogs(page);
+};
 const enabled = async (page, name) => {
   const b = page.getByRole("button", { name, exact: true });
   return await b.count() > 0 && await b.isEnabled();
@@ -63,6 +68,17 @@ try {
   await host.getByRole("spinbutton", { name: "Rounds", exact: true }).fill("2");
   await click(host, "Online");
   await host.getByRole("textbox", { name: "Join link", exact: true }).waitFor();
+  await settledDialogs(host);
+  await checkNoOnlineBar(host);
+  const lobbyCanvas = await host.locator("#game").boundingBox();
+  await click(host, "Cancel");
+  await host.getByRole("dialog", { name: "Online lobby", exact: true }).waitFor({ state: "detached" });
+  await settledDialogs(host);
+  await checkNoOnlineBar(host);
+  assert.deepEqual(await host.locator("#game").boundingBox(), lobbyCanvas, "Canceling the lobby does not resize the game");
+  await click(host, "Start"); await click(host, "Online");
+  await host.getByRole("textbox", { name: "Join link", exact: true }).waitFor();
+  await settledDialogs(host);
   const shareUrl = await host.getByRole("textbox", { name: "Join link", exact: true }).inputValue();
   assert.ok(!shareUrl.includes("localhost") && !shareUrl.includes("127.0.0.1"));
   const joinUrl = `${base}/${new URL(shareUrl).search}`;
@@ -97,6 +113,12 @@ try {
   await click(host, "Start online game");
   await host.waitForFunction(async () => (await import("/src/sound.ts")).sfx._ctx?.state === "running");
   await until(() => enabled(a, "Done"), "Alice shopping");
+  assert.ok(await host.locator(".lan-bar").isVisible(), "The toolbar appears once play starts");
+  await click(host, "Join link");
+  await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor();
+  assert.equal(await host.evaluate(() => window.onlineApp.transitioning), false, "Sharing animations do not pause the match or disable remote input");
+  await click(host, "Close join link");
+  await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor({ state: "detached" });
   assert.equal(await enabled(b, "Space / Fire"), false);
   assert.equal(await b.locator(".lan-shop-row:enabled").count(), 0, "Waiting guests cannot purchase");
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");

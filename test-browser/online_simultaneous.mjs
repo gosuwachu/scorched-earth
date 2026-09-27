@@ -75,6 +75,9 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
     gs.tanks.forEach((t, i) => { t.x = 120 + i * 350; t.y = 600; t.angle = 90; t.power = 400; });
     const a = gs.tanks[0]; a.inventory[31] = 3; a.inventory[39] = 5; a.selected_weapon = 31;
   });
+  // Clearing shots does not cancel soil settling already queued by an impact.
+  // Fire is intentionally gated until that settling completes.
+  await host.waitForFunction(() => !window.onlineApp.gs.sim_settling && !window.onlineApp.gs.soilDirty);
   await hold(b, "← Angle");
   await click(a, "Space / Fire");
   const charge = a.getByRole("spinbutton", { name: "Batteries for Plasma", exact: true });

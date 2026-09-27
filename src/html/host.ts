@@ -9,7 +9,7 @@ import * as ranks from "../ui";
 import type { GameState } from "../game";
 import type { ScreenEvent } from "../screen";
 import { ITEMS } from "../weapons";
-import { sfx } from "../sound";
+import { animateDialog } from "./transitions";
 import { button, el, installTheme, modalShell } from "./components";
 import { PanelView, type WidgetActions } from "./widgets";
 import { ScreenContent, menuArt } from "./screens";
@@ -338,13 +338,12 @@ export class UiHost {
     }
   }
   private animate(view: View, opening: boolean, done?: () => void): void {
-    sfx.play(opening ? "dialog_open" : "dialog_close", this.app.cfg.is_on("SOUND"));
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !view.element.animate) { done?.(); return; }
-    const frames = [{ transform: "scale(.05)", opacity: .2 }, { transform: "scale(1)", opacity: 1 }];
-    const animation = view.element.animate(opening ? frames : frames.reverse(), { duration: 1000 / 3, easing: "linear" });
-    this.animations.add(animation);
-    const finish = () => { this.animations.delete(animation); done?.(); };
-    animation.onfinish = finish; animation.oncancel = finish;
+    let animation: Animation | null = null;
+    animation = animateDialog(view.element, opening, this.app.cfg.is_on("SOUND"), () => {
+      if (animation) this.animations.delete(animation);
+      done?.();
+    });
+    if (animation) this.animations.add(animation);
   }
   private retire(view: View): void {
     view.element.inert = true;

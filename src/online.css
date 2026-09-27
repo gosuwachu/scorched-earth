@@ -53,7 +53,6 @@ body.lan-phone { min-height: 100dvh; }
 @media (max-width: 600px) {
   .lan-lobby-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .lan-controller { margin: 8px; }
-  .ui-dialog, .ui-dialog.ui-wide { width: calc(100% - 16px); max-height: calc(100dvh - 16px); }
   .ui-dialog-body { padding: 12px; }
 }
 

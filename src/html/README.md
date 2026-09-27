@@ -6,7 +6,7 @@ and action handlers; HTML is their production presentation. Legacy canvas panel
 painters remain available to the differential/reference harnesses.
 
 - `components.ts`: element/button/field factories, the shared native modal shell,
-  online dialog layout, stable keyed lists, and the `Component<T>` lifecycle
+  standalone dialog layout and animated close/disposal, stable keyed lists, and the `Component<T>` lifecycle
   (`element`, `update(value)`, `dispose()`). Uses text nodes, never HTML injection.
 - `theme.ts` / `theme.css`: shared palette and bevels. Add `se-ui` to a container;
   add `ui-compact` for the original game density, including host new-game and online
@@ -21,6 +21,10 @@ painters remain available to the differential/reference harnesses.
 - `host.ts`: screen/nested-dialog lifecycle, keyboard ownership, focus restoration,
   fullscreen placement, and transitions. All local mutations pass the active-screen
   and online-ownership guards. Guest actions still use the existing remote adapter.
+- `transitions.ts`: shared opening/closing animation and sound for screen-backed
+  and standalone dialogs, including reduced-motion support. Standalone transitions
+  do not pause an active online match. Settings and setup dialogs share a responsive
+  600px width.
 - `targeting.ts`: a temporary HTML player-name/status/Cancel row in the top bar.
   It measures its content and shares logical-pixel bounds with the renderer;
   the canvas hides readouts that cannot fit and restores them when targeting ends.
