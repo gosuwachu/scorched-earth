@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build, verify, and install the game. Caddy is deployed independently.
 set -euo pipefail
-usage() { echo 'usage: deploy.sh [--skip-tests] [ssh-target]'; }
-target=root@shopping
+usage() { echo 'usage: deploy.sh [--skip-tests] <ssh-target>'; }
+target=
 target_set=false
 build_args=()
 for argument in "$@"; do
@@ -17,6 +17,7 @@ for argument in "$@"; do
       ;;
   esac
 done
+"$target_set" || { usage >&2; exit 1; }
 [[ -n $target && $target != -* && $target != *[[:space:]]* ]] || { echo 'invalid SSH target' >&2; exit 1; }
 project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 for command in ssh tar sha256sum awk; do command -v "$command" >/dev/null; done
@@ -73,4 +74,4 @@ else
     sudo -n bash "$upload/install-game.sh"
 fi'
 echo "[4/4] Deployment verified on $target."
-echo 'To deploy the HTTPS site separately, run ./deploy-caddy.sh with the same SSH target.'
+echo 'To deploy the HTTPS site separately, run ./deploy-caddy.sh <ssh-target> <domain> with the same SSH target.'

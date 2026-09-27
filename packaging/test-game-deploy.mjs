@@ -79,7 +79,7 @@ process.exit(result.status ?? 1);
 test("game deployment builds before upload, handles custom targets/sudo, and works outside the repository", () => {
   const f = fixture();
   try {
-    for (const [args, env, target] of [[[], {}, "root@shopping"], [["admin@other-vps"], { REMOTE_UID: "1000" }, "admin@other-vps"]]) {
+    for (const [args, env, target] of [[["root@game.example.com"], {}, "root@game.example.com"], [["admin@other-vps"], { REMOTE_UID: "1000" }, "admin@other-vps"]]) {
       const result = f.run(args, env);
       assert.equal(result.status, 0, result.stderr);
       assert.match(result.stdout, /Deployment verified/);
@@ -97,20 +97,20 @@ test("game deployment builds before upload, handles custom targets/sudo, and wor
 test("skip-tests is forwarded in either position without skipping verification or installation", () => {
   const f = fixture();
   try {
-    for (const args of [["--skip-tests"], ["--skip-tests", "admin@other-vps"], ["admin@other-vps", "--skip-tests"]]) {
+    for (const args of [["--skip-tests", "admin@other-vps"], ["admin@other-vps", "--skip-tests"]]) {
       const result = f.run(args);
       assert.equal(result.status, 0, result.stderr);
       assert.match(result.events, /^build --skip-tests$/m);
       assert.match(result.events, /install/);
       assert.match(result.stdout, /Deployment verified/);
       const calls = result.events.split("\n").filter((line) => line.startsWith("{")).map(JSON.parse);
-      for (const { ssh } of calls) assert.equal(ssh[ssh.indexOf("--") + 1], args.length === 1 ? "root@shopping" : "admin@other-vps");
+      for (const { ssh } of calls) assert.equal(ssh[ssh.indexOf("--") + 1], "admin@other-vps");
     }
-    const failed = f.run(["--skip-tests"], { BUILD_RESULT: "21" });
+    const failed = f.run(["--skip-tests", "admin@other-vps"], { BUILD_RESULT: "21" });
     assert.equal(failed.status, 21);
     assert.doesNotMatch(failed.events, /install|mktemp -d/);
     writeFileSync(join(f.project, "artifacts/scorchedearth-html5_0.0.0-1_amd64.deb"), "changed");
-    const corrupt = f.run(["--skip-tests"]);
+    const corrupt = f.run(["--skip-tests", "admin@other-vps"]);
     assert.equal(corrupt.status, 1);
     assert.match(corrupt.stderr, /checksum mismatch/);
     assert.doesNotMatch(corrupt.events, /install|mktemp -d/);
@@ -130,17 +130,17 @@ test("game deployment stops on build, transfer, install, checksum, privilege and
       [{ INSTALL_RESULT: "23" }, 23, /never-present/],
       [{ REMOTE_UID: "1000", SUDO_RESULT: "24" }, 24, /build|install/],
     ]) {
-      const result = f.run([], env);
+      const result = f.run(["root@game.example.com"], env);
       assert.equal(result.status, code, result.stderr);
       assert.doesNotMatch(result.stdout, /Deployment verified/);
       assert.doesNotMatch(result.events, forbidden);
     }
     writeFileSync(join(f.project, "artifacts/scorchedearth-html5_0.0.0-1_amd64.deb"), "changed");
-    const corrupt = f.run();
+    const corrupt = f.run(["root@game.example.com"]);
     assert.equal(corrupt.status, 1);
     assert.match(corrupt.stderr, /checksum mismatch/);
     assert.doesNotMatch(corrupt.events, /mktemp -d/);
-    for (const args of [[""], ["-oProxyCommand=bad"], ["bad host"], ["one", "two"], ["--skip-test"], ["--skip-tests", "one", "two"]]) {
+    for (const args of [[], ["--skip-tests"], [""], ["-oProxyCommand=bad"], ["bad host"], ["one", "two"], ["--skip-test"], ["--skip-tests", "one", "two"]]) {
       const result = f.run(args);
       assert.equal(result.status, 1);
       assert.equal(result.events, "");

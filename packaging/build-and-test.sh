@@ -43,6 +43,6 @@ done
   -t scorchedearth-package-test:browser .
 "$docker_cmd" run --rm --platform linux/amd64 --network none --cpus 4 --memory 4g --memory-swap 4g \
   --mount "type=bind,source=$(pwd)/artifacts,target=/artifacts,readonly" \
-  --add-host scorched.gosuwachu.fyi:127.0.0.1 scorchedearth-package-test:browser
+  --add-host scorched.example.com:127.0.0.1 scorchedearth-package-test:browser
 (cd artifacts && sha256sum --check SHA256SUMS)
 echo "PASS: package lifecycle and deployment installer on Ubuntu 24.04/25.04, and HTTPS multiplayer browser flow"

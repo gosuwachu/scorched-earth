@@ -189,13 +189,13 @@ node --test packaging/test-*.mjs
 From the development checkout, deploy with one command:
 
 ```bash
-./deploy.sh                    # defaults to root@shopping
+./deploy.sh root@game.example.com
 ./deploy.sh admin@another-vps   # requires non-interactive sudo on the VPS
-./deploy.sh --skip-tests       # faster: build and deploy without test suites
 ./deploy.sh --skip-tests admin@another-vps
 ```
 
-The script checks SSH access, builds and tests a fresh package in Docker, verifies
+An explicit SSH target is required; there is no default server. The script checks
+SSH access, builds and tests a fresh package in Docker, verifies
 its checksum, uploads it into a temporary directory, and installs it on the VPS.
 It then enables/restarts `scorchedearth-html5.service` and verifies the installed
 version, active service, and application health within 30 seconds. It works from
@@ -222,14 +222,13 @@ deployment does not change DNS, firewall rules, or other applications.
 
 For manual package transfer and installation:
 
-The `shopping` VPS uses amd64 Ubuntu. Its ports 3000 and 4000 serve other apps;
-this package defaults to **127.0.0.1:4001**. Before the first install, check again
-that 4001 has no listener:
+This package defaults to **127.0.0.1:4001**. Before the first install, check that
+4001 has no listener on your destination server:
 
 ```bash
-ssh shopping 'ss -H -ltn "( sport = :4001 )"'
-scp artifacts/scorchedearth-html5_0.0.0-1_amd64.deb artifacts/SHA256SUMS shopping:/tmp/
-ssh shopping
+ssh admin@game.example.com 'ss -H -ltn "( sport = :4001 )"'
+scp artifacts/scorchedearth-html5_0.0.0-1_amd64.deb artifacts/SHA256SUMS admin@game.example.com:/tmp/
+ssh admin@game.example.com
 cd /tmp
 sha256sum --check SHA256SUMS
 sudo apt install ./scorchedearth-html5_0.0.0-1_amd64.deb
@@ -257,36 +256,43 @@ public firewall opening for port 4001 is needed.
 The shared proxy is provisioned separately by
 [`caddy-reverse-proxy`](../caddy-reverse-proxy). This application expects an active
 `caddy.service` and `/usr/local/sbin/caddy-config` on the VPS. It does not install
-or manage a second proxy. Create the DNS A record for `scorched.gosuwachu.fyi`
-pointing to **209.97.177.131** before requesting its public certificate.
+or manage a second proxy. Create a DNS A record for your game domain pointing to
+your server's public IP before requesting its public certificate. Replace the
+example SSH targets and `scorched.example.com` below with your own values.
 
-The game owns [deploy/caddy/scorchedearth-html5.caddy](deploy/caddy/scorchedearth-html5.caddy).
+The game owns the template [deploy/caddy/scorchedearth-html5.caddy](deploy/caddy/scorchedearth-html5.caddy).
 From this checkout on the workstation, deploy just that site:
 
 ```bash
-./deploy-caddy.sh                 # defaults to root@shopping
-./deploy-caddy.sh admin@my-vps     # requires non-interactive sudo on the VPS
+./deploy-caddy.sh root@game.example.com scorched.example.com
+./deploy-caddy.sh admin@my-vps scorched.example.com  # requires non-interactive sudo
 ```
 
-The script streams its configuration to a temporary upload and invokes
+Both the SSH target and domain are required. The domain must be a DNS hostname,
+without a scheme, port, path, or wildcard. The script replaces `__SITE_DOMAIN__`
+locally, streams the rendered configuration to a temporary upload, and invokes
 `caddy-config deploy scorchedearth-html5`. The shared helper validates the combined
 configuration, installs `/etc/caddy/sites.d/scorchedearth-html5.caddy`, and gracefully
 reloads Caddy. It preserves other applications and rolls back on reload failure.
 The script returns a failure if upload, validation, or reload fails. The shared
 proxy repository does not need to be checked out on the workstation.
 
-For installation from the `.deb` alone, a copy of the site is included:
+For installation from the `.deb` alone, a copy of the template is included.
+Render it with your domain before passing it to Caddy:
 
 ```bash
 # On the VPS:
-sudo caddy-config deploy scorchedearth-html5 \
-  /usr/share/scorchedearth-html5/caddy/scorchedearth-html5.caddy
-curl --fail https://scorched.gosuwachu.fyi/
+site=$(mktemp)
+sed 's/__SITE_DOMAIN__/scorched.example.com/g' \
+  /usr/share/scorchedearth-html5/caddy/scorchedearth-html5.caddy > "$site"
+sudo caddy-config deploy scorchedearth-html5 "$site"
+rm -f -- "$site"
+curl --fail https://scorched.example.com/
 systemctl status caddy --no-pager
 journalctl -u caddy --since '-5 minutes' --no-pager
 ```
 
-Open **https://scorched.gosuwachu.fyi**, choose Online, and connect a controller using
+Open your game domain (for example, **https://scorched.example.com**), choose Online, and connect a controller using
 the generated join link. It retains the public HTTPS origin and uses secure
 WebSockets. The host browser still runs the game and must stay open; the VPS relays
 messages. Restarting/upgrading the game service loses its in-memory rooms. Caddy
