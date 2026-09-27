@@ -807,6 +807,8 @@ export class OptionsScreen extends Screen {
   _wl_h = 8;
   weapon_items: number[] = [];
   _wl_toggles: Toggle[] = [];
+  /** HTML help bindings; independent of labels and legacy canvas geometry. */
+  readonly optionKeys = new Map<W.Widget, string>();
 
   constructor(cfg: CfgLike, w: number, h: number, spec: string) {
     super();
@@ -836,6 +838,7 @@ export class OptionsScreen extends Screen {
     let y = p.rect.y + 30;
     for (const row of fields) {
       const kind = row[0];
+      const firstWidget = p.widgets.length;
       if (kind === "toggle") {
         _toggle(p, x, y, this.cfg, row[1] as string, row[2] as string);
         y += 24;
@@ -915,6 +918,9 @@ export class OptionsScreen extends Screen {
       } else if (kind === "weapon_list") {
         this._build_weapon_list(x, y);
         y += 24 * 8 + 6; // reserve the scroll viewport height
+      }
+      if (typeof row[1] === "string" && p.widgets.length > firstWidget) {
+        this.optionKeys.set(p.widgets[firstWidget], row[1]);
       }
     }
     // ~Done at the bottom (default button; Enter/Esc both leave)

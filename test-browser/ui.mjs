@@ -4,6 +4,7 @@ import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { checkOptionHelp } from "./option_help.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.UI_TEST_URL || "http://127.0.0.1:4320";
 let server, browser;
@@ -45,6 +46,7 @@ try {
     assert.equal(await page.locator("dialog[open]").count(), 0);
     assert.equal(await page.evaluate(() => document.activeElement.textContent), name);
   }
+  await checkOptionHelp(page, { click, settled, shot });
   await click("About"); assert.ok(await page.getByText("Register Scorched Earth", { exact: true }).isVisible()); await click("OK");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await click("Sound..."); assert.equal(await page.evaluate(() => window.onlineApp.transitioning), false);

@@ -116,3 +116,22 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
 }
 
 .ui-local-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+
+/* Settings use normal flow so help text can wrap at every game resolution. */
+.ui-options { inset: 0; margin: auto; width: min(600px, calc(100vw - 16px)); overflow: hidden; }
+.ui-options[open] { display: flex; }
+.ui-options > .ui-flow-panel { display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 0; max-height: calc(100dvh - 20px); }
+.ui-options .ui-panel-body { display: block; padding: 16px; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.ui-options .ui-panel-body > * + * { margin-top: 16px; }
+.ui-options .ui-widget { position: static !important; width: auto; max-width: 100%; }
+.ui-options .ui-field { flex-wrap: wrap; gap: 4px 12px; }
+.ui-options .ui-field > span:first-child { flex: 1 1 220px !important; }
+.ui-options .ui-field > .ui-stepper { flex: 0 1 auto; max-width: 100%; }
+.ui-options .ui-field > input { flex: 1 1 160px; }
+.ui-options .ui-stepper output { white-space: normal; overflow: visible; }
+.ui-options .ui-stepper button { min-width: 24px; }
+.ui-options .ui-option-help { margin: 5px 0 0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.ui-options .ui-dialog-footer { border-top: 1px solid var(--ui-lo); }
+.ui-weapon-options h2 { margin: 0; font-size: 15px; }
+.ui-weapon-options-list { margin-top: 12px; display: grid; gap: 6px; }
+.ui-weapon-options-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

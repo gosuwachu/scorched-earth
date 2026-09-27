@@ -28,12 +28,32 @@ export class ScreenContent implements Component<boolean> {
       add(text, screen._text_x, screen._text_y, p.rect.w - 48);
     }
     if (screen instanceof S.OptionsScreen && screen.spec === "weapons") {
-      const prev = button("↑ Previous weapons", () => actions.change(() => { screen.scroll = Math.max(0, screen.scroll - screen._wl_h); screen._refresh_weapon_toggles(); }));
-      const next = button("↓ More weapons", () => actions.change(() => { screen.scroll = Math.min(Math.max(0, screen.weapon_items.length - screen._wl_h), screen.scroll + screen._wl_h); screen._refresh_weapon_toggles(); }));
-      const row = el("div"); row.append(prev, next);
-      add(row, p.rect.x + 16, screen._wl_y + screen._wl_h * 24 + 6, p.rect.w - 32);
-      this.updates.push((active) => { prev.disabled = !active || screen.scroll === 0; next.disabled = !active || screen.scroll >= screen.weapon_items.length - screen._wl_h; });
-      view.body.addEventListener("wheel", (e) => { e.preventDefault(); actions.change(() => { screen.scroll = Math.max(0, Math.min(Math.max(0, screen.weapon_items.length - screen._wl_h), screen.scroll + Math.sign(e.deltaY))); screen._refresh_weapon_toggles(); }); }, { passive: false });
+      const section = el("section", "", "ui-weapon-options");
+      const heading = el("h2", "Shop availability");
+      const help = el("p", "Checked equipment can appear in the shop if its tier is allowed by Arms Level. Uncheck an item to exclude it.", "ui-option-help");
+      help.id = `${view.heading.id}-availability-help`;
+      const list = el("div", "", "ui-weapon-options-list");
+      list.setAttribute("role", "group"); list.setAttribute("aria-label", "Equipment allowed in the shop");
+      list.setAttribute("aria-describedby", help.id);
+      const page = (delta: number) => actions.change(() => {
+        const focused = [...list.querySelectorAll("input")].indexOf(document.activeElement as HTMLInputElement);
+        screen.scroll = Math.max(0, Math.min(Math.max(0, screen.weapon_items.length - screen._wl_h), screen.scroll + delta));
+        screen._refresh_weapon_toggles();
+        if (focused >= 0) queueMicrotask(() => list.querySelectorAll("input")[focused]?.focus({ preventScroll: true }));
+      });
+      const prev = button("↑ Previous weapons", () => page(-screen._wl_h));
+      const next = button("↓ More weapons", () => page(screen._wl_h));
+      const row = el("div", "", "ui-weapon-options-nav"); row.append(prev, next);
+      section.append(heading, help, list, row); view.body.append(section); this.owned.push(section);
+      this.updates.push((active) => {
+        for (const toggle of screen._wl_toggles) view.place(toggle, list);
+        prev.disabled = !active || screen.scroll === 0;
+        next.disabled = !active || screen.scroll >= screen.weapon_items.length - screen._wl_h;
+      });
+      list.addEventListener("wheel", (e) => {
+        if (!e.deltaY || (e.deltaY < 0 ? prev.disabled : next.disabled)) return;
+        e.preventDefault(); page(Math.sign(e.deltaY));
+      }, { passive: false });
     }
     if (screen instanceof S.ShopScreen) {
       const name = el("strong"); name.style.color = `rgb(${TEAM_RGB[(screen.tank.player_index ?? 0) % TEAM_RGB.length].join(",")})`;

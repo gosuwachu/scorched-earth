@@ -12,6 +12,7 @@ import { sfx } from "../sound";
 import { button, el, installTheme, modalShell } from "./components";
 import { PanelView, type WidgetActions } from "./widgets";
 import { ScreenContent, menuArt } from "./screens";
+import { describeOption } from "./option_help";
 
 export interface HtmlScreen {
   opaque?: boolean;
@@ -73,6 +74,11 @@ export class UiHost {
     Object.assign(this.element.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${this.app.w}px`, height: `${this.app.h}px`, transformOrigin: "top left", transform: compact ? "none" : `scale(${scale})` });
     this.element.style.setProperty("--game-bottom", `${Math.max(0, innerHeight - r.bottom - r.top)}px`);
     for (const view of this.views.values()) if (view.dialog) {
+      if (view.screen instanceof S.OptionsScreen) {
+        // Reading help should not depend on the game's chosen pixel resolution.
+        Object.assign(view.dialog.style, { zoom: "1", left: "", top: "", right: "", bottom: "", margin: "", translate: "" });
+        continue;
+      }
       view.dialog.style.zoom = String(scale);
       Object.assign(view.dialog.style, compact ? { left: "", top: "", right: "", bottom: "", margin: "", translate: "" } : {
         left: `${r.left / scale + (view.panel?.rect.x ?? this.app.w / 2)}px`,
@@ -154,6 +160,12 @@ export class UiHost {
     return {
       activate: (action) => { if (this.order[this.order.length - 1]?.key === d.key) this.act(d.screen, action); },
       change: (run) => { if (this.order[this.order.length - 1]?.key === d.key) this.change(d.screen, run); },
+      description: (widget) => {
+        const screen = d.screen;
+        if (!(screen instanceof S.OptionsScreen)) return undefined;
+        const key = screen.optionKeys.get(widget);
+        return describeOption(key, key === undefined ? undefined : screen.cfg[key]);
+      },
       label: (widget) => {
         const screen = d.screen;
         if (screen instanceof S.TankInitScreen) {
@@ -186,7 +198,7 @@ export class UiHost {
     view.panel = d.panel;
     if (d.panel) {
       const actions = this.actions(d);
-      view.widgets = new PanelView(d.panel, actions); view.widgets.update(this.permitted(d.screen));
+      view.widgets = new PanelView(d.panel, actions, d.screen instanceof S.OptionsScreen); view.widgets.update(this.permitted(d.screen));
       view.element.append(view.widgets.element);
       view.element.setAttribute("aria-labelledby", view.widgets.heading.id);
       view.content = d.nested ? undefined : new ScreenContent(d.screen, view.widgets, actions);
@@ -202,6 +214,7 @@ export class UiHost {
       if (panel && !panel.no_cancel) this.act(d.screen, panel.cancel_action);
     } }) : el("div", "", "se-ui ui-compact ui-screen");
     element.dataset.uiScreen = d.screen.constructor.name;
+    if (d.screen instanceof S.OptionsScreen) element.classList.add("ui-options");
     element.dataset.uiOwner = "true";
     const view: View = { screen: d.screen, element, returnFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null };
     if (element instanceof HTMLDialogElement) {

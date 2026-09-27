@@ -7,6 +7,7 @@ export interface WidgetActions {
   activate(action: W.Action): void;
   change(run: () => void): void;
   label?(widget: W.Widget): string | undefined;
+  description?(widget: W.Widget): string | undefined;
   iconLabels?(widget: W.IconStrip): string[] | undefined;
 }
 
@@ -16,6 +17,7 @@ export class WidgetView implements Component<boolean> {
   private refresh: () => void = () => {};
   private controls: Array<HTMLInputElement | HTMLSelectElement | HTMLButtonElement> = [];
   private labelNode: HTMLElement | null = null;
+  private descriptionNode: HTMLElement | null = null;
   constructor(readonly model: W.Widget, private actions: WidgetActions, label: string) {
     const w = model;
     const change = (run: () => void) => actions.change(run);
@@ -136,6 +138,19 @@ export class WidgetView implements Component<boolean> {
     if (w.accel) this.element.setAttribute("aria-keyshortcuts", w.accel);
     this.controls = Array.from(this.element.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>("input, select, button"));
     if (this.element instanceof HTMLButtonElement) this.controls.push(this.element);
+    if (actions.description?.(w) !== undefined) {
+      this.descriptionNode = el("p", "", "ui-option-help");
+      this.descriptionNode.id = `ui-help-${++nextGroup}`;
+      for (const control of [...this.controls, ...this.element.querySelectorAll("[role=group]")]) {
+        control.setAttribute("aria-describedby", this.descriptionNode.id);
+      }
+      // Keep explanatory prose outside labels and buttons so it does not become
+      // part of the control's name or toggle a checkbox when selected/tapped.
+      const control = this.element;
+      control.classList.remove("ui-widget");
+      this.element = el("div", "", "ui-widget ui-described-widget");
+      this.element.append(control, this.descriptionNode);
+    }
     this.update(true);
   }
   update(active: boolean): void {
@@ -144,6 +159,10 @@ export class WidgetView implements Component<boolean> {
     for (const control of this.controls) control.disabled = !active || !w.enabled;
     this.element.setAttribute("aria-disabled", String(!active || !w.enabled));
     this.refresh();
+    if (this.descriptionNode) {
+      const description = this.actions.description?.(w) ?? "";
+      if (this.descriptionNode.textContent !== description) this.descriptionNode.textContent = description;
+    }
   }
   dispose(): void { this.element.remove(); }
 }
@@ -152,9 +171,11 @@ export class PanelView implements Component<boolean> {
   readonly element = el("section", "", "se-ui ui-compact ui-panel");
   readonly body = el("div", "", "ui-panel-body");
   readonly heading = el("h1", "", "ui-title");
+  readonly footer = el("div", "", "ui-dialog-footer");
   private views = new Map<W.Widget, WidgetView>();
-  constructor(readonly model: W.Panel, private actions: WidgetActions) {
+  constructor(readonly model: W.Panel, private actions: WidgetActions, private flow = false) {
     this.element.append(this.heading, this.body);
+    if (flow) { this.element.classList.add("ui-flow-panel"); this.element.append(this.footer); }
     this.heading.id = `ui-panel-${++nextGroup}`;
     this.element.setAttribute("aria-labelledby", this.heading.id);
   }
@@ -162,8 +183,10 @@ export class PanelView implements Component<boolean> {
     const p = this.model;
     this.heading.textContent = p.title || W.plain(p.widgets.find((w) => w instanceof W.Label && !w.clickable)?.label ?? "Controls");
     this.heading.hidden = !p.title;
-    Object.assign(this.element.style, { left: `${p.rect.x}px`, top: `${p.rect.y}px`, width: `${p.rect.w}px`, height: `${p.rect.h}px` });
-    this.body.style.height = `${p.rect.h - (p.title ? 24 : 4)}px`;
+    if (!this.flow) {
+      Object.assign(this.element.style, { left: `${p.rect.x}px`, top: `${p.rect.y}px`, width: `${p.rect.w}px`, height: `${p.rect.h}px` });
+      this.body.style.height = `${p.rect.h - (p.title ? 24 : 4)}px`;
+    }
     const widgets = new Set(p.widgets);
     for (const [w, view] of this.views) if (!widgets.has(w)) { view.dispose(); this.views.delete(w); }
     p.widgets.forEach((w, i) => {
@@ -171,13 +194,20 @@ export class PanelView implements Component<boolean> {
       if (!view) {
         const previous = p.widgets[i - 1];
         const label = this.actions.label?.(w) ?? (W.plain(w.label || (previous instanceof W.Label ? previous.label : "")) || (w instanceof W.RadioGroup ? "Computer difficulty" : w instanceof W.Slider ? "Selection" : "Choose item"));
-        view = new WidgetView(w, this.actions, label); this.views.set(w, view); this.body.append(view.element);
+        view = new WidgetView(w, this.actions, label); this.views.set(w, view);
+        const parent = this.flow && w === p.default_widget ? this.footer : this.body;
+        parent.append(view.element);
       }
-      Object.assign(view.element.style, { left: `${w.rect.x - p.rect.x - 2}px`, top: `${w.rect.y - p.rect.y - (p.title ? 24 : 2)}px`, width: w instanceof W.Label && !w.clickable ? "max-content" : `${w.rect.w}px`, maxWidth: `${p.rect.right - w.rect.x - 8}px`, minHeight: `${w.rect.h}px` });
+      if (!this.flow) Object.assign(view.element.style, { left: `${w.rect.x - p.rect.x - 2}px`, top: `${w.rect.y - p.rect.y - (p.title ? 24 : 2)}px`, width: w instanceof W.Label && !w.clickable ? "max-content" : `${w.rect.w}px`, maxWidth: `${p.rect.right - w.rect.x - 8}px`, minHeight: `${w.rect.h}px` });
       view.update(active);
     });
   }
   hide(widget: W.Widget, hidden: boolean): void { const view = this.views.get(widget); if (view) view.element.hidden = hidden; }
+  /** Group dynamic rows without moving controls that are already in place. */
+  place(widget: W.Widget, container: HTMLElement): void {
+    const view = this.views.get(widget);
+    if (view && view.element.parentElement !== container) container.append(view.element);
+  }
   focusDefault(): void {
     const control = this.element.querySelector<HTMLElement>("[data-default]:not(:disabled)") ??
       this.element.querySelector<HTMLElement>("input:not(:disabled), button:not(:disabled)");
