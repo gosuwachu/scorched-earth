@@ -168,6 +168,15 @@ export interface GameState extends ShieldVisualState {
   [extra: string]: unknown;
 }
 
+/** Shared logical-pixel reservation for the HTML targeting row and canvas HUD. */
+export interface TargetHudLayout {
+  left: number;
+  width: number;
+  height: number;
+  showAim: boolean;
+  showWeapon: boolean;
+}
+
 /** Grid access shim: the terrain plane is a (W,H) integer index grid.  The Python
  *  is a numpy (W,H) int array; the TS oracle/test build it as a flat column-major
  *  Int32Array with w,h.  `at(x,y)` reads it; iteration helpers below mask/gather. */
@@ -618,6 +627,7 @@ export function shieldPct(t: { shield_hp: number; shield_item: number }): number
 export class Renderer {
   /** The browser UI host owns modal prompts; oracle renderers still paint them. */
   htmlDialogs = false;
+  targetHud: TargetHudLayout | null = null;
   cfg: Cfg;
   w: number;
   h: number;
@@ -1473,30 +1483,65 @@ export class Renderer {
     return hudAngle(angle);
   }
 
+  private _weapon_label(t: Pick<Tank, "selected_weapon" | "inventory">): string {
+    const item = weapons.ITEMS[t.selected_weapon];
+    return t.selected_weapon === weapons.SLOT_BABY_MISSILE ? item.name : `${t.inventory[t.selected_weapon]}: ${item.name}`;
+  }
+
+  /** Prefer the normal readouts, then reclaim weapon space, then aim space. */
+  layoutTargetHud(t: Pick<Tank, "angle" | "power" | "selected_weapon" | "inventory">, showHud: boolean, width: number, height: number): TargetHudLayout {
+    const [elev, side] = this._hud_angle(t.angle);
+    const aimRight = Math.max(6 + this.font.size(`Power: ${Math.trunc(t.power as number)}`)[0],
+      150 + this.font.size(`Angle: ${elev}${side}`)[0]);
+    const weaponLeft = this.w - 26 - this.font.size(this._weapon_label(t))[0];
+    let showAim = showHud, showWeapon = showHud;
+    let left = showAim ? aimRight + 8 : 6;
+    let right = showWeapon ? weaponLeft - 8 : this.w - 6;
+    if (width > right - left) { showWeapon = false; right = this.w - 6; }
+    if (width > right - left) { showAim = false; left = 6; }
+    const fitted = Math.min(width, Math.max(0, right - left));
+    return { left: Math.max(left, Math.min((this.w - fitted) / 2, right - fitted)), width: fitted,
+      height: Math.max(Renderer.BAR_H, height), showAim, showWeapon };
+  }
+
+  private _target_hud(state: GameState): TargetHudLayout | null {
+    return this.htmlDialogs && _inChooseTarget(state) ? this.targetHud : null;
+  }
+
   private _draw_hud(surf: pygame.Surface, state: GameState): void {
     const t = state.current_shooter;
+    const targetHud = this._target_hud(state);
+    const barHeight = targetHud?.height ?? Renderer.BAR_H;
+    const dy = (barHeight - Renderer.BAR_H) / 2;
     const hitboxes: { [k: string]: pygame.Rect } = {};
     (state as { _hud_hitboxes?: { [k: string]: pygame.Rect } })._hud_hitboxes = hitboxes;
     if (state.cfg.is_on("ICON_BAR")) {
-      const bar = new pygame.Surface([this.w, Renderer.BAR_H]);
+      const bar = new pygame.Surface([this.w, Math.ceil(barHeight)]);
       bar.set_alpha(190);
       bar.fill([0, 0, 0]);
       surf.blit(bar, [0, 0]);
       if (t !== null) {
         const [elev, side] = this._hud_angle(t.angle);
         const pwTxt = `Power: ${Math.trunc(t.power as number)}`;
-        this._text(surf, pwTxt, 6, 4);
-        hitboxes["power"] = new pygame.Rect(6, 4, this.font.size(pwTxt)[0], this.font.get_height());
         const anTxt = `Angle: ${elev}${side}`;
-        this._text(surf, anTxt, 150, 4);
-        hitboxes["angle"] = new pygame.Rect(150, 4, this.font.size(anTxt)[0], this.font.get_height());
-        const ncol = tupRgb(lutGet(this._active, t.color));
-        const nr = this.font.render(t.name, true, ncol);
-        const nx = Math.floor(this.w / 2) - Math.floor(nr.get_width() / 2);
-        this._draw_shield_swatch(surf, state, t, nx - 22, 3);
-        surf.blit(nr, [nx, 4]);
-        hitboxes["name"] = new pygame.Rect(nx, 4, nr.get_width(), nr.get_height());
-        this._draw_weapon_readout(surf, t, state);
+        if (!targetHud || targetHud.showAim) {
+          this._text(surf, pwTxt, 6, 4 + dy);
+          hitboxes["power"] = new pygame.Rect(6, 4 + dy, this.font.size(pwTxt)[0], this.font.get_height());
+          this._text(surf, anTxt, 150, 4 + dy);
+          hitboxes["angle"] = new pygame.Rect(150, 4 + dy, this.font.size(anTxt)[0], this.font.get_height());
+        }
+        if (targetHud) {
+          // HTML owns the player name next to its targeting status and Cancel.
+          this._draw_shield_swatch(surf, state, t, targetHud.left, 3 + dy);
+        } else {
+          const ncol = tupRgb(lutGet(this._active, t.color));
+          const nr = this.font.render(t.name, true, ncol);
+          const nx = Math.floor(this.w / 2) - Math.floor(nr.get_width() / 2);
+          this._draw_shield_swatch(surf, state, t, nx - 22, 3);
+          surf.blit(nr, [nx, 4]);
+          hitboxes["name"] = new pygame.Rect(nx, 4, nr.get_width(), nr.get_height());
+        }
+        if (!targetHud || targetHud.showWeapon) this._draw_weapon_readout(surf, t, state, dy);
       }
     }
     if (!this.htmlDialogs && _inChooseTarget(state)) {
@@ -1509,19 +1554,18 @@ export class Renderer {
     }
   }
 
-  private _draw_weapon_readout(surf: pygame.Surface, t: Tank, state: GameState | null = null): void {
+  private _draw_weapon_readout(surf: pygame.Surface, t: Tank, state: GameState | null = null, dy = 0): void {
     const slot = t.selected_weapon;
     const item = weapons.ITEMS[slot];
-    const name = item.name;
-    const label = slot === weapons.SLOT_BABY_MISSILE ? name : `${t.inventory[slot]}: ${name}`;
+    const label = this._weapon_label(t);
     const tw = this.font.size(label)[0];
     const iconW = 14;
     const xIcon = this.w - 8 - tw - iconW - 4;
-    this._draw_weapon_icon(surf, xIcon, 3, iconW, item);
-    this._text(surf, label, xIcon + iconW + 4, 4);
+    this._draw_weapon_icon(surf, xIcon, 3 + dy, iconW, item);
+    this._text(surf, label, xIcon + iconW + 4, 4 + dy);
     if (state !== null) {
       const hitboxes = (state as unknown as { _hud_hitboxes: { [k: string]: pygame.Rect } })._hud_hitboxes;
-      hitboxes["weapon"] = new pygame.Rect(xIcon, 2, this.w - 8 - xIcon, this.font.get_height() + 2);
+      hitboxes["weapon"] = new pygame.Rect(xIcon, 2 + dy, this.w - 8 - xIcon, this.font.get_height() + 2);
     }
   }
 
@@ -1542,9 +1586,10 @@ export class Renderer {
   }
 
   private _hud_bottom(state: GameState): number {
-    let bottom = state.cfg.is_on("ICON_BAR") ? Renderer.BAR_H : 0;
+    const barHeight = this._target_hud(state)?.height ?? Renderer.BAR_H;
+    let bottom = state.cfg.is_on("ICON_BAR") || this._target_hud(state) ? barHeight : 0;
     if (state.cfg.is_on("STATUS_BAR") && state.current_shooter !== null) {
-      bottom = Math.max(bottom, Renderer.BAR_H + 18);
+      bottom = Math.max(bottom, barHeight + 18);
     }
     return bottom;
   }
@@ -1591,7 +1636,7 @@ export class Renderer {
   }
 
   private _draw_status_bar(surf: pygame.Surface, state: GameState, t: Tank): void {
-    const y = Renderer.BAR_H;
+    const y = this._target_hud(state)?.height ?? Renderer.BAR_H;
     const bar = new pygame.Surface([this.w, 18]);
     bar.set_alpha(190);
     bar.fill([0, 0, 0]);

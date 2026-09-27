@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { assertCompactTargetHud } from "./guidance_ui.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.ONLINE_TEST_URL || "http://127.0.0.1:4317";
@@ -206,6 +207,7 @@ try {
   assert.equal(await enabled(a, "← Angle"), false);
   assert.equal(await enabled(b, "Fire at target"), false);
   await host.locator("[data-targeting]").waitFor({ state: "visible" });
+  await assertCompactTargetHud(host, false);
   await a.getByRole("button", { name: /^\d+: Bob$/ }).click();
   await until(async () => await host.evaluate(() => window.onlineApp.gs.pendingTarget?.target?.name) === "Bob", "target draft");
   const xField = a.getByLabel("Target X", { exact: true });
@@ -238,6 +240,7 @@ try {
   await until(() => enabled(a, "Space / Fire"), "targeting canceled");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[37]), guidanceStock);
   assert.equal(await host.locator("[data-targeting]").isVisible(), false);
+  assert.equal(await host.evaluate(() => window.onlineApp.renderer.targetHud), null);
   // Plasma's charge is host state; cancellation and reconnect preserve ammo.
   await host.evaluate(() => {
     const t = window.onlineApp.gs.tanks[0];

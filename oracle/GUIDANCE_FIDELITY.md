@@ -57,10 +57,14 @@ available. Fire opens a fresh request; confirmation spends stock and clears
 the selection. Cancel spends nothing. Synchronous mode first records the choice
 and spends stock when the volley launches.
 
-The local prompt is larger than DOS's small box, has a transparent outer layer,
-numbered tank labels, crosshair cursor and Cancel button. Escape cancellation
-is an intentional improvement: the DOS picker checked here waits for a valid
-target. The prompt remains visible with the HUD off.
+The local prompt is a single transparent row in the top bar, beside the player
+name, with a small borderless Cancel button. It has no instructions or enclosing
+panel. On narrow screens it temporarily hides the weapon readout, then power
+and angle if needed, and truncates the guidance name. Numbered tank labels and
+the crosshair remain on the battlefield. Escape cancellation is an intentional
+improvement: the DOS picker checked here waits for a valid target. The compact
+row remains visible with the HUD off. The online host uses the same row, with
+cancellation on the player's controller.
 
 Online controllers show tank buttons and bounded integer X/Y fields, followed
 by an explicit **Fire at target** confirmation. The host shows the draft marker.

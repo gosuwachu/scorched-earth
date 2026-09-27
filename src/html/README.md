@@ -20,6 +20,10 @@ painters remain available to the differential/reference harnesses.
 - `host.ts`: screen/nested-dialog lifecycle, keyboard ownership, focus restoration,
   fullscreen placement, and transitions. All local mutations pass the active-screen
   and online-ownership guards. Guest actions still use the existing remote adapter.
+- `targeting.ts`: a temporary HTML player-name/status/Cancel row in the top bar.
+  It measures its content and shares logical-pixel bounds with the renderer;
+  the canvas hides readouts that cannot fit and restores them when targeting ends.
+  Only Cancel captures pointer input, leaving the battlefield clickable.
 
 To add a screen, construct its existing widget model and route buttons through
 `dispatchAction(action)` (the same handler used for legacy input). Put derived UI
