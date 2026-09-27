@@ -1,6 +1,7 @@
 /** Host-side controller adapter. Reuses the real screens and widget operations. */
 import type { App } from "./main";
 import type { GameState } from "./game";
+import type { Tank } from "./objects";
 import type { Player, ControllerView, Control, Input } from "../shared/online";
 import * as pg from "./pygame";
 import * as W from "./widgets";
@@ -33,6 +34,19 @@ export class RemoteHold {
   }
 }
 
+interface SimController {
+  gs: GameState;
+  tank: Tank;
+  context: number;
+  identity: unknown[];
+  enabled: boolean;
+  hold: RemoteHold;
+  names: Set<string>;
+  lastSeq: number;
+}
+
+const simKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "Enter", "Tab", "BracketLeft"];
+
 export class RemoteAdapter {
   readonly hold = new RemoteHold();
   private context = 0;
@@ -43,12 +57,87 @@ export class RemoteAdapter {
   private enabled = false;
   private lastSeq = new Map<string, number>();
   private names = new Set<string>();
+  private simultaneous = new Map<string, SimController>();
 
   constructor(private app: App, private roster: Player[]) {}
 
   release(player?: string): void {
     if (!player || player === this.owner) { this.hold.clear(); this.names.clear(); }
     if (player) this.lastSeq.delete(player);
+    for (const [id, controller] of this.simultaneous) {
+      if (player && id !== player) continue;
+      controller.hold.clear(); controller.names.clear(); controller.lastSeq = -1;
+      controller.context = ++this.context;
+      controller.gs.sim_release(controller.tank);
+    }
+  }
+
+  updateSimultaneous(dt: number, now: number): void {
+    this.refresh();
+    for (const c of this.simultaneous.values()) {
+      const keys = c.hold.get(now);
+      if (!Object.keys(keys).length) c.names.clear();
+      if (!c.enabled) continue;
+      c.gs.sim_aim(c.tank, Number(!!keys[pg.K_LEFT]) - Number(!!keys[pg.K_RIGHT]),
+        Number(!!keys[pg.K_UP]) - Number(!!keys[pg.K_DOWN]), dt);
+    }
+  }
+
+  private refreshSimultaneous(gs: GameState): void {
+    this.roster.forEach((p, i) => {
+      if (p.ai !== 0) return;
+      const tank = gs.tanks[i];
+      if (!tank) return;
+      let c = this.simultaneous.get(p.id);
+      if (!c || c.gs !== gs || c.tank !== tank) {
+        c?.gs.sim_release(c.tank);
+        c = { gs, tank, context: 0, identity: [], enabled: false, hold: new RemoteHold(), names: new Set(), lastSeq: -1 };
+        this.simultaneous.set(p.id, c);
+      }
+      c.enabled = p.connected && tank.alive && tank.ai_class === 0 && !this.app.transitioning;
+      if (!c.enabled) gs.sim_release(tank);
+      const identity = [gs, this.app.top, gs.round_index, c.enabled, gs.sim_charges.get(tank)];
+      if (identity.some((v, j) => v !== c.identity[j])) {
+        c.identity = identity;
+        c.context = ++this.context;
+        c.hold.clear(); c.names.clear();
+      }
+    });
+  }
+
+  private receiveSimultaneous(c: SimController, context: number, seq: number, input: Input, now: number): void {
+    if (!c.enabled || context !== c.context || seq <= c.lastSeq) return;
+    c.lastSeq = seq;
+    if (!Object.keys(c.hold.get(now)).length) c.names.clear();
+    const { gs, tank } = c;
+    const charge = gs.sim_charges.get(tank);
+    if (charge) {
+      if (input.kind === "control") {
+        if (input.id === "plasma-charge" && typeof input.value === "number") gs.sim_set_plasma_charge(tank, input.value);
+        else if (input.id === "plasma-fire") gs.sim_confirm_plasma_charge(tank);
+        else if (input.id === "plasma-cancel") gs.sim_release(tank);
+      } else if (input.kind === "key" && input.down) {
+        if (input.key === "Escape") gs.sim_release(tank);
+        else if (input.key === "Space" || input.key === "Enter") gs.sim_confirm_plasma_charge(tank);
+      }
+    } else if (input.kind === "hold") {
+      c.names = new Set(input.keys.filter((key) => c.names.has(key)));
+      c.hold.set([...c.names], now);
+    } else if (input.kind === "key" && simKeys.includes(input.key)) {
+      if (input.down) {
+        if (c.names.has(input.key)) return;
+        c.names.add(input.key);
+      } else c.names.delete(input.key);
+      c.hold.set([...c.names], now);
+      if (input.down) {
+        if (input.key === "Space" || input.key === "Enter") gs.sim_fire(tank);
+        else if (input.key === "Tab") gs.sim_cycle_weapon(tank, 1);
+        else if (input.key === "BracketLeft") gs.sim_cycle_weapon(tank, -1);
+        else gs.sim_adjust(tank, Number(input.key === "ArrowLeft") - Number(input.key === "ArrowRight"),
+          Number(input.key === "ArrowUp") - Number(input.key === "ArrowDown"));
+      }
+    }
+    this.refresh();
   }
 
   keys(now: number): Record<number, boolean> {
@@ -86,6 +175,11 @@ export class RemoteAdapter {
   receive(player: string, context: number, seq: number, input: Input, now = performance.now()): void {
     this.keys(now);
     this.refresh();
+    const controller = this.simultaneous.get(player);
+    if (controller) {
+      this.receiveSimultaneous(controller, context, seq, input, now);
+      return;
+    }
     if (!this.enabled || player !== this.owner || context !== this.context || seq <= (this.lastSeq.get(player) ?? -1)) return;
     this.lastSeq.set(player, seq);
     if (input.kind === "hold") {
@@ -137,6 +231,16 @@ export class RemoteAdapter {
     const gs = this.app.gs as unknown as GameState | null;
     const top = this.app.top;
     const kind = this.app.onlineScreen;
+    if (gs?.phase === "sim_live" && kind === "battle") {
+      this.hold.clear(); this.names.clear();
+      this.enabled = false; this.owner = undefined;
+      this.refreshSimultaneous(gs);
+      return;
+    }
+    if (this.simultaneous.size) {
+      for (const c of this.simultaneous.values()) c.gs.sim_release(c.tank);
+      this.simultaneous.clear();
+    }
     const panel = top instanceof ingame.ControlPanelScreen ? (top.discharge_modal?.panel ?? top.panel) :
       top instanceof ingame.RetreatScreen ? top.confirm.panel : top.panel as W.Panel | undefined;
     const tank = top instanceof ShopScreen || top instanceof InventoryScreen || top instanceof SellScreen ||
@@ -229,6 +333,25 @@ export class RemoteAdapter {
     roster.forEach((p, i) => {
       if (p.ai !== 0) return;
       const t = gs?.tanks[i];
+      const sim = this.simultaneous.get(p.id);
+      if (sim) {
+        const charge = gs!.sim_charges.get(sim.tank);
+        result[p.id] = {
+          context: sim.context, enabled: sim.enabled, screen: "Battle", round: gs!.round_index + 1,
+          message: !sim.tank.alive ? "Your tank was destroyed. Watching the battle." :
+            charge ? "Choose batteries for Plasma. The battle continues." : "Simultaneous battle — control your tank",
+          keys: charge ? ["Space", "Enter", "Escape"] : simKeys,
+          tank: { name: sim.tank.name, icon: sim.tank.tank_icon, health: sim.tank.health, cash: sim.tank.cash,
+            angle: sim.tank.angle, power: sim.tank.power, weapon: weapons.ITEMS[sim.tank.selected_weapon]?.name ?? "",
+            ammo: sim.tank.inventory[sim.tank.selected_weapon] },
+          controls: sim.enabled && charge ? [
+            { id: "plasma-charge", label: "Batteries for Plasma", kind: "number", value: charge.value, min: 0, max: charge.max, step: 1 },
+            { id: "plasma-fire", label: "Fire Plasma", kind: "button" },
+            { id: "plasma-cancel", label: "Cancel", kind: "button" },
+          ] : [],
+        };
+        return;
+      }
       const enabled = this.enabled && p.id === this.owner;
       const message = screen === "rankings" ? "Round complete. Waiting for the host to continue." :
         screen === "finished" ? "Match complete." : screen === "admin" ? "Waiting for the host." :

@@ -692,7 +692,7 @@ export class App {
     const mayhem = (this.cfg as unknown as { mayhem?: boolean }).mayhem;
     this.cfg = Config.load(this.cfg.save());
     (this.cfg as unknown as { mayhem?: boolean }).mayhem = mayhem;
-    this.cfg.PLAY_MODE = "SEQUENTIAL";
+    if (this.cfg.PLAY_MODE !== "SIMULTANEOUS") this.cfg.PLAY_MODE = "SEQUENTIAL";
     this.cfg.MAXPLAYERS = players.length;
     this.renderer = new Renderer(this.cfg, this.w, this.h);
     this._setup = players.map((p, i) => [p.name, p.ai, this.cfg.team_mode === C.TEAM_NONE ? 0 : i, p.icon]);
@@ -1201,7 +1201,8 @@ class GameScreen extends Screen {
   override update(dt: number): string | null {
     const gs = this.gs;
     if (gs.phase === SIM_LIVE) {
-      (gs as unknown as { _sim_human_input(keys: unknown, dt: number): void })._sim_human_input(
+      if (this.app.online) this.app.online.updateSimultaneous(dt);
+      else (gs as unknown as { _sim_human_input(keys: unknown, dt: number): void })._sim_human_input(
         _keyGetPressed(),
         dt,
       );

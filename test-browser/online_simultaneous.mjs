@@ -1,0 +1,122 @@
+import assert from "node:assert/strict";
+
+export async function checkSimultaneous({ host, a, b, base, root, click, enabled, until, pause }) {
+  await host.evaluate(() => {
+    Object.assign(window.onlineApp.cfg, { PLAY_MODE: "SIMULTANEOUS", MAXROUNDS: 2, SOUND: "OFF", INITIAL_CASH: 100000 });
+    window.onlineApp._act("start_game");
+  });
+  await click(host, "Online");
+  const link = host.getByRole("textbox", { name: "Join link", exact: true });
+  await link.waitFor();
+  const joinUrl = `${base}/${new URL(await link.inputValue()).search}`;
+  await a.goto(joinUrl); await b.goto(joinUrl);
+  await a.getByPlaceholder("Your name").fill("Alice"); await click(a, "Ready");
+  await b.getByPlaceholder("Your name").fill("Bob"); await click(b, "Ready");
+  await click(host, "Add computer");
+  await until(() => enabled(host, "Start online game"), "simultaneous lobby");
+  await click(host, "Start online game");
+  // Purchasing stays turn-based and never asks either player to bind keys.
+  await until(() => enabled(a, "Done"), "Alice simultaneous shopping");
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.cfg.PLAY_MODE), "SIMULTANEOUS");
+  assert.equal(await enabled(b, "Done"), false);
+  await click(a, "Done");
+  await until(() => enabled(b, "Done"), "Bob simultaneous shopping");
+  await click(b, "Done");
+  await host.waitForFunction(() => window.onlineApp.gs.phase === "sim_live");
+  await host.evaluate(() => {
+    const gs = window.onlineApp.gs;
+    for (const rec of Object.values(gs._sim)) rec.timer = 10000;
+    gs.projectiles = []; gs.explosions = []; gs.death_queue = [];
+    gs.tanks.forEach((t) => { t.angle = 90; t.power = 500; t.inventory[1] = 5; t.selected_weapon = 0; });
+    window.simShots = [];
+    const fire = gs.fire.bind(gs);
+    gs.fire = (tank = null) => {
+      const result = fire(tank);
+      if (result.length) window.simShots.push({ owner: tank?.name, weapon: result[0].weapon.name });
+      return result;
+    };
+  });
+  await until(async () => await enabled(a, "Space / Fire") && await enabled(b, "Space / Fire"), "both controllers enabled");
+  assert.equal(await a.getByRole("button", { name: "Tank controls", exact: true }).count(), 0);
+  assert.equal(await b.getByRole("button", { name: "Inventory", exact: true }).count(), 0);
+  const angles = () => host.evaluate(() => window.onlineApp.gs.tanks.map((t) => t.angle));
+  const powers = () => host.evaluate(() => window.onlineApp.gs.tanks.map((t) => t.power));
+  const hold = async (page, name) => {
+    const box = await page.getByRole("button", { name, exact: true }).boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
+  };
+  await click(a, "← Angle"); await until(async () => (await angles())[0] > 90, "Alice tap");
+  assert.deepEqual((await angles()).slice(1), [90, 90]);
+  await hold(a, "← Angle"); await hold(b, "← Angle");
+  await until(async () => { const x = await angles(); return x[0] > 100 && x[1] > 100; }, "overlapping angle holds");
+  await a.mouse.up(); await pause(150);
+  const stopped = (await angles())[0], moving = (await angles())[1];
+  await until(async () => (await angles())[1] > moving + 5, "Bob continues after Alice releases");
+  assert.equal((await angles())[0], stopped);
+  await b.mouse.up();
+  await hold(a, "↑ Power"); await hold(b, "↑ Power");
+  await until(async () => { const x = await powers(); return x[0] > 550 && x[1] > 550; }, "overlapping power holds");
+  await a.mouse.up(); await b.mouse.up();
+  assert.equal((await powers())[2], 500);
+  await click(a, "Tab / Next");
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].selected_weapon) === 1, "Alice weapon");
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[1].selected_weapon), 0);
+  await click(a, "Previous weapon");
+  await host.keyboard.press("ArrowLeft"); await host.keyboard.press("Space");
+  assert.equal(await host.evaluate(() => window.simShots.length), 0);
+  await host.screenshot({ path: `${root}/test-browser/out/online-simultaneous-host.png` });
+  await Promise.all([click(a, "Space / Fire"), click(b, "Space / Fire")]);
+  await until(async () => await host.evaluate(() => window.simShots.some((s) => s.owner === "Alice") && window.simShots.some((s) => s.owner === "Bob")), "both phones fire");
+
+  // Controlled positions keep these UI checks independent of random shot damage.
+  await host.evaluate(() => {
+    const gs = window.onlineApp.gs;
+    gs.projectiles = []; gs.explosions = []; gs.death_queue = [];
+    gs.tanks.forEach((t, i) => { t.x = 120 + i * 350; t.y = 600; t.angle = 90; t.power = 400; });
+    const a = gs.tanks[0]; a.inventory[31] = 3; a.inventory[39] = 5; a.selected_weapon = 31;
+  });
+  await hold(b, "← Angle");
+  await click(a, "Space / Fire");
+  const charge = a.getByRole("spinbutton", { name: "Batteries for Plasma", exact: true });
+  await charge.waitFor();
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.plasma_charge), null);
+  assert.equal(await b.getByRole("spinbutton", { name: "Batteries for Plasma", exact: true }).count(), 0);
+  const bobBefore = (await angles())[1];
+  await until(async () => (await angles())[1] > bobBefore + 5, "Bob aims during Alice's Plasma choice");
+  assert.equal((await angles())[0], 90);
+  await b.mouse.up();
+  const bobShots = await host.evaluate(() => window.simShots.filter((s) => s.owner === "Bob").length);
+  await click(b, "Space / Fire");
+  await until(async () => await host.evaluate(() => window.simShots.filter((s) => s.owner === "Bob").length) > bobShots, "Bob fires during Alice's Plasma choice");
+  await charge.fill("2"); await charge.press("Tab");
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.sim_charges.get(window.onlineApp.gs.tanks[0])?.value) === 2, "private battery selection");
+  await a.screenshot({ path: `${root}/test-browser/out/online-simultaneous-plasma.png`, fullPage: true });
+  await click(a, "Fire Plasma");
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[31]) === 2, "Alice Plasma fires");
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].batteries), 3);
+
+  await host.evaluate(() => { window.onlineApp.gs.projectiles = []; });
+  await hold(b, "↑ Power");
+  // Navigating away disconnects Alice; her browser token restores the same tank.
+  await a.goto("about:blank");
+  const beforeDisconnect = (await powers())[1];
+  await until(async () => (await powers())[1] > beforeDisconnect + 20, "Bob continues while Alice disconnects");
+  await a.goto(joinUrl);
+  await until(() => enabled(a, "Space / Fire"), "Alice reconnects to her tank");
+  await b.mouse.up();
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks.length), 3);
+  assert.ok((await a.getByRole("heading", { level: 2 }).innerText()).startsWith("Alice"));
+  await a.screenshot({ path: `${root}/test-browser/out/online-simultaneous-controller.png`, fullPage: true });
+  await host.evaluate(() => { window.onlineApp.gs.tanks[0].alive = false; window.onlineApp.gs.tanks[0].health = 0; });
+  await until(async () => !await enabled(a, "Space / Fire"), "dead tank disabled");
+  assert.equal(await enabled(b, "Space / Fire"), true);
+  await host.evaluate(() => window.onlineApp.gs.mass_kill());
+  await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
+  await click(host, "Continue to purchasing");
+  await until(() => enabled(a, "Done"), "next round Alice shopping"); await click(a, "Done");
+  await until(() => enabled(b, "Done"), "next round Bob shopping"); await click(b, "Done");
+  await until(async () => await enabled(a, "Space / Fire") && await enabled(b, "Space / Fire"), "next round both controllers");
+  await host.evaluate(() => window.onlineApp._act("to_menu"));
+  assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SIMULTANEOUS");
+  console.log("PASS: simultaneous phones, concurrent aim/power/fire, independent releases, private Plasma, reconnect, death and next round");
+}

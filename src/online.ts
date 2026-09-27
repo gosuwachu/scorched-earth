@@ -69,6 +69,10 @@ export class HostSession {
   get paused(): boolean { return !this.connection.connected || !this.room?.hostConnected; }
   get keys(): Record<number, boolean> { return this.adapter?.keys(performance.now()) ?? {}; }
 
+  updateSimultaneous(dt: number): void {
+    this.adapter?.updateSimultaneous(dt, performance.now());
+  }
+
   beforeFrame(now: number): void {
     if (!this.room || !this.adapter || this.disposed) return;
     this.adapter.states(this.room.players);

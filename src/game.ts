@@ -246,6 +246,9 @@ export class GameState {
 
   // round/settle/sim scratch (created lazily in the Python via attribute set)
   plasma_charge: { tank: Tank; value: number; max: number } | null = null;
+  // Independent controller prompts; these never open the shared host modal.
+  readonly sim_charges = new Map<Tank, { value: number; max: number }>();
+  private simAim = new Map<Tank, { angle: number; power: number; ad: number; pd: number }>();
   private plasmaChoices = new Map<Tank, number>();
   private deathCredit = new WeakMap<Tank, Tank | null>();
   private soilMoving = false;
@@ -452,6 +455,7 @@ export class GameState {
     this._build_firing_order();
     this.soilDirty = false; this.soilMoving = false; this.forceSoil = false;
     this.plasma_charge = null; this.plasmaChoices.clear();
+    this.sim_charges.clear(); this.simAim.clear();
     this.projectiles.length = 0;
     this.explosions.length = 0;
     this.beams.length = 0;
@@ -1387,6 +1391,86 @@ export class GameState {
     this.current_shooter = tank;
     this.fire(tank);
     return true;
+  }
+
+  /** Device-owned simultaneous controls, independent of the local keymap/HUD. */
+  private sim_can_control(tank: Tank): boolean {
+    return this.phase === SIM_LIVE && this.tanks.includes(tank) && tank.alive && tank.ai_class === C.AI_HUMAN;
+  }
+
+  sim_release(tank: Tank): void {
+    this.simAim.delete(tank);
+    this.sim_charges.delete(tank);
+  }
+
+  sim_aim(tank: Tank, angleDirection: number, powerDirection: number, dt: number): void {
+    if (!this.sim_can_control(tank) || this.sim_charges.has(tank)) {
+      this.simAim.delete(tank);
+      return;
+    }
+    const held = this.simAim.get(tank) ?? { angle: 0, power: 0, ad: 0, pd: 0 };
+    // Carry fractional movement across fixed simulation ticks. Truncating each
+    // 1/60 s tick would make the 50 degree/s positive rotation stand still.
+    if (angleDirection !== held.ad || !angleDirection) held.angle = 0;
+    if (powerDirection !== held.pd || !powerDirection) held.power = 0;
+    held.ad = angleDirection; held.pd = powerDirection;
+    held.angle += angleDirection * SIM_AIM_RATE * dt;
+    held.power += powerDirection * SIM_POWER_RATE * dt;
+    const angle = Math.trunc(held.angle), power = Math.trunc(held.power);
+    held.angle -= angle; held.power -= power;
+    this.simAim.set(tank, held);
+    this.sim_adjust(tank, angle, power);
+  }
+
+  sim_adjust(tank: Tank, angle: number, power: number): void {
+    if (!this.sim_can_control(tank) || this.sim_charges.has(tank)) return;
+    const beforeAngle = tank.angle, beforePower = tank.power;
+    tank.angle = Math.max(0, Math.min(180, tank.angle + angle));
+    tank.power = Math.max(0, Math.min(1000, tank.power + power));
+    sfx.adjustment("angle", beforeAngle, tank.angle, this.cfg.is_on("SOUND"));
+    sfx.adjustment("power", beforePower, tank.power, this.cfg.is_on("SOUND"));
+  }
+
+  sim_cycle_weapon(tank: Tank, direction: 1 | -1): void {
+    if (!this.sim_can_control(tank) || this.sim_charges.has(tank)) return;
+    const owned = weapons.ITEMS.flatMap((item, slot) => item.offensive && tank.has_ammo(slot) ? [slot] : []);
+    if (!owned.length) return;
+    const at = owned.indexOf(tank.selected_weapon);
+    tank.selected_weapon = owned[at < 0 ? 0 : (at + direction + owned.length) % owned.length];
+  }
+
+  sim_fire(tank: Tank): void {
+    if (!this.sim_can_control(tank) || this._sim_in_flight(tank) || this.sim_charges.has(tank)) return;
+    if (tank.selected_weapon === 31 && tank.has_ammo(31) && tank.batteries > 0) {
+      this.simAim.delete(tank);
+      this.sim_charges.set(tank, { value: 0, max: Math.min(10, tank.batteries) });
+      return;
+    }
+    this.sim_launch(tank);
+  }
+
+  sim_set_plasma_charge(tank: Tank, value: number): void {
+    const charge = this.sim_charges.get(tank);
+    if (charge && Number.isFinite(value)) charge.value = Math.max(0, Math.min(charge.max, Math.trunc(value)));
+  }
+
+  sim_confirm_plasma_charge(tank: Tank): void {
+    const charge = this.sim_charges.get(tank);
+    this.sim_charges.delete(tank);
+    if (!charge || !this.sim_can_control(tank) || this._sim_in_flight(tank) ||
+        tank.selected_weapon !== 31 || !tank.has_ammo(31)) return;
+    this.plasmaChoices.set(tank, Math.min(charge.value, tank.batteries));
+    try { this.sim_launch(tank); }
+    finally { this.plasmaChoices.delete(tank); }
+  }
+
+  private sim_launch(tank: Tank): void {
+    // Immediate weapon effects use current_shooter for damage credit. Keep that
+    // launch detail scoped to this tank without changing the shared HUD owner.
+    const previous = this.current_shooter;
+    this.current_shooter = tank;
+    try { this.fire(tank); }
+    finally { this.current_shooter = previous; }
   }
 
   _sim_human_input(keys: ArrayLike<boolean> | null, dt: number): void {
@@ -2606,6 +2690,7 @@ export class GameState {
   }
 
   on_tank_destroyed(victim: Tank, weapon: weapons.Item | null = null): void {
+    this.sim_release(victim);
     this.deathCredit.set(victim, this.current_shooter);
     // Enqueue ONLY: the kill roulette (award, taunt, roll, case FX) runs when
     // the queue PROCESSES this corpse -- the binary's dead-tank-sweep order
@@ -2621,6 +2706,7 @@ export class GameState {
 
   // --------------------------------------------------------------- round end
   _end_round(): void {
+    this.sim_charges.clear(); this.simAim.clear();
     scoring.survival_award(this as unknown as scoring.State);
     // Victory fanfare on the winner path: a round that ends with a surviving tank
     // has a winner.  A mutual-kill round (no survivor) ends with no fanfare.
@@ -2633,6 +2719,7 @@ export class GameState {
   }
 
   mass_kill(): void {
+    this.sim_charges.clear(); this.simAim.clear();
     // System Menu -> Mass Kill (SCORCH.DOC:L1461-1469): kill EVERY tank, split the
     // round's survival pool EQUALLY with NO win/survival credit, then end the round.
     const n = this.tanks.length;

@@ -51,7 +51,8 @@ export function startController(roomId: string): void {
     for (const b of heldButtons.values()) b.dataset.held = "false";
   };
   const key = (code: string, down: boolean): void => {
-    if (!allowed() || (view?.targeting && code !== "Escape" && !code.startsWith("Digit")) || (down && held.has(code))) return;
+    if (!allowed() || (view?.keys && !view.keys.includes(code)) ||
+        (view?.targeting && code !== "Escape" && !code.startsWith("Digit")) || (down && held.has(code))) return;
     if (down) held.add(code); else held.delete(code);
     send({ kind: "key", key: code, down });
     const b = heldButtons.get(code);
@@ -62,7 +63,8 @@ export function startController(roomId: string): void {
     if (ended) return;
     status.textContent = !connection.connected ? "Connection lost. Reconnecting…" : !room?.hostConnected ?
       "Host unavailable. Waiting for the original host page to reconnect…" : view?.message ?? "Choose your tank and get ready.";
-    for (const [code, b] of heldButtons) b.disabled = !allowed() || (!!view?.targeting && code !== "Escape");
+    for (const [code, b] of heldButtons) b.disabled = !allowed() || (!!view?.keys && !view.keys.includes(code)) ||
+      (!!view?.targeting && code !== "Escape");
     const invalidTarget = ["target-0", "target-1"].some((id) => {
       const field = controlNodes.get(id)?.field;
       return field instanceof HTMLInputElement && (!field.value || !field.validity.valid);

@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -53,7 +54,11 @@ try {
   await click(host, "Local");
   await click(host, "Continue");
   await host.waitForFunction(() => window.onlineApp.top.result !== undefined);
-  await host.evaluate(() => { window.onlineApp._act("to_menu"); window.onlineApp._act("start_game"); });
+  await host.evaluate(() => {
+    window.onlineApp._act("to_menu");
+    window.onlineApp.cfg.PLAY_MODE = "SEQUENTIAL";
+    window.onlineApp._act("start_game");
+  });
   await host.getByRole("spinbutton", { name: "Rounds", exact: true }).fill("2");
   await click(host, "Online");
   await host.getByRole("textbox", { name: "Join link", exact: true }).waitFor();
@@ -307,7 +312,8 @@ try {
   await host.screenshot({ path: `${root}/test-browser/out/online-host.png` });
   await click(host, "Return to menu");
   await until(async () => (await a.locator(".lan-status").textContent()).includes("ended"), "room closed");
-  assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SIMULTANEOUS");
+  assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
+  await checkSimultaneous({ host, a, b, base, root, click, enabled, until, pause });
   assert.deepEqual(errors, []);
   console.log("PASS: local choice, lobby, AI, mobile controls, ownership, holds, inventory, purchases, reconnects, replacement, round progression, match completion");
 } catch (error) {

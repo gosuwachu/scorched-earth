@@ -28,6 +28,8 @@ export interface Control {
 }
 
 export interface ControllerView {
+  /** When present, limit the phone's standard buttons to these controls. */
+  keys?: string[];
   targeting?: boolean;
   context: number;
   enabled: boolean;

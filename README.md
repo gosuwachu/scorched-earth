@@ -114,15 +114,20 @@ once all human players are connected and ready. The host can play using the same
 join link on a separate controller page. **Local** retains the existing game setup.
 
 Watch the battlefield on the host screen. Each controller shows its tank's status,
-aiming and firing buttons, inventory, equipment, and purchasing controls. Online
-matches use sequential turns: only the active player can act. Purchasing also takes
-turns; each player presses **Done**, and the host advances the shared round results
+aiming and firing buttons, inventory, equipment, and purchasing controls. Choose
+**Simultaneous** in Play Options before starting an online match to let everyone
+aim and fire together. Each phone controls only its own tank with the same buttons;
+no key rebinding is needed. Plasma battery choices appear only on the owner's phone
+while the battle continues. Other online modes use sequential turns, where only
+the active player can act. Purchasing always takes turns; each player presses
+**Done**, and the host advances the shared round results
 with **Continue to purchasing**. The existing round and match-ending rules apply.
 
 Reopen the original join link in the **same browser, with its storage intact**, to
 resume your tank, including during a round or shopping. Refreshing a controller is
 safe. A second tab for the same player replaces the first. Disconnected players
-keep their tank and their turn waits for them; new players cannot join after Start.
+keep their tank. Sequential turns wait for them; simultaneous battles continue,
+with the disconnected tank's controls released. New players cannot join after Start.
 
 Keep the host game page **open and visible**. It runs the game; the Node server
 relays controls and serves the pages. A temporary network interruption reconnects
