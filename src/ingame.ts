@@ -60,6 +60,7 @@
  *   "reassign_teams", "save_game", "restore_game", "new_game", "back"
  */
 import { UI_ACTION } from "./screen";
+import { startShieldFade, stopShieldFade, type ShieldVisualState } from "./shields";
 import * as pygame from "./pygame";
 
 import * as C from "./constants";
@@ -142,7 +143,7 @@ export interface Cfg {
 }
 
 /** The GameState subset the in-round input layer reads / mutates. */
-export interface GameState {
+export interface GameState extends ShieldVisualState {
   phase: string;
   current_shooter: Tank | null;
   tanks: Tank[];
@@ -1104,6 +1105,7 @@ export class ControlPanelScreen implements Screen {
     const slot = this._s_slots[pyMod(i, this._s_slots.length)];
     const t = this.tank;
     if (slot === 0) {
+      stopShieldFade(this.state, t);
       t.shield_item = 0;
       t.shield_hp = 0;
       return;
@@ -1115,6 +1117,7 @@ export class ControlPanelScreen implements Screen {
     t.shield_deflect = Boolean(p["deflect"]);
     t.shield_laserproof = Boolean(p["laserproof"]);
     t.shield_failproof = Boolean(p["failproof"]);
+    startShieldFade(this.state, t, +1);
   }
 
   // ---- battery discharge: spend one battery for +10 health (section 7) ----

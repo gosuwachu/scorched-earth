@@ -428,6 +428,7 @@ export interface SaveGameState {
   projectiles?: unknown[];
   explosions?: unknown[];
   beams?: unknown[];
+  shield_fades?: Record<number, unknown>;
   awaiting_human?: boolean;
 }
 
@@ -1026,6 +1027,7 @@ export function apply(data: SaveData, state: SaveGameState): SaveGameState {
   if (state.projectiles) state.projectiles.length = 0;
   if (state.explosions) state.explosions.length = 0;
   if (state.beams) state.beams.length = 0;
+  if (state.shield_fades) state.shield_fades = {};
   state.awaiting_human = false;
   return state;
 }

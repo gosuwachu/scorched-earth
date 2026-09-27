@@ -34,7 +34,7 @@
 
 import * as pygame from "./pygame";
 import * as C from "./constants";
-import { shieldPixels } from "./shields";
+import { shieldPixels, shieldColor, type ShieldVisualState } from "./shields";
 import * as weapons from "./weapons";
 import { FUNKY_RGB, type WeaponEffect } from "./weapon_effects";
 import { chargeLayout } from "./energy_controls";
@@ -155,7 +155,7 @@ export interface Tank {
   [extra: string]: unknown;
 }
 
-export interface GameState {
+export interface GameState extends ShieldVisualState {
   cfg: Cfg;
   lut?: LiveLUT | null;
   terrain: { grid: Int32Array | Uint8Array | number[][] | GridLike };
@@ -771,6 +771,12 @@ export class Renderer {
         this._draw_wreck(surf, t);
       }
     }
+    // A collapse outlives shield HP and may also outlive its tank. Its saved
+    // outline is visual only; collision continues to depend on live HP.
+    for (const fade of Object.values(state.shield_fades ?? {})) {
+      if (fade.dir < 0) this._draw_shield_outline(surf, fade.item, fade.x, fade.y,
+        shieldColor(fade.item, 0, fade), state);
+    }
     for (const p of state.projectiles) {
       this._draw_projectile(surf, p, state);
     }
@@ -890,7 +896,7 @@ export class Renderer {
     if (t.shield_hp > 0) {
       this._draw_shield_ring(surf, t, x, y, state);
     }
-    this._health_bar(surf, t);
+    this._health_bar(surf, t, t.shield_hp > 0 || !!state.shield_fades?.[t.player_index]);
     if (
       state.current_shooter === t &&
       (state.phase === "aim" || state.phase === "turn_start")
@@ -945,20 +951,23 @@ export class Renderer {
     }
   }
 
-  // Browser shield color. Geometry uses the recovered DOS outline; the
-  // original per-player, strength-dependent shield palette remains separate.
-  static readonly SHIELD_RING_RGB: RGB = [120, 200, 255];
-
   private _draw_shield_ring(surf: pygame.Surface, t: Tank, x: number, y: number, state: GameState): void {
-    for (const [dx, dy] of shieldPixels(t.shield_item)) {
-      if (!C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x + dx, y + dy))) surf.set_at([x + dx, y + dy], Renderer.SHIELD_RING_RGB);
+    this._draw_shield_outline(surf, t.shield_item, x, y,
+      shieldColor(t.shield_item, t.shield_hp, state.shield_fades?.[t.player_index]), state);
+  }
+
+  private _draw_shield_outline(surf: pygame.Surface, item: number, x: number, y: number, color: RGB, state: GameState): void {
+    for (const [dx, dy] of shieldPixels(item)) {
+      if (!C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x + dx, y + dy))) surf.set_at([x + dx, y + dy], color);
     }
   }
 
-  private _health_bar(surf: pygame.Surface, t: Tank): void {
+  private _health_bar(surf: pygame.Surface, t: Tank, shieldVisible = false): void {
     const w = 22;
     const x = t.x - (w >> 1);
-    const y = t.y - t.half_width - 9;
+    // The browser health bar must not paint over DOS's overhead Mag arcs or
+    // the tops of the circular shields (outer radius 16, bar height 3).
+    const y = t.y - Math.max(t.half_width + 9, shieldVisible ? 22 : 0);
     pygame.draw.rect(surf, [60, 0, 0], [x, y, w, 3]);
     const hp = Math.max(0, Math.min(C.TANK_DEFAULT_HEALTH, t.health));
     pygame.draw.rect(surf, [0, 220, 0], [x, y, Math.trunc((w * hp) / C.TANK_DEFAULT_HEALTH), 3]);
@@ -1447,26 +1456,11 @@ export class Renderer {
   }
 
   static readonly SHIELD_SWATCH = 16;
-  static readonly _SHIELD_FADE_FRAMES = 51;
-
   private _draw_shield_swatch(surf: pygame.Surface, state: GameState, t: Tank, x: number, y: number): void {
-    const fades = (state as { shield_fades?: { [k: number]: { frame: number; dir: number } } }).shield_fades;
-    const fade = fades ? fades[t.player_index] : undefined;
-    let level: number;
-    if (fade !== undefined) {
-      const fr = Math.min(Renderer._SHIELD_FADE_FRAMES, fade.frame);
-      if (fade.dir > 0) {
-        level = fr / Renderer._SHIELD_FADE_FRAMES;
-      } else {
-        level = Math.max(0.0, 1.0 - fr / Renderer._SHIELD_FADE_FRAMES);
-      }
-    } else if (t.shield_hp > 0) {
-      level = 1.0;
-    } else {
-      return;
-    }
-    const base = tupRgb(lutGet(this._active, t.color));
-    const col: RGB = [Math.trunc(base[0] * level), Math.trunc(base[1] * level), Math.trunc(base[2] * level)];
+    const fade = state.shield_fades?.[t.player_index];
+    if (t.shield_hp <= 0 && fade?.dir !== -1) return;
+    const item = fade?.dir === -1 ? fade.item : t.shield_item;
+    const col = shieldColor(item, t.shield_hp, fade);
     const sz = Renderer.SHIELD_SWATCH;
     pygame.draw.rect(surf, col, [x, y, sz, sz]);
     pygame.draw.rect(surf, [90, 90, 90], [x, y, sz, sz], 1);

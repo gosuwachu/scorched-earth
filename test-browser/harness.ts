@@ -837,7 +837,7 @@ STATES["shield_outlines"] = () => {
   for (let i = d.gs.tanks.length; i < 5; i++) d.gs.add_player(`Shield ${i}`, 0, 0, i);
   d.gs.tanks.forEach((t, i) => {
     t.x = 200 + i * 150; t.y = d.gs.terrain.column_top(t.x) - 1;
-    t.alive = true; t.shield_item = 40 + i; t.shield_hp = 100;
+    t.alive = true; t.shield_item = 40 + i; t.shield_hp = ITEMS[40 + i].params.hp as number;
   });
   return advanceWeaponDemo(0);
 };
@@ -871,7 +871,8 @@ for (const [name, idx, frames] of [
 Object.assign(window, { startWeaponDemo, advanceWeaponDemo, weaponDemoTerrainStats });
 
 // Real flight sequences for the shield gate; setup goes through normal equipment.
-let shieldDemo: { gs: GameState; p: Projectile; renderer: Renderer; surf: pygame.Surface; frame: number };
+let shieldDemo: { gs: GameState; p: Projectile; renderer: Renderer; surf: pygame.Surface; frame: number;
+  descending: boolean; lifted: boolean };
 function startShieldDemo(item: number, scenario: string): void {
   const gs = buildState(42, { SKY: "PLAIN", FALLING_TANKS: "OFF", MTN_PERCENT: 0,
     TRACE: "ON", FLY_SOUND: "OFF", FIRE_DELAY: 100 });
@@ -881,23 +882,85 @@ function startShieldDemo(item: number, scenario: string): void {
   for (let x = 0; x < W; x++) for (let y = ground; y < H; y++) gs.terrain.write(x, y, C.DIRT_SHADE_LO + 8);
   gs.tanks.forEach((t, i) => { t.x = i ? W >> 1 : 100; t.y = ground - 1; });
   const target = gs.tanks[1];
-  target.shield_hp = 0; target.inventory.fill(0); target.inventory[item] = 1;
-  gs._arm_best_shield(target, false);
+  const launched = scenario.startsWith("launch-");
+  if (launched) target.x = scenario === "launch-slow" ? 160 : 430;
+  target.shield_hp = 0; target.inventory.fill(0);
+  if (item) {
+    target.inventory[item] = 1;
+    if (launched) {
+      const panel = new ingame.ControlPanelScreen(gs as unknown as ingame.GameState, target);
+      panel._s_set(panel._shield_options().indexOf(ITEMS[item].name));
+    } else gs._arm_best_shield(target, false);
+  }
+  // Flight captures start with an already deployed shield; palette captures
+  // below exercise the actual activation samples separately.
+  for (let i = 0; i < 51; i++) gs._tick_shield_fades();
   gs.current_shooter = gs.tanks[0]; gs.phase = FIRING;
   const top = scenario === "top";
   const side = scenario === "left" ? -1 : scenario === "right" ? 1 : 0;
-  const p = new Projectile(gs.current_shooter, ITEMS[0], target.x + (side ? side * 16 : top ? 0 : -4),
+  let p: Projectile;
+  if (launched) {
+    const shooter = gs.current_shooter;
+    shooter.angle = scenario === "launch-slow" ? 60 : 70;
+    shooter.power = scenario === "launch-slow" ? 180 : 499;
+    shooter.selected_weapon = 0; gs.phase = AIM;
+    [p] = gs.fire();
+  } else p = new Projectile(gs.current_shooter, ITEMS[0], target.x + (side ? side * 16 : top ? 0 : -4),
     target.y - (side ? 0 : 40), side ? -side * 300 : top ? 0 : 10,
     side ? 0 : scenario === "fast" ? -400 : top ? -300 : -100);
   gs.projectiles = [p];
-  shieldDemo = { gs, p, renderer: freshRenderer(gs), surf: newSurf(), frame: 0 };
+  shieldDemo = { gs, p, renderer: freshRenderer(gs), surf: newSurf(), frame: 0, descending: false, lifted: false };
   advanceShieldDemo(0);
 }
 function advanceShieldDemo(frames: number): StateMeta {
   const d = shieldDemo;
-  for (let i = 0; i < frames; i++) { d.gs.update(C.DT); d.frame++; }
+  for (let i = 0; i < frames; i++) {
+    d.gs.update(C.DT); d.frame++;
+    if (d.p.vy < 0) d.descending = true;
+    if (d.descending && d.p.vy > 0) d.lifted = true;
+  }
   d.renderer.render(d.surf, d.gs); blit(d.surf);
   return { frame: d.frame, x: d.p.px, y: d.p.py, vx: d.p.vx, vy: d.p.vy, active: d.p.active,
-    shield: d.gs.tanks[1].shield_hp, health: d.gs.tanks[1].health, phase: d.gs.phase };
+    shield: d.gs.tanks[1].shield_hp, health: d.gs.tanks[1].health, phase: d.gs.phase, lifted: d.lifted };
 }
 Object.assign(window, { startShieldDemo, advanceShieldDemo });
+
+let shieldVisualOrigin: { item: number; x: number; y: number };
+function startShieldVisualDemo(item: number): StateMeta {
+  startShieldDemo(item, "slow");
+  const d = shieldDemo, t = d.gs.tanks[1];
+  d.gs.projectiles = []; d.gs.phase = AIM; d.gs.current_shooter = t;
+  shieldVisualOrigin = { item, x: t.x, y: t.y };
+  d.gs._start_shield_fade(t, +1);
+  return advanceShieldVisualDemo("read");
+}
+
+function advanceShieldVisualDemo(action: string, value = 0): StateMeta {
+  const d = shieldDemo, gs = d.gs, t = gs.tanks[1];
+  if (action === "age") for (let i = 0; i < value; i++) gs._tick_shield_fades();
+  if (action === "damage") damage.apply_tank_damage(gs, t, value);
+  if (action === "recharge") {
+    const p = new Projectile(gs.tanks[0], ITEMS[32], t.x, t.y - 4, 1, 0);
+    p.state.energy = value * 100;
+    wb.fire_laser(gs as unknown as wb.BState, p as unknown as wb.BProjectile);
+    gs.beams = [];
+  }
+  if (action === "manual") {
+    if (value) t.inventory[value] = 1;
+    const panel = new ingame.ControlPanelScreen(gs as unknown as ingame.GameState, t);
+    panel._s_set(value ? panel._shield_options().indexOf(ITEMS[value].name) : 0);
+  }
+  if (action === "team") t.color = value;
+  if (action === "move") t.x += value;
+  const fade = gs.shield_fades[t.player_index];
+  const item = t.shield_item || fade?.item || shieldVisualOrigin.item;
+  const x = fade?.dir === -1 ? fade.x : shieldVisualOrigin.x;
+  const y = (fade?.dir === -1 ? fade.y : shieldVisualOrigin.y) - (item === 41 || item === 42 ? 15 : 16);
+  if (action === "bury") gs.terrain.write(x, y, C.DIRT_SHADE_LO + 8);
+  d.renderer.render(d.surf, gs); blit(d.surf);
+  const pixel = (px: number, py: number) => Array.from(d.surf.ctx.getImageData(px, py, 1, 1).data).slice(0, 3);
+  const name = (gs as unknown as { _hud_hitboxes: Record<string, pygame.Rect> })._hud_hitboxes.name;
+  return { hp: t.shield_hp, item: t.shield_item, fade: fade ?? null, rgb: pixel(x, y),
+    swatch: pixel(name.x - 14, 8), background: pixel(x + 25, y) };
+}
+Object.assign(window, { startShieldVisualDemo, advanceShieldVisualDemo });

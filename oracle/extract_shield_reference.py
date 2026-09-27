@@ -27,7 +27,15 @@ speed_divisor = data("f", 0x1cc8)
 shields = []
 for i in range(5):
     tier, hp, radius, r, g, b, flags, _ = struct.unpack_from("<8H", binary, 0x55d80 + 0x617c + 16*i)
-    shields.append(dict(item=40+i, tier=tier, hp=hp, radius=radius,
+    rgb6 = [r, g, b]
+    # 4191:0034/06ca: signed integer division before writing six-bit DAC channels.
+    colors = [dict(hp=strength, rgb=[(c * strength // hp) << 2 for c in rgb6])
+              for strength in sorted({0, 1, hp // 4, hp // 2, hp * 3 // 4, hp - 1, hp})]
+    # 4191:0455 and 0034: the exact palette samples, not DOS wall-clock traces.
+    activation = [[(c * (frame * 63 // 50) // 63) << 2 for c in rgb6] for frame in range(51)]
+    collapse = [[(c * (60 - frame) // 60) << 2 for c in rgb6] for frame in range(51)]
+    shields.append(dict(item=40+i, tier=tier, hp=hp, radius=radius, rgb6=rgb6,
+                        colors=colors, activation=activation, collapse=collapse,
                         push=bool(flags & 6), deflect=bool(flags & 1), laserproof=tier == 5))
 
 

@@ -46,6 +46,7 @@ import * as damage from "./damage";
 import { pyRound } from "./damage";
 import * as _pal from "./palette";
 import { Projectile } from "./objects";
+import { stopShieldFade } from "./shields";
 import { sfx } from "./sound";
 import type { Item } from "./weapons";
 import { startBlast, startFluid, startSoil, plasmaRadius } from "./combat_effects";
@@ -599,6 +600,7 @@ export function fire_laser(state: BState, proj: BProjectile): void {
         Math.abs(tk.y - 4 - iy) <= 6
       ) {
         if (tk.shield_laserproof && tk.shield_hp > 0) {
+          stopShieldFade(state, tk);
           tk.shield_hp = Math.min(200, tk.shield_hp + Math.trunc(energy / 100));
           energy = 0; // Super Mag stops and absorbs the beam
           break;

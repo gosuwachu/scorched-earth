@@ -34,7 +34,7 @@
  * j = _randbelow(i+1)) against _pyrandom, where _randbelow(i+1) == _pyrandom.pick(i+1).
  */
 import * as C from "./constants";
-import { shieldContains } from "./shields";
+import { shieldContains, startShieldFade, SHIELD_FADE_SAMPLES, type ShieldFade } from "./shields";
 import * as physics from "./physics";
 import * as wb from "./weapon_behaviors";
 import { startBlast, startSoil, startDeathFlames } from "./combat_effects";
@@ -222,8 +222,7 @@ export class GameState {
   throe_fx: Array<{ [k: string]: unknown }>;
   death_queue: death.DeathEntry[];
   flashes: Array<{ [k: string]: unknown }>;
-  shield_fades: { [playerIndex: number]: { dir: number; frame: number } };
-  _prev_shield_hp: { [playerIndex: number]: number };
+  shield_fades: Record<number, ShieldFade>;
   speech: Speech;
   _speech_frame: number;
   live_sky: string;
@@ -310,10 +309,8 @@ export class GameState {
     // frame-driven analogue of the binary's blocking FUN_3ef5_029a call.
     this.death_queue = [];
     this.flashes = []; // full-screen palette flashes (lightning)
-    // 51-frame status-bar shield SWATCH fade (FUN_4191_0034 collapse / _0455
-    // activate): {player_index: {"dir": +1 arm-in / -1 collapse-out, "frame"}}.
+    // Transient outline/status fades; collapse keeps the old item and position.
     this.shield_fades = {};
-    this._prev_shield_hp = {}; // to detect a shield collapsing to 0
     this.speech = null; // active tank speech bubble (talk)
     this._speech_frame = 0;
     this.live_sky = (cfg.SKY || "PLAIN").toUpperCase(); // resolved per round (hazard)
@@ -462,7 +459,6 @@ export class GameState {
     this.flashes.length = 0;
     this.trace_marks.length = 0;
     this.shield_fades = {};
-    this._prev_shield_hp = {};
     this.last_landing = null;
     this.direct_hit_tank = null; // DAT_5f38_e1e4/e1e6 (Tosser forced-target latch)
     this.fire_index = 0;
@@ -650,7 +646,7 @@ export class GameState {
         t.shield_laserproof = (p.laserproof as boolean | undefined) ?? false;
         t.shield_failproof = (p.failproof as boolean | undefined) ?? false;
         t.inventory[slot] -= 1;
-        // 51-frame swatch fade-IN on activate (FUN_4191_0455.c:50-64).
+        // 51-sample outline fade-IN on activate (4191:0455).
         this._start_shield_fade(t, +1);
         // Shield-deploy rising sweep (FUN_4191_0455.c:58-62): gated on the arm.
         sfx.play("shield_deploy", this.cfg.is_on("SOUND"));
@@ -663,36 +659,18 @@ export class GameState {
     return null;
   }
 
-  // 51-frame shield SWATCH fade (FUN_4191_0034.c:37 collapse / FUN_4191_0455.c:50
-  // activate both loop `for ... < 0x33` = 51 frames).  Status-bar swatch only.
-  static SHIELD_FADE_FRAMES = 51; // 0x33
+  static SHIELD_FADE_FRAMES = SHIELD_FADE_SAMPLES;
 
   _start_shield_fade(tank: Tank, direction: number): void {
-    // direction +1 = fade-in (shield armed), -1 = fade-out (shield collapsed).
-    this.shield_fades[tank.player_index] = { dir: direction, frame: 0 };
+    startShieldFade(this, tank, direction);
   }
 
   _tick_shield_fades(): void {
-    // Advance shield swatch fades and detect collapses to 0.
-    for (const t of this.tanks) {
-      const prev = this._prev_shield_hp[t.player_index] ?? 0;
-      if (prev > 0 && t.shield_hp <= 0) {
-        // collapsed this frame
-        this._start_shield_fade(t, -1);
-      }
-      this._prev_shield_hp[t.player_index] = t.shield_hp;
+    // Sample zero is rendered on the event frame; samples 1..50 follow.
+    // Start/cancel at mutations, rather than inferring equipment from zero HP.
+    for (const [key, fade] of Object.entries(this.shield_fades)) {
+      if (++fade.frame >= SHIELD_FADE_SAMPLES) delete this.shield_fades[Number(key)];
     }
-    for (const k of Object.keys(this.shield_fades)) {
-      this.shield_fades[Number(k)].frame += 1;
-    }
-    const kept: { [playerIndex: number]: { dir: number; frame: number } } = {};
-    for (const k of Object.keys(this.shield_fades)) {
-      const f = this.shield_fades[Number(k)];
-      if (f.frame <= GameState.SHIELD_FADE_FRAMES) {
-        kept[Number(k)] = f;
-      }
-    }
-    this.shield_fades = kept;
   }
 
   _build_firing_order(): void {
@@ -2327,7 +2305,7 @@ export class GameState {
   _tick_sky(): void {
     // Age the sky-borne transient visuals every frame, regardless of phase.
     this._step_flashes(); // full-screen lightning flashes
-    this._tick_shield_fades(); // 51-frame shield swatch fades
+    this._tick_shield_fades(); // 51-sample shield outline fades
     hazard.age_bolts(this as unknown as hazard.State); // expire hostile-sky lightning bolts
   }
 

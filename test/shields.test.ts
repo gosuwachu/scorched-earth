@@ -6,12 +6,13 @@ import { Projectile } from "../src/objects";
 import { ITEMS } from "../src/weapons";
 import * as damage from "../src/damage";
 import * as wb from "../src/weapon_behaviors";
+import { shieldColor } from "../src/shields";
 
-function game(item = 40, mode = "SEQUENTIAL") {
+function game(item = 40, mode = "SEQUENTIAL", w = 320, h = 240) {
   const cfg = new Config();
   Object.assign(cfg, { PLAY_MODE: mode, SOUND: "OFF", FLY_SOUND: "OFF", TALKING_TANKS: "OFF",
     INITIAL_CASH: 0, MAX_WIND: 0, FALLING_TANKS: "OFF", TRACE: "ON" });
-  const gs = createGameState(cfg, 320, 240, 42);
+  const gs = createGameState(cfg, w, h, 42);
   gs.add_player("A", 0, 0, 0); gs.add_player("B", 0, 0, 1); gs.new_game();
   gs.terrain.grid.fill(0);
   gs.tanks.forEach((t, i) => { t.x = i ? 160 : 30; t.y = 159; t.health = 100; t.alive = true; });
@@ -32,6 +33,86 @@ function shell(gs: Game, dx = -10, dy = 40, vx = 10, vy = -100, item = 0) {
   gs.projectiles.push(p);
   return p;
 }
+
+describe("DOS shield palette and lifecycle", () => {
+  for (const f of reference.shields) {
+    it(`item ${f.item} quantizes strength and both fades in VGA DAC space`, () => {
+      for (const sample of f.colors) expect(shieldColor(f.item, sample.hp)).toEqual(sample.rgb);
+      expect(shieldColor(f.item, f.hp + 100)).toEqual(f.colors.at(-1)!.rgb);
+      const fade = { item: f.item, hp: f.hp, x: 160, y: 159, dir: 1, frame: 0 };
+      for (let frame = 0; frame < 51; frame++) {
+        expect(shieldColor(f.item, f.hp, { ...fade, frame })).toEqual(f.activation[frame]);
+        expect(shieldColor(f.item, 0, { ...fade, dir: -1, frame })).toEqual(f.collapse[frame]);
+      }
+    });
+    it(`item ${f.item} dims on damage and captures its outline before collapse`, () => {
+      const gs = game(f.item), t = gs.tanks[1];
+      expect(gs.shield_fades[1]).toMatchObject({ item: f.item, dir: 1, frame: 0 });
+      damage.apply_tank_damage(gs, t, 1);
+      expect(gs.shield_fades[1]).toBeUndefined();
+      expect(shieldColor(t.shield_item, t.shield_hp)).toEqual(f.colors.at(-2)!.rgb);
+      damage.apply_tank_damage(gs, t, t.shield_hp);
+      expect([t.shield_item, t.shield_hp, t.health]).toEqual([0, 0, 100]);
+      expect(gs.shield_fades[1]).toMatchObject({ item: f.item, dir: -1, frame: 0, x: 160, y: 159 });
+      t.x += 30; t.y += 10;
+      for (let i = 0; i < 50; i++) gs._tick_shield_fades();
+      expect(gs.shield_fades[1]).toMatchObject({ frame: 50, x: 160, y: 159 });
+      gs._tick_shield_fades();
+      expect(gs.shield_fades[1]).toBeUndefined();
+    });
+  }
+  it("replaces a collapse with new equipment and clears fades on round reset", () => {
+    const gs = game(40), t = gs.tanks[1];
+    damage.apply_tank_damage(gs, t, t.shield_hp);
+    t.inventory[42] = 1; gs._arm_best_shield(t, false);
+    expect(gs.shield_fades[1]).toMatchObject({ item: 42, dir: 1, frame: 0 });
+    gs.start_round();
+    expect(gs.shield_fades).toEqual({});
+  });
+  it("laser recharge interrupts deployment and immediately shows current strength", () => {
+    const gs = game(44), t = gs.tanks[1]; t.shield_hp = 100;
+    const p = shell(gs, 0, 4, 1, 0, 32); p.state.energy = 1000;
+    wb.fire_laser(gs as unknown as wb.BState, p as unknown as wb.BProjectile);
+    expect(t.shield_hp).toBe(110);
+    expect(gs.shield_fades[1]).toBeUndefined();
+    expect(shieldColor(44, t.shield_hp)).toEqual([136, 116, 72]);
+  });
+  it("a collapsing outline provides no collision or magnetic protection", () => {
+    const gs = game(44), t = gs.tanks[1];
+    damage.apply_tank_damage(gs, t, t.shield_hp);
+    const p = shell(gs, -4, 40, 10, -100);
+    gs._mag_deflect(p);
+    expect(p.vy).toBe(-100);
+    for (let i = 0; i < 2000 && p.active; i++) gs._step_flight();
+    expect(t.alive).toBe(false);
+    expect(gs.shield_fades[1].dir).toBe(-1);
+  });
+});
+
+describe("magnetic shields against normally launched enemy shots", () => {
+  for (const mode of ["SEQUENTIAL", "SYNCHRONOUS", "SIMULTANEOUS"]) {
+    for (const item of [0, 40, 44]) for (const speed of ["slow", "fast"]) {
+      it(`${mode}: item ${item}, ${speed} shot`, () => {
+        const gs = game(item, mode, 1024, 768), [a, b] = gs.tanks;
+        a.x = 100; b.x = speed === "slow" ? 160 : 430; a.y = b.y = 499;
+        for (let x = 0; x < gs.w; x++) for (let y = 500; y < gs.h; y++) gs.terrain.write(x, y, 96);
+        a.angle = speed === "slow" ? 60 : 70; a.power = speed === "slow" ? 180 : 499;
+        a.selected_weapon = 0;
+        const [p] = gs.fire(a);
+        let descending = false, lifted = false;
+        for (let frame = 0; frame < 300 && p.active; frame++) {
+          gs.update(1 / 60);
+          if (p.vy < 0) descending = true;
+          if (descending && p.vy > 0) lifted = true;
+        }
+        expect(p.active).toBe(false);
+        expect(lifted).toBe(item !== 0 && speed === "slow");
+        expect(b.health).toBe(item === 0 || (item === 40 && speed === "fast") ? 0 : 100);
+        if (item === 44) expect(b.shield_hp).toBe(speed === "slow" ? 200 : 190);
+      });
+    }
+  }
+});
 
 describe("DOS shield equipment and damage", () => {
   for (const f of reference.shields) {

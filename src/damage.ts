@@ -50,6 +50,7 @@
 import * as C from "./constants";
 import * as scoring from "./scoring";
 import { sfx } from "./sound";
+import { startShieldFade, stopShieldFade, type ShieldVisualState } from "./shields";
 
 /**
  * Python round() == round-half-to-even (banker's rounding).  Used where the
@@ -117,7 +118,7 @@ export interface Terrain {
 }
 
 /** Game-state surface damage threads through. Mirrors the duck-typed reads. */
-export interface State {
+export interface State extends ShieldVisualState {
   cfg: Cfg;
   tanks: Tank[];
   terrain: Terrain;
@@ -201,6 +202,10 @@ export function apply_tank_damage(state: State, tank: Tank | null, amount: numbe
     tank.hits_career[i] = (tank.hits_career[i] ?? 0) + 1;
   }
 
+  if (tank.shield_hp > 0) {
+    if (amount >= tank.shield_hp) startShieldFade(state, tank, -1);
+    else stopShieldFade(state, tank);
+  }
   const [overflow, absorbed] = shield_gate(tank, amount);
   if (absorbed > 0 && tank.shield_hp === 0) {
     // shield destroyed by this hit

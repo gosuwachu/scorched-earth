@@ -604,6 +604,7 @@ describe("savegame: load() + apply() round-trip restores the state exactly", () 
       const blob = hexToBytes(bc.blob_hex);
       const data = load(blob);
       const host = mkBlankState(rc.restored.tanks.length, rc.restored.w, rc.restored.h);
+      host.shield_fades = { 0: { item: 44, dir: -1, frame: 25, x: 100, y: 100, hp: 1 } };
       const out = apply(data, host);
       expect(out, "apply returns the host").toBe(host);
       expectStateRestored(out, rc.restored, bc.name);
@@ -611,6 +612,7 @@ describe("savegame: load() + apply() round-trip restores the state exactly", () 
       expect(out.projectiles, `${bc.name} projectiles cleared`).toEqual([]);
       expect(out.explosions, `${bc.name} explosions cleared`).toEqual([]);
       expect(out.beams, `${bc.name} beams cleared`).toEqual([]);
+      expect(out.shield_fades, `${bc.name} shield fades cleared`).toEqual({});
       expect(out.awaiting_human, `${bc.name} awaiting_human`).toBe(false);
     });
   }

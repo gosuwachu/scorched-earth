@@ -129,7 +129,8 @@ describe("render: module constants pinned to the recovered values", () => {
     expect(render.TITLE_SKY_BOTTOM).toEqual(c.TITLE_SKY_BOTTOM);
     expect(render.SUNSET_TOP_RGB).toEqual(c.SUNSET_TOP_RGB);
     expect(render.SUNSET_BOTTOM_RGB).toEqual(c.SUNSET_BOTTOM_RGB);
-    expect(render.Renderer.SHIELD_RING_RGB).toEqual(c.SHIELD_RING_RGB);
+    // Shield colors supersede this Python fixture; DOS DAC vectors are tested
+    // in shields.test.ts, including strength changes and palette fades.
     expect(render.Renderer.PLASMA_RING_RGB).toEqual(c.PLASMA_RING_RGB);
     expect(render.Renderer.NUKE_CORE).toEqual(c.NUKE_CORE);
     expect(render.Renderer.NUKE_MID).toEqual(c.NUKE_MID);

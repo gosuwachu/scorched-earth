@@ -45,10 +45,10 @@ and reconnect preserve ammunition and Battery counts.
 Terrain settling now animates all unsupported runs while preserving their
 shade order. Cavern ceilings and Suspend Dirt remain respected. Falling tanks,
 parachutes, collateral deaths, and settling must finish before turn advancement.
-Existing parachute geometry and shield deployment are retained. Shield outlines
-and swept contact handling now use the original tier geometry; see the feedback
-audit below. Laser recharge, terrain burial and delayed damage use the corrected
-weapon paths.
+Existing parachute geometry is retained. Shield outlines, palette changes and
+swept contact handling use the original tier geometry and DAC arithmetic; see
+the shield audits below. Laser recharge, terrain burial and delayed damage use
+the corrected weapon paths.
 
 ## Gameplay feedback audit
 
@@ -138,6 +138,60 @@ Shield audit verification on 2026-09-27: `npm test` passed 15,892 tests in
 64 files; `npm run build` passed; the browser gates passed 13 shield flight
 scenarios, 44 render states, and 66 weapon/terrain sequences. Shield captures
 and trajectory samples are written to `test-browser/out/shields/`.
+
+## Shield palette and normal-launch audit
+
+The fixed browser blue has been replaced with the RGB fields at offsets
+`+6/+8/+a` in the five definitions at `5f38:617c..61bc`. These are shield-type
+colors, independently updated for each tank, not the tank's team hue:
+
+| Tier | VGA RGB (0..63) | Full browser RGB |
+|---|---|---|
+| Mag Deflector | 63, 63, 23 | 252, 252, 92 |
+| Shield | 63, 63, 63 | 252, 252, 252 |
+| Force Shield | 63, 23, 63 | 252, 92, 252 |
+| Heavy Shield | 63, 63, 63 | 252, 252, 252 |
+| Super Mag | 63, 53, 33 | 252, 212, 132 |
+
+`4191:0034` and `4191:06ca` scale each DAC channel using integer division:
+`channel6 = base6 * HP / maximumHP`, truncated before expanding with `<< 2`.
+The outline and browser status swatch share that color. The browser health bar
+is placed above a visible shield so it cannot obscure the small Mag arcs.
+
+Activation (`4191:0455`) has samples `i=0..50`: first compute
+`level = floor(i*63/50)`, then `floor(base6*level/63)`. Collapse (`4191:0034`)
+starts at full brightness and draws `floor(base6*(60-i)/60)` for `i=0..50`, then
+erases the outline. Both use one sample per browser update (60 Hz), **not measured
+DOS wall-clock timing**. The collapse snapshot keeps the shield type and position
+after HP and equipment have been cleared; it never supplies collision protection.
+Damage/recharge interrupts deployment, replacement starts a fresh fade, and
+manual disable, round reset and save restoration discard obsolete animations.
+The fixture extractor now records base colors, strength samples and every fade
+sample directly from the checked executable and these static transcriptions.
+
+The magnetic force itself did not need a magnitude change. New tests launch
+actual enemy Baby Missiles instead of only injecting projectiles above a tank.
+With default gravity, no wind, equal tank heights and shooter X=100:
+
+- Target X=160, angle 60 degrees, power 180: an unshielded tank is hit; both
+  magnetic tiers turn the descending shot upward and preserve full shield HP.
+- Target X=430, angle 70 degrees, power 499: the shot penetrates the magnetic
+  field. Mag Deflector's tank is hit; Super Mag intercepts it and loses 10 HP.
+
+The unit tests exercise these flights in all three play modes. The browser gate
+arms through the real control panel, fires through the normal launch path, and
+records trajectories and successive frames. Faster shots can receive upward
+acceleration yet keep descending, making the field less obvious during play.
+The earlier caveat about DOS's machine-dependent callback cadence still applies.
+
+The expanded shield browser gate passes 19 flight scenarios, all five palettes
+and both 51-sample fades, plus manual deployment, damage, laser recharge,
+replacement, collapse removal and terrain clipping. Pixel checks cover both the
+outline and status swatch and confirm that changing team color leaves shield
+color unchanged. Captures and `palette.json` are in `test-browser/out/shields/`.
+Verification on 2026-09-27: `npm test` passed 15,923 tests across 64 files;
+`npm run build` passed; the complete browser render gate passed all 44 states
+with no exceptions or blank frames.
 
 ## Deaths, weather and sound
 
