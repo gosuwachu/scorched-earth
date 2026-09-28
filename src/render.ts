@@ -777,8 +777,6 @@ export class Renderer {
           after.data.set(before.data.subarray(i, i + 4), i);
         }
         surf.ctx.putImageData(after, x0, y0);
-      } else {
-        this._draw_wreck(surf, t);
       }
     }
     // A collapse outlives shield HP and may also outlive its tank. Its saved
@@ -981,10 +979,6 @@ export class Renderer {
     pygame.draw.rect(surf, [60, 0, 0], [x, y, w, 3]);
     const hp = Math.max(0, Math.min(C.TANK_DEFAULT_HEALTH, t.health));
     pygame.draw.rect(surf, [0, 220, 0], [x, y, Math.trunc((w * hp) / C.TANK_DEFAULT_HEALTH), 3]);
-  }
-
-  private _draw_wreck(surf: pygame.Surface, t: Tank): void {
-    pygame.draw.rect(surf, [40, 40, 40], [t.x - t.half_width, t.y - 3, t.half_width * 2, 3]);
   }
 
   // The UFO-ABDUCTION sprite (6x5 grid @ data 0x60c3 / file 0x5be43, FUN_3ef5_067b).
