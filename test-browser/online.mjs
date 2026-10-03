@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { checkBattleControls } from "./online_battle.mjs";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
 import { purchaseButton, checkHostShopping, checkShopRows, checkShopLayout } from "./online_shop.mjs";
@@ -130,7 +131,7 @@ try {
   await host.screenshot({ path: `${root}/test-browser/out/online-menu.png` });
   await closeHostMenu(host);
   await until(() => enabled(a, "Done"), "shopping resumes");
-  assert.equal(await enabled(b, "Space / Fire"), false);
+  assert.equal(await enabled(b, "Fire"), false);
   assert.equal(await b.locator(".lan-shop-row:enabled").count(), 0, "Waiting guests cannot purchase");
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.cfg.MAXROUNDS), 2);
@@ -210,12 +211,13 @@ try {
   await purchaseButton(b, "Lazy Boy").click();
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]) > 0, "Bob buys guidance");
   await click(b, "Done");
-  await until(() => enabled(a, "Space / Fire"), "Alice aiming");
-  await click(a, "Back / Esc");
+  await until(() => enabled(a, "Fire"), "Alice aiming");
+  await click(a, "Esc");
   assert.equal(await host.getByRole("dialog", { name: "System Menu", exact: true }).count(), 0, "Guest Escape never opens the host menu");
+  await checkBattleControls({ host, a, b, root, until });
   // Phone angles use the host HUD's elevation and direction, not raw aim values.
   const startingAngle = await host.evaluate(() => window.onlineApp.gs.tanks[0].angle);
-  const displayedAngle = () => a.locator(".lan-stats").innerText().then((text) => text.match(/ · Angle (.*?) · /)?.[1]);
+  const displayedAngle = () => a.getByRole("meter", { name: "Angle", exact: true }).getAttribute("aria-valuetext").then((text) => text.replace("Angle ", ""));
   for (const [raw, label] of [[0, "0R"], [45, "45R"], [89, "89R"], [90, "90R"], [91, "89L"], [135, "45L"], [180, "0L"]]) {
     await host.evaluate((angle) => { window.onlineApp.gs.tanks[0].angle = angle; }, raw);
     await until(async () => await displayedAngle() === label, `phone angle ${raw} displays ${label}`);
@@ -272,7 +274,7 @@ try {
   await click(a, "← Angle");
   await pause(150);
   assert.deepEqual(await ticks(), beforeMuteTicks);
-  await click(a, "Tank controls");
+  await click(a, "Tank Control Panel");
   await a.getByRole("heading", { name: /Tank controls/ }).waitFor();
   assert.equal(await enabled(host, "Engage"), false, "Host cannot operate combat tank controls");
   await openHostMenu(host);
@@ -298,24 +300,25 @@ try {
   await a.getByLabel("Guidance", { exact: true }).selectOption({ label: "Lazy Boy" });
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].selected_guidance) === 37, "guidance equipped");
   await click(a, "Engage");
-  await until(() => enabled(a, "Space / Fire"), "back to battle");
+  await until(() => enabled(a, "Fire"), "back to battle");
   assert.equal(await a.getByLabel("Target X", { exact: true }).count(), 0);
   // Equipping guidance permits inventory, retreat and aiming before Fire.
+  await a.locator(".lan-battle-more summary").click();
   await click(a, "Inventory");
   await until(async () => await host.getByLabel("Guidance", { exact: true }).count() > 0, "combat inventory on host");
   assert.equal(await enabled(host, "Done"), false, "Combat inventory remains guest-controlled");
   assert.equal(await host.getByLabel("Guidance", { exact: true }).locator("button:enabled").count(), 0);
   await a.getByLabel("Guidance", { exact: true }).selectOption("2");
   await click(a, "Done");
-  await until(() => enabled(a, "Space / Fire"), "inventory closes");
+  await until(() => enabled(a, "Fire"), "inventory closes");
   await click(a, "Retreat");
   await a.getByRole("button", { name: "Yes", exact: true }).waitFor();
-  await click(a, "Back / Esc");
-  await a.getByRole("heading", { name: /Alice · Battle/ }).waitFor();
-  await until(() => enabled(a, "Space / Fire"), "retreat canceled");
+  await click(a, "Esc");
+  await a.getByRole("region", { name: "Tank battle controls" }).waitFor();
+  await until(() => enabled(a, "Fire"), "retreat canceled");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].selected_guidance), 37);
   const guidanceStock = await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[37]);
-  await click(a, "Space / Fire");
+  await click(a, "Fire");
   await a.getByLabel("Target X", { exact: true }).waitFor();
   assert.equal(await enabled(a, "Fire at target"), false);
   assert.equal(await enabled(a, "← Angle"), false);
@@ -358,7 +361,7 @@ try {
   await a.close(); a = replacement;
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks.length), 3);
   await click(a, "Cancel targeting");
-  await until(() => enabled(a, "Space / Fire"), "targeting canceled");
+  await until(() => enabled(a, "Fire"), "targeting canceled");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[37]), guidanceStock);
   assert.equal(await host.locator("[data-targeting]").isVisible(), false);
   assert.equal(await host.evaluate(() => window.onlineApp.renderer.targetHud), null);
@@ -367,7 +370,7 @@ try {
     const t = window.onlineApp.gs.tanks[0];
     t.inventory[31] = 2; t.selected_weapon = 31;
   });
-  await click(a, "Space / Fire");
+  await click(a, "Fire");
   await a.getByLabel("Batteries for Plasma", { exact: true }).waitFor();
   assert.equal(await b.getByLabel("Batteries for Plasma", { exact: true }).count(), 0);
   await a.getByLabel("Batteries for Plasma", { exact: true }).fill("5");
@@ -385,7 +388,7 @@ try {
   assert.deepEqual(await host.evaluate(() => {
     const t = window.onlineApp.gs.tanks[0]; return [t.inventory[31], t.inventory[39]];
   }), [2, 8]);
-  await click(a, "Space / Fire");
+  await click(a, "Fire");
   await a.getByLabel("Batteries for Plasma", { exact: true }).waitFor();
   await a.getByLabel("Batteries for Plasma", { exact: true }).fill("5");
   await a.getByLabel("Batteries for Plasma", { exact: true }).press("Tab");
@@ -401,7 +404,7 @@ try {
   assert.deepEqual(await host.evaluate(() => {
     const t = window.onlineApp.gs.tanks[0]; return [t.inventory[31], t.inventory[39]];
   }), [1, 3]);
-  await until(async () => !await enabled(a, "Space / Fire"), "controller locked after firing");
+  await until(async () => !await enabled(a, "Fire"), "controller locked after firing");
   // End rounds deterministically through the real engine rather than waiting for random AI hits.
   await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
@@ -417,8 +420,8 @@ try {
   assert.equal(await host.evaluate(() => window.onlineApp.gs.current_shooter.name), "Bob");
   await host.evaluate(() => { window.onlineApp.gs.current_shooter.selected_guidance = 37; });
   const bobStock = await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]);
-  await until(() => enabled(b, "Space / Fire"), "second-round aiming");
-  await click(b, "Space / Fire");
+  await until(() => enabled(b, "Fire"), "second-round aiming");
+  await click(b, "Fire");
   await b.getByLabel("Target X", { exact: true }).waitFor();
   await b.getByRole("button", { name: /^\d+: Alice$/ }).click();
   await until(() => enabled(b, "Fire at target"), "target ready");

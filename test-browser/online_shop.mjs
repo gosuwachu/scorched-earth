@@ -104,7 +104,7 @@ export async function checkShopLayout(page, root, category) {
     }));
     assert.equal(layout.overflow, false, `${category}: no horizontal page overflow at ${width}px`);
     assert.ok(layout.rows.every((row) => row.height >= 44 && row.fits && row.nameFits && row.cellsFit), `${category}: readable rows and touch targets at ${width}px`);
-    if (width !== 390) await page.locator(".lan-controls").screenshot({ path: `${root}/test-browser/out/online-shop-${category}-${width}.png` });
+    if (width !== 390) await page.locator(".lan-controls:visible").screenshot({ path: `${root}/test-browser/out/online-shop-${category}-${width}.png` });
   }
   await page.setViewportSize(original);
 }

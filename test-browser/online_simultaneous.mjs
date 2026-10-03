@@ -37,8 +37,8 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
       return result;
     };
   });
-  await until(async () => await enabled(a, "Space / Fire") && await enabled(b, "Space / Fire"), "both controllers enabled");
-  assert.equal(await a.getByRole("button", { name: "Tank controls", exact: true }).count(), 0);
+  await until(async () => await enabled(a, "Fire") && await enabled(b, "Fire"), "both controllers enabled");
+  assert.equal(await a.getByRole("button", { name: "Tank Control Panel", exact: true }).count(), 0);
   assert.equal(await b.getByRole("button", { name: "Inventory", exact: true }).count(), 0);
   const angles = () => host.evaluate(() => window.onlineApp.gs.tanks.map((t) => t.angle));
   const powers = () => host.evaluate(() => window.onlineApp.gs.tanks.map((t) => t.power));
@@ -51,12 +51,12 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   await hold(a, "← Angle"); await hold(b, "← Angle");
   await until(async () => { const x = await angles(); return x[0] > 100 && x[1] > 100; }, "overlapping angle holds");
   await openHostMenu(host);
-  await until(async () => !await enabled(a, "Space / Fire") && !await enabled(b, "Space / Fire"), "both controllers pause");
+  await until(async () => !await enabled(a, "Fire") && !await enabled(b, "Fire"), "both controllers pause");
   const pausedAngles = await angles();
   await pause(250);
   assert.deepEqual(await angles(), pausedAngles);
   await closeHostMenu(host);
-  await until(async () => await enabled(a, "Space / Fire") && await enabled(b, "Space / Fire"), "both controllers resume");
+  await until(async () => await enabled(a, "Fire") && await enabled(b, "Fire"), "both controllers resume");
   await pause(150);
   assert.deepEqual(await angles(), pausedAngles, "Old holds do not resume with the match");
   await a.mouse.up(); await b.mouse.up();
@@ -70,14 +70,14 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   await until(async () => { const x = await powers(); return x[0] > 550 && x[1] > 550; }, "overlapping power holds");
   await a.mouse.up(); await b.mouse.up();
   assert.equal((await powers())[2], 500);
-  await click(a, "Tab / Next");
+  await click(a, "Next weapon");
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].selected_weapon) === 1, "Alice weapon");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[1].selected_weapon), 0);
   await click(a, "Previous weapon");
   await host.keyboard.press("ArrowLeft"); await host.keyboard.press("Space");
   assert.equal(await host.evaluate(() => window.simShots.length), 0);
   await host.screenshot({ path: `${root}/test-browser/out/online-simultaneous-host.png` });
-  await Promise.all([click(a, "Space / Fire"), click(b, "Space / Fire")]);
+  await Promise.all([click(a, "Fire"), click(b, "Fire")]);
   await until(async () => await host.evaluate(() => window.simShots.some((s) => s.owner === "Alice") && window.simShots.some((s) => s.owner === "Bob")), "both phones fire");
 
   // Controlled positions keep these UI checks independent of random shot damage.
@@ -91,7 +91,7 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   // Fire is intentionally gated until that settling completes.
   await host.waitForFunction(() => !window.onlineApp.gs.sim_settling && !window.onlineApp.gs.soilDirty);
   await hold(b, "← Angle");
-  await click(a, "Space / Fire");
+  await click(a, "Fire");
   const charge = a.getByRole("spinbutton", { name: "Batteries for Plasma", exact: true });
   await charge.waitFor();
   assert.equal(await host.evaluate(() => window.onlineApp.gs.plasma_charge), null);
@@ -101,7 +101,7 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   assert.equal((await angles())[0], 90);
   await b.mouse.up();
   const bobShots = await host.evaluate(() => window.simShots.filter((s) => s.owner === "Bob").length);
-  await click(b, "Space / Fire");
+  await click(b, "Fire");
   await until(async () => await host.evaluate(() => window.simShots.filter((s) => s.owner === "Bob").length) > bobShots, "Bob fires during Alice's Plasma choice");
   await charge.fill("2"); await charge.press("Tab");
   await until(async () => await host.evaluate(() => window.onlineApp.gs.sim_charges.get(window.onlineApp.gs.tanks[0])?.value) === 2, "private battery selection");
@@ -133,20 +133,20 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   const beforeDisconnect = (await powers())[1];
   await until(async () => (await powers())[1] > beforeDisconnect + 20, "Bob continues while Alice disconnects");
   await a.goto(joinUrl);
-  await until(() => enabled(a, "Space / Fire"), "Alice reconnects to her tank");
+  await until(() => enabled(a, "Fire"), "Alice reconnects to her tank");
   await b.mouse.up();
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks.length), 3);
   assert.ok((await a.getByRole("heading", { level: 2 }).innerText()).startsWith("Alice"));
   await a.screenshot({ path: `${root}/test-browser/out/online-simultaneous-controller.png`, fullPage: true });
   await host.evaluate(() => { window.onlineApp.gs.tanks[0].alive = false; window.onlineApp.gs.tanks[0].health = 0; });
-  await until(async () => !await enabled(a, "Space / Fire"), "dead tank disabled");
-  assert.equal(await enabled(b, "Space / Fire"), true);
+  await until(async () => !await enabled(a, "Fire"), "dead tank disabled");
+  assert.equal(await enabled(b, "Fire"), true);
   await host.evaluate(() => window.onlineApp.gs.mass_kill());
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
   await click(host, "Go");
   await until(() => enabled(a, "Done"), "next round Alice shopping"); await click(a, "Done");
   await until(() => enabled(b, "Done"), "next round Bob shopping"); await click(b, "Done");
-  await until(async () => await enabled(a, "Space / Fire") && await enabled(b, "Space / Fire"), "next round both controllers");
+  await until(async () => await enabled(a, "Fire") && await enabled(b, "Fire"), "next round both controllers");
   // Losing the host connection freezes play but must leave its menu usable.
   await host.evaluate(() => window.onlineApp.online.connection.close());
   await host.waitForFunction(() => window.onlineApp.online.paused);

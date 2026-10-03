@@ -199,12 +199,12 @@ try {
   await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor({ state: "detached" });
   await closeHostMenu(host);
   await phone.getByRole("button", { name: "Done", exact: true }).click();
-  await phone.getByRole("button", { name: "Tank controls", exact: true }).waitFor();
-  const before = await phone.locator(".lan-stats").textContent();
+  await phone.getByRole("button", { name: "Tank Control Panel", exact: true }).waitFor();
+  const before = await phone.locator(".lan-angle").textContent();
   await phone.getByRole("button", { name: "← Angle", exact: true }).tap();
-  await phone.waitForFunction((before) => document.querySelector(".lan-stats").textContent !== before, before);
+  await phone.waitForFunction((before) => document.querySelector(".lan-angle").textContent !== before, before);
   await phone.reload();
-  await phone.getByRole("button", { name: "Tank controls", exact: true }).waitFor();
+  await phone.getByRole("button", { name: "Tank Control Panel", exact: true }).waitFor();
   await host.screenshot({ path: `${root}/test-browser/out/online-production-host.png` });
   await checkNoOnlineBar(host);
   await openHostMenu(host);

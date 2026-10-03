@@ -4,6 +4,7 @@ import { Connection } from "./online_connection";
 import { button, el, installOnlineTheme, Roster, tankIcon } from "./online_ui";
 import { get_sprite, WEAPON_ICON_BASE, weapon_icon_palette } from "./sprites";
 import { hudAngle } from "./angles";
+import { BattleControls } from "./controller_battle";
 import "./online.css";
 
 interface ControlNode {
@@ -51,6 +52,9 @@ export function startController(roomId: string): void {
   let stats: HTMLElement;
   let heading: HTMLElement;
   let controls: HTMLElement;
+  let keys: HTMLElement;
+  let battle: BattleControls;
+  let battleLayout = false;
   const controlNodes = new Map<string, ControlNode>();
 
   const allowed = (): boolean => !ended && !!connection.connected && !!room?.hostConnected && !!view?.enabled;
@@ -138,13 +142,15 @@ export function startController(roomId: string): void {
     gameBuilt = true;
     content.replaceChildren();
     heading = el("h2"); stats = el("div", "", "lan-stats");
-    const keys = el("div", "", "lan-keys");
+    keys = el("div", "", "lan-keys");
     for (const [label, code] of [
-      ["← Angle", "ArrowLeft"], ["↑ Power", "ArrowUp"], ["Angle →", "ArrowRight"],
-      ["Previous weapon", "BracketLeft"], ["↓ Power", "ArrowDown"], ["Tab / Next", "Tab"],
-      ["Space / Fire", "Space"], ["Enter", "Enter"], ["Back / Esc", "Escape"],
+      ["Previous weapon", "BracketLeft"], ["↑ Power", "ArrowUp"], ["Next weapon", "Tab"],
+      ["← Angle", "ArrowLeft"], ["↓ Power", "ArrowDown"], ["Angle →", "ArrowRight"],
+      ["Fire", "Space"], ["Enter", "Enter"], ["Esc", "Escape"],
     ]) {
       const b = button(label, () => {});
+      b.dataset.key = code;
+      b.setAttribute("aria-keyshortcuts", code === "BracketLeft" ? "[" : code);
       b.onpointerdown = (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); key(code, true); };
       b.onpointerup = (e) => { e.preventDefault(); key(code, false); };
       b.onpointercancel = () => { key(code, false); };
@@ -155,7 +161,8 @@ export function startController(roomId: string): void {
       heldButtons.set(code, b); keys.append(b);
     }
     controls = el("div", "", "lan-controls");
-    content.append(heading, stats, keys, controls);
+    battle = new BattleControls();
+    content.append(heading, stats, keys, controls, battle.element);
   }
 
   function renderControl(c: Control): HTMLElement {
@@ -240,18 +247,39 @@ export function startController(roomId: string): void {
     buildGame();
     heading.textContent = `${view.tank?.name ?? "Player"} · ${view.screen} · Round ${view.round}`;
     const t = view.tank;
+    const useBattle = !!t && view.screen === "Battle" && !view.targeting &&
+      !view.controls.some((c) => c.id === "plasma-charge");
+    if (useBattle !== battleLayout) {
+      release();
+      battleLayout = useBattle;
+      root.classList.toggle("lan-controller-battle", useBattle);
+      battle.element.hidden = !useBattle;
+      heading.hidden = stats.hidden = keys.hidden = controls.hidden = useBattle;
+      for (const [code, b] of heldButtons) {
+        const target = !useBattle || code === "Enter" ? keys : code === "Space" ? battle.fire :
+          code === "Escape" ? battle.escape : battle.keys;
+        target.append(b);
+      }
+    }
     if (t) {
       const [elev, side] = hudAngle(t.angle);
       stats.textContent = `Health ${t.health} · Cash $${t.cash} · Angle ${elev}${side} · Power ${t.power} · ${t.weapon} (${t.ammo})`;
+      if (useBattle) battle.update(t, room?.players.findIndex((p) => p.id === playerId) ?? 0, view.round);
     } else {
       stats.textContent = "";
     }
     const ids = new Set(view.controls.map((c) => c.id));
     for (const [id, record] of controlNodes) if (!ids.has(id)) { record.node.remove(); controlNodes.delete(id); }
-    view.controls.forEach((c, index) => {
-      const node = renderControl(c);
-      if (controls.children[index] !== node) controls.insertBefore(node, controls.children[index] ?? null);
+    const counts = new Map<HTMLElement, number>();
+    view.controls.forEach((c) => {
+      const target = !useBattle ? controls : c.id === "tank" ? battle.panel : battle.extra;
+      const index = counts.get(target) ?? 0;
+      counts.set(target, index + 1);
+      const node = renderControl(useBattle && c.id === "tank" ? { ...c, label: "Tank Control Panel" } : c);
+      if (target.children[index] !== node) target.insertBefore(node, target.children[index] ?? null);
     });
+    battle.panel.hidden = !counts.has(battle.panel);
+    battle.more.hidden = !counts.has(battle.extra);
     updateStatus();
   }
 
@@ -271,6 +299,7 @@ export function startController(roomId: string): void {
       release(); ended = true; view = undefined;
       status.textContent = m.message;
       content.replaceChildren();
+      root.classList.remove("lan-controller-battle");
     } else if (m.type === "error") error.textContent = m.message;
     updateStatus();
   }
@@ -280,8 +309,10 @@ export function startController(roomId: string): void {
   });
   window.addEventListener("keydown", (e) => {
     if (!gameBuilt || e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    // Let the focused purchase button perform its native keyboard click.
-    if (e.target instanceof Element && e.target.closest(".lan-shop-row") && (e.code === "Enter" || e.code === "Space")) return;
+    // Native navigation/activation must work for the disclosure and focused controls.
+    // Tab cycles weapons only when focus is outside an interactive control.
+    if (e.target instanceof Element && e.target.closest("button, summary") &&
+        (e.code === "Enter" || e.code === "Space" || e.code === "Tab")) return;
     if ((REMOTE_KEYS as readonly string[]).includes(e.code)) { e.preventDefault(); if (!e.repeat) key(e.code, true); }
   });
   window.addEventListener("keyup", (e) => { if (held.has(e.code)) { e.preventDefault(); key(e.code, false); } });
