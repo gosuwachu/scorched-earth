@@ -1112,6 +1112,33 @@ describe("ingame_flow: SystemMenuScreen dispatch + confirm sub-flow", () => {
     expect(sm.confirm).toBeNull();
   });
 
+  it.each(["turn_start", "aim", "firing", "settle", "sync_aim", "sync_volley", "sim_live"])(
+    "online Mass Kill confirms and cancels during %s", (phase) => {
+      const sm = new ingame.SystemMenuScreen(new MockState({ phase }), true);
+      expect(byAction(sm.panel, "~Mass Kill").enabled).toBe(true);
+      expect(clickItem(sm, "~Mass Kill")).toBeNull();
+      expect(sm.confirm?.prompt).toBe("Mass kill everyone?");
+      expect(sm.handle(kd(pygame.K_ESCAPE))).toBeNull();
+      expect(sm.confirm).toBeNull();
+      expect(sm.handle(kd(pygame.K_m, "m"))).toBeNull();
+      expect(clickConfirmYes(sm)).toBe("mass_kill");
+    },
+  );
+
+  it.each(["place", "shop", "round_end", "game_over"])(
+    "online Mass Kill is disabled during %s", (phase) => {
+      const sm = new ingame.SystemMenuScreen(new MockState({ phase }), true);
+      expect(byAction(sm.panel, "~Mass Kill").enabled).toBe(false);
+      expect(clickItem(sm, "~Mass Kill")).toBeNull();
+      expect(sm.handle(kd(pygame.K_m, "m"))).toBeNull();
+      expect(sm.dispatchAction("~Mass Kill")).toBeNull();
+      expect(sm.confirm).toBeNull();
+      expect(clickItem(sm, "~Join link")).toBe("join_link");
+      expect(clickItem(sm, "~Quit Game")).toBeNull();
+      expect(clickConfirmYes(sm)).toBe("quit_game");
+    },
+  );
+
   it("the Sound toggle flips cfg.SOUND in place and returns null", () => {
     const { sm, st } = menu();
     expect(st.cfg.is_on("SOUND")).toBe(true);

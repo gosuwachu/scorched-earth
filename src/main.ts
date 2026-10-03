@@ -1014,7 +1014,11 @@ export class App {
       }
       ingame.clear_screen_effect(gs as never);
     } else if (action === "mass_kill" && gs) {
-      if (this.top instanceof ingame.SystemMenuScreen) {
+      if (this.online) {
+        if (!ingame.canMassKill(gs)) return;
+        // Discard battle dialogs beneath the host menu before showing results.
+        this.stack = this.stack.filter((screen) => screen instanceof GameScreen);
+      } else if (this.top instanceof ingame.SystemMenuScreen) {
         this.pop();
       }
       ingame.do_mass_kill(gs as never);

@@ -1541,7 +1541,7 @@ export class SystemMenuScreen implements Screen {
     const colw = 190;
     const gap = 12;
     const pw = this.online ? colw + 32 : 16 + colw * 2 + gap + 16;
-    const ph = 26 * (this.online ? 3 : 5) + 36;
+    const ph = 26 * (this.online ? 4 : 5) + 36;
     const px = Math.floor((this._w - pw) / 2);
     const py = Math.floor((this._h - ph) / 2);
     const p = new widgets.Panel(px, py, pw, ph, "System Menu");
@@ -1549,12 +1549,14 @@ export class SystemMenuScreen implements Screen {
     const lx = px + 16;
     const rx = this.online ? lx : px + 16 + colw + gap;
     const y0 = py + 28;
-    const left: MenuItem[] = this.online ? [["~Join link", "join_link", null]] : SystemMenuScreen.LEFT;
+    const left: MenuItem[] = this.online ? [["~Join link", "join_link", null], SystemMenuScreen.LEFT[1]] : SystemMenuScreen.LEFT;
     const right: MenuItem[] = this.online ? [SystemMenuScreen.RIGHT[3]] : SystemMenuScreen.RIGHT;
     for (let i = 0; i < left.length; i++) {
       const [label, action, prompt] = left[i];
       this._action_by_label[label] = [action, prompt];
-      p.add(new widgets.Button(lx, y0 + i * 26, label, label, colw));
+      const button = new widgets.Button(lx, y0 + i * 26, label, label, colw);
+      if (this.online && action === "mass_kill") button.enabled = canMassKill(this.state);
+      p.add(button);
     }
     // Sound TOGGLE: left column row 5 (FUN_4891_01e8 L row5 = FUN_4f19_2f39).
     const cfg = this.state ? this.state.cfg : null;
@@ -1562,7 +1564,7 @@ export class SystemMenuScreen implements Screen {
       p.add(
         new widgets.Toggle(
           lx,
-          y0 + (this.online ? 1 : 4) * 26,
+          y0 + (this.online ? 2 : 4) * 26,
           "~Sound:",
           () => cfg.is_on("SOUND"),
           (v: boolean) => {
@@ -1575,7 +1577,7 @@ export class SystemMenuScreen implements Screen {
     for (let i = 0; i < right.length; i++) {
       const [label, action, prompt] = right[i];
       this._action_by_label[label] = [action, prompt];
-      p.add(new widgets.Button(rx, y0 + (i + (this.online ? 2 : 0)) * 26, label, label, colw));
+      p.add(new widgets.Button(rx, y0 + (i + (this.online ? 3 : 0)) * 26, label, label, colw));
     }
     return p;
   }
@@ -1604,6 +1606,7 @@ export class SystemMenuScreen implements Screen {
     const entry = this._action_by_label[act];
     const action = entry ? entry[0] : act;
     const prompt = entry ? entry[1] : null;
+    if (this.online && action === "mass_kill" && !canMassKill(this.state)) return null;
     if (prompt !== null) {
       this.confirm = new _ConfirmScreen(
         this.state !== null ? this.state : new _SizeStub(this._w, this._h),
@@ -1650,6 +1653,11 @@ class _SizeStub implements SizeLike {
 // System Menu action effects  (SCORCH.DOC:L1449-1545; labels L1323-1336)
 // --------------------------------------------------------------------------
 // In-place effects the App._act System-Menu branch runs after it pops the menu.
+
+/** Online hosts may end a live round, including while shots or tanks move. */
+export function canMassKill(state: Pick<GameState, "phase"> | null): boolean {
+  return !!state && ["turn_start", "aim", "firing", "settle", "sync_aim", "sync_volley", "sim_live"].includes(state.phase);
+}
 
 /** ~Clear Screen (SCORCH.DOC:L1455-1460): "erase whatever traces are currently on
  *  the screen".

@@ -7,6 +7,7 @@ import { checkBattleControls, checkPreciseAim, checkHealthPower, checkResults, c
 import { checkGuestEquipment, checkPanelLayout } from "./online_panel.mjs";
 import { checkTargetArrows } from "./online_targeting.mjs";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
+import { checkMassKillDisabled, massKillRound } from "./online_mass_kill.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
 import { purchaseButton, checkHostShopping, checkShopRows, checkShopLayout, checkShopEdges, checkNoGuestActions, checkGuestReconnect } from "./online_shop.mjs";
 import { checkNoOnlineBar, settledDialogs, openHostMenu, closeHostMenu } from "./dialogs.mjs";
@@ -119,6 +120,7 @@ try {
   await until(() => enabled(a, "Done"), "Alice shopping");
   await checkNoOnlineBar(host);
   await openHostMenu(host);
+  await checkMassKillDisabled(host);
   assert.equal(await enabled(host, "Update"), false, "Host menu disables purchasing underneath");
   assert.equal(await host.getByRole("button", { name: "Save Game", exact: true }).count(), 0);
   assert.equal(await host.getByRole("button", { name: "End online game", exact: true }).count(), 0);
@@ -419,15 +421,14 @@ try {
     const t = window.onlineApp.gs.tanks[0]; return [t.inventory[31], t.inventory[39]];
   }), [1, 3]);
   await until(async () => !await enabled(a, "Fire"), "controller locked after firing");
-  // End rounds deterministically through the real engine rather than waiting for random AI hits.
-  await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });
-  await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
+  await massKillRound({ host, guests: [a, b], click, until, root, capture: true });
   await checkResults({ pages: [a, b], screen: "Round results", until });
   await checkGuestReconnect(a, until);
   await a.reload();
   await checkResults({ pages: [a, b], screen: "Round results", until });
   await a.screenshot({ path: `${root}/test-browser/out/online-round-results.png`, fullPage: true });
   await openHostMenu(host);
+  await checkMassKillDisabled(host);
   for (const page of [a, b]) {
     await until(async () => (await page.locator(".lan-status").textContent()).includes("Paused by host"), "results pause reaches guest");
     assert.equal(await page.locator(".lan-controller button:visible").count(), 0, "Host menu over results does not reveal tank controls");
@@ -455,12 +456,16 @@ try {
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]) === bobStock - 1, "guided shot spends one accessory");
   assert.equal(await host.evaluate(() => window.shotCount), count + 1);
   assert.equal(await host.evaluate(() => window.onlineApp.gs.pendingTarget), null);
-  await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });
-  await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
+  // Leave a battle dialog beneath the host menu to verify it is discarded.
+  await host.evaluate(() => window.onlineApp._act("open_inventory"));
+  await massKillRound({ host, guests: [a, b], click, until, root });
   await click(host, "Go");
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "finished");
   await until(async () => (await a.locator(".lan-status").textContent()).includes("Match complete"), "final results");
   await checkResults({ pages: [a, b], screen: "Final results", until });
+  await openHostMenu(host);
+  await checkMassKillDisabled(host);
+  await closeHostMenu(host);
   await b.reload();
   await checkResults({ pages: [a, b], screen: "Final results", until });
   await a.screenshot({ path: `${root}/test-browser/out/online-final-results.png`, fullPage: true });

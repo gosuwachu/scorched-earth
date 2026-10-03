@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { openHostMenu, closeHostMenu } from "./dialogs.mjs";
+import { massKillRound } from "./online_mass_kill.mjs";
 import { checkPreciseAim, checkHealthPower, checkResults, checkWeaponSelector } from "./online_battle.mjs";
 
 export async function checkSimultaneous({ host, a, b, base, root, click, enabled, until, pause }) {
@@ -147,8 +148,7 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   await host.evaluate(() => { window.onlineApp.gs.tanks[0].alive = false; window.onlineApp.gs.tanks[0].health = 0; });
   await until(async () => !await enabled(a, "Fire"), "dead tank disabled");
   assert.equal(await enabled(b, "Fire"), true);
-  await host.evaluate(() => window.onlineApp.gs.mass_kill());
-  await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
+  await massKillRound({ host, guests: [a, b], click, until, root });
   await checkResults({ pages: [a, b], screen: "Round results", until });
   await click(host, "Go");
   await until(() => enabled(a, "Done"), "next round Alice shopping"); await click(a, "Done");
