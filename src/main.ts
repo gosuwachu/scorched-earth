@@ -1209,13 +1209,13 @@ class GameScreen extends Screen {
   override update(dt: number): string | null {
     const gs = this.gs;
     if (gs.phase === SIM_LIVE) {
-      if (this.app.online) this.app.online.updateSimultaneous(dt);
+      if (this.app.online) this.app.online.updateAim();
       else (gs as unknown as { _sim_human_input(keys: unknown, dt: number): void })._sim_human_input(
         _keyGetPressed(),
         dt,
       );
     } else if (this._is_human_turn() && !(gs as unknown as import("./game").GameState).pendingTarget) {
-      if (this.app.online) ui.HumanController.update_continuous(gs as never, this.app.online.keys, dt);
+      if (this.app.online) this.app.online.updateAim();
       else ingame.update_game_input(gs as never, dt, _keyGetPressed() as never);
     }
     (gs as unknown as { update(dt: number): void }).update(dt);

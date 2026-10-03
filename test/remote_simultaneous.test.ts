@@ -5,6 +5,7 @@ import { RemoteAdapter } from "../src/remote";
 import type { App } from "../src/main";
 import type { Input, Player } from "../shared/online";
 import { SLOT_BATTERY } from "../src/weapons";
+import { HumanController } from "../src/ui";
 
 // Network control regression cases, not DOS fidelity fixtures.
 function setup() {
@@ -36,6 +37,63 @@ function setup() {
   return { gs, roster, app, adapter, states, send, key, plasma };
 }
 
+describe.each(["sequential", "simultaneous"])("precise %s guest aiming", (mode) => {
+  function controller() {
+    const fixture = setup();
+    if (mode === "sequential") {
+      fixture.gs.phase = "aim";
+      fixture.gs.current_shooter = fixture.gs.tanks[0];
+      fixture.app.handleRemote.mockImplementation((event) => HumanController.handle(fixture.gs as never, event));
+    }
+    return fixture;
+  }
+
+  it.each([
+    ["ArrowLeft", "angle", 1], ["ArrowRight", "angle", -1],
+    ["ArrowUp", "power", 1], ["ArrowDown", "power", -1],
+  ] as const)("makes %s a single-unit tap through 350 ms", (code, property, step) => {
+    const { gs, key, adapter } = controller();
+    const tank = gs.tanks[0], before = tank[property];
+    key("Alice", code);
+    adapter.updateAim(350);
+    expect(tank[property]).toBe(before + step);
+    key("Alice", code, false, 350);
+    adapter.updateAim(450);
+    expect(tank[property]).toBe(before + step);
+    key("Alice", code, true, 460);
+    adapter.updateAim(810);
+    expect(tank[property]).toBe(before + 2 * step);
+  });
+
+  it("repeats a held input after the delay and stops immediately on release", () => {
+    const { gs, key, send, adapter } = controller();
+    const tank = gs.tanks[0];
+    key("Alice", "ArrowLeft"); key("Alice", "ArrowUp");
+    send("Alice", { kind: "hold", keys: ["ArrowLeft", "ArrowUp"] }, 400);
+    adapter.updateAim(600);
+    expect([tank.angle, tank.power]).toEqual([93, 314]);
+    send("Alice", { kind: "hold", keys: [] }, 610);
+    adapter.updateAim(800);
+    expect([tank.angle, tank.power]).toEqual([93, 314]);
+  });
+
+  it("clamps repeated input to integer angle and power limits", () => {
+    const { gs, key, send, adapter } = controller();
+    const tank = gs.tanks[0];
+    tank.angle = 179; tank.power = 999;
+    key("Alice", "ArrowLeft"); key("Alice", "ArrowUp");
+    send("Alice", { kind: "hold", keys: ["ArrowLeft", "ArrowUp"] }, 400);
+    adapter.updateAim(600);
+    expect([tank.angle, tank.power]).toEqual([180, 1000]);
+    send("Alice", { kind: "hold", keys: [] }, 610);
+    tank.angle = 1; tank.power = 1;
+    key("Alice", "ArrowRight", true, 620); key("Alice", "ArrowDown", true, 620);
+    send("Alice", { kind: "hold", keys: ["ArrowRight", "ArrowDown"] }, 1000);
+    adapter.updateAim(1220);
+    expect([tank.angle, tank.power]).toEqual([0, 0]);
+  });
+});
+
 describe("independent simultaneous controllers", () => {
   it("pauses controllers without losing Plasma choices and rejects commands from before or during the pause", () => {
     const { gs, app, states, adapter, key, send, plasma } = setup();
@@ -49,7 +107,7 @@ describe("independent simultaneous controllers", () => {
     const paused = states();
     expect(Object.values(paused).every((s) => !s.enabled && s.message === "Paused by host.")).toBe(true);
     expect(paused.Alice.controls).toEqual([]);
-    adapter.updateSimultaneous(0.1, 100);
+    adapter.updateAim(490);
     send("Alice", { kind: "control", id: "plasma-fire" });
     expect(gs.projectiles).toHaveLength(0);
     expect(bob.angle).toBe(angle);
@@ -63,7 +121,7 @@ describe("independent simultaneous controllers", () => {
     app.transitioning = false;
     const resumed = states();
     expect(resumed.Alice.enabled && resumed.Bob.enabled).toBe(true);
-    adapter.updateSimultaneous(0.1, 150);
+    adapter.updateAim(150);
     expect(bob.angle).toBe(angle);
     for (const context of [before.Alice.context, paused.Alice.context]) {
       adapter.receive("Alice", context, 100, { kind: "control", id: "plasma-fire" }, 150);
@@ -105,7 +163,7 @@ describe("independent simultaneous controllers", () => {
     expect(t.inventory[1]).toBe(3);
     expect(gs.projectiles).toHaveLength(0);
     expect(states().Alice.context).toBe(context);
-    key("Alice", "ArrowLeft"); adapter.updateSimultaneous(0.1, 100);
+    key("Alice", "ArrowLeft"); adapter.updateAim(490);
     expect(t.angle).toBeGreaterThan(90);
     for (let i = 0; i < 500 && gs.sim_settling; i++) gs.update(1 / 60);
     expect(gs.sim_settling).toBe(false);
@@ -115,19 +173,20 @@ describe("independent simultaneous controllers", () => {
     expect(gs.projectiles).toHaveLength(1);
   });
   it("enables both humans without key bindings and scopes identical buttons to their tanks", () => {
-    const { gs, states, key, adapter, app } = setup();
+    const { gs, states, key, send, adapter, app } = setup();
     expect(gs.phase).toBe(SIM_LIVE);
     expect(gs._sim_keymap).toEqual({});
     expect(Object.values(states()).map((s) => s.enabled)).toEqual([true, true]);
     const [a, b, cpu] = gs.tanks;
     gs.current_shooter = cpu;
     key("Alice", "ArrowLeft"); key("Bob", "ArrowLeft"); key("Bob", "ArrowUp");
-    adapter.updateSimultaneous(0.1, 100);
-    expect([a.angle, b.angle, cpu.angle]).toEqual([96, 96, 90]);
-    expect([a.power, b.power, cpu.power]).toEqual([300, 326, 300]);
-    key("Alice", "ArrowLeft", false, 110);
-    adapter.updateSimultaneous(0.1, 200);
-    expect([a.angle, b.angle]).toEqual([96, 101]);
+    adapter.updateAim(490);
+    expect([a.angle, b.angle, cpu.angle]).toEqual([92, 92, 90]);
+    expect([a.power, b.power, cpu.power]).toEqual([300, 306, 300]);
+    key("Alice", "ArrowLeft", false, 490);
+    send("Bob", { kind: "hold", keys: ["ArrowLeft", "ArrowUp"] }, 490);
+    adapter.updateAim(700);
+    expect([a.angle, b.angle]).toEqual([92, 95]);
     expect(gs.current_shooter).toBe(cpu);
     expect(app.handleRemote).not.toHaveBeenCalled();
     expect(states().Alice.controls).toEqual([]);
@@ -153,8 +212,8 @@ describe("independent simultaneous controllers", () => {
     expect(gs.projectiles).toHaveLength(2);
     expect(states().Alice.context).toBe(before.Alice.context);
     expect(states().Bob.context).toBe(before.Bob.context);
-    key("Bob", "ArrowRight"); adapter.updateSimultaneous(0.1, 100);
-    expect([a.angle, b.angle]).toEqual([90, 84]);
+    key("Bob", "ArrowRight"); adapter.updateAim(490);
+    expect([a.angle, b.angle]).toEqual([90, 88]);
     gs.projectiles = gs.projectiles.filter((p) => p.owner !== a);
     key("Alice", "Space", false); key("Alice", "Space");
     expect(gs.projectiles.map((p) => p.owner)).toEqual([b, a]);
@@ -164,11 +223,11 @@ describe("independent simultaneous controllers", () => {
     const { gs, key, send, adapter } = setup(); const [a, b] = gs.tanks;
     key("Alice", "ArrowLeft"); key("Bob", "ArrowLeft", true, 100);
     send("Bob", { kind: "hold", keys: ["ArrowLeft", "ArrowUp"] }, 400);
-    adapter.updateSimultaneous(0.1, 500);
-    expect([a.angle, b.angle, b.power]).toEqual([91, 96, 300]);
+    adapter.updateAim(500);
+    expect([a.angle, b.angle, b.power]).toEqual([91, 91, 300]);
     send("Alice", { kind: "hold", keys: ["ArrowLeft"] }, 501);
-    adapter.updateSimultaneous(0.1, 900);
-    expect([a.angle, b.angle]).toEqual([91, 96]);
+    adapter.updateAim(900);
+    expect([a.angle, b.angle]).toEqual([91, 91]);
     key("Alice", "ArrowLeft", true, 910);
     expect(a.angle).toBe(92);
   });
@@ -194,8 +253,8 @@ describe("independent simultaneous controllers", () => {
     const before = states();
     roster[0].connected = false; adapter.release("Alice");
     expect(states().Alice.enabled).toBe(false);
-    adapter.updateSimultaneous(0.1, 100);
-    expect(gs.tanks.map((t) => t.angle)).toEqual([91, 96, 90]);
+    adapter.updateAim(490);
+    expect(gs.tanks.map((t) => t.angle)).toEqual([91, 92, 90]);
     expect(states().Bob.context).toBe(before.Bob.context);
     roster[0].connected = true;
     const resumed = states().Alice;
@@ -218,7 +277,7 @@ describe("independent simultaneous controllers", () => {
     expect(Object.values(states()).every((s) => !s.enabled)).toBe(true);
     gs.round_index++; gs.phase = SIM_LIVE; app.onlineScreen = "battle"; gs.tanks[0].alive = true;
     const angle = gs.tanks[1].angle;
-    adapter.updateSimultaneous(0.1, 100);
+    adapter.updateAim(490);
     expect(gs.tanks[1].angle).toBe(angle);
     expect(states().Bob.context).not.toBe(bob);
   });
@@ -231,7 +290,7 @@ describe("independent simultaneous controllers", () => {
     expect(states().Alice.controls.map((c) => c.id)).toContain("plasma-charge");
     expect(states().Bob.controls).toEqual([]);
     expect(states().Bob.context).toBe(bobContext);
-    adapter.updateSimultaneous(0.1, 100); expect(b.angle).toBe(96);
+    adapter.updateAim(490); expect(b.angle).toBe(92);
     key("Bob", "Space");
     send("Alice", { kind: "control", id: "plasma-charge", value: 2 });
     send("Bob", { kind: "control", id: "plasma-charge", value: 4 });

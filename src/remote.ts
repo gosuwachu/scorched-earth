@@ -9,6 +9,8 @@ import * as ingame from "./ingame";
 import * as weapons from "./weapons";
 import * as targeting from "./targeting";
 import { ShopScreen, InventoryScreen, SellScreen } from "./screens";
+import { RemoteAimRepeat } from "./remote_aim";
+import { sfx } from "./sound";
 
 const keyCodes: Record<string, number> = {
   ArrowLeft: pg.K_LEFT, ArrowRight: pg.K_RIGHT, ArrowUp: pg.K_UP, ArrowDown: pg.K_DOWN,
@@ -22,15 +24,23 @@ for (let n = 0; n <= 9; n++) keyCodes[`Digit${n}`] = pg.K_0 + n;
 export class RemoteHold {
   keys: Record<number, boolean> = {};
   private until = 0;
-  clear(): void { this.keys = {}; this.until = 0; }
+  private aim = new RemoteAimRepeat();
+  clear(): void { this.keys = {}; this.until = 0; this.aim.clear(); }
   set(names: string[], now: number): void {
+    this.get(now);
     this.keys = {};
     for (const name of names) if (keyCodes[name]) this.keys[keyCodes[name]] = true;
+    this.aim.set(Number(!!this.keys[pg.K_LEFT]) - Number(!!this.keys[pg.K_RIGHT]),
+      Number(!!this.keys[pg.K_UP]) - Number(!!this.keys[pg.K_DOWN]), now);
     this.until = now + 500;
   }
   get(now: number): Record<number, boolean> {
     if (now >= this.until) this.clear();
     return this.keys;
+  }
+  repeat(now: number): { angle: number; power: number } {
+    this.get(now);
+    return this.aim.take(now);
   }
 }
 
@@ -73,15 +83,26 @@ export class RemoteAdapter {
     }
   }
 
-  updateSimultaneous(dt: number, now: number): void {
+  updateAim(now: number): void {
     this.refresh();
     for (const c of this.simultaneous.values()) {
       const keys = c.hold.get(now);
       if (!Object.keys(keys).length) c.names.clear();
       if (!c.enabled) continue;
-      c.gs.sim_aim(c.tank, Number(!!keys[pg.K_LEFT]) - Number(!!keys[pg.K_RIGHT]),
-        Number(!!keys[pg.K_UP]) - Number(!!keys[pg.K_DOWN]), dt);
+      const delta = c.hold.repeat(now);
+      c.gs.sim_adjust(c.tank, delta.angle, delta.power);
     }
+    const gs = this.app.gs as unknown as GameState | null;
+    if (!this.enabled || this.app.onlineScreen !== "battle" || gs?.phase !== "aim" ||
+        gs.pendingTarget || gs.plasma_charge || !gs.current_shooter) return;
+    this.keys(now);
+    const delta = this.hold.repeat(now);
+    const tank = gs.current_shooter;
+    const beforeAngle = tank.angle, beforePower = tank.power;
+    tank.angle = Math.max(0, Math.min(180, tank.angle + delta.angle));
+    tank.power = Math.max(0, Math.min(1000, tank.power + delta.power));
+    sfx.adjustment("angle", beforeAngle, tank.angle, gs.cfg.is_on("SOUND"));
+    sfx.adjustment("power", beforePower, tank.power, gs.cfg.is_on("SOUND"));
   }
 
   private refreshSimultaneous(gs: GameState): void {

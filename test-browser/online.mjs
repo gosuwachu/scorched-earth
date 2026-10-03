@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { checkBattleControls } from "./online_battle.mjs";
+import { checkBattleControls, checkPreciseAim, checkResults } from "./online_battle.mjs";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
 import { purchaseButton, checkHostShopping, checkShopRows, checkShopLayout } from "./online_shop.mjs";
@@ -215,6 +215,7 @@ try {
   await click(a, "Esc");
   assert.equal(await host.getByRole("dialog", { name: "System Menu", exact: true }).count(), 0, "Guest Escape never opens the host menu");
   await checkBattleControls({ host, a, b, root, until });
+  await checkPreciseAim({ host, page: a, until });
   // Phone angles use the host HUD's elevation and direction, not raw aim values.
   const startingAngle = await host.evaluate(() => window.onlineApp.gs.tanks[0].angle);
   const displayedAngle = () => a.getByRole("meter", { name: "Angle", exact: true }).getAttribute("aria-valuetext").then((text) => text.replace("Angle ", ""));
@@ -408,8 +409,17 @@ try {
   // End rounds deterministically through the real engine rather than waiting for random AI hits.
   await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
+  await checkResults({ pages: [a, b], screen: "Round results", until });
+  await a.reload();
+  await checkResults({ pages: [a, b], screen: "Round results", until });
+  await a.screenshot({ path: `${root}/test-browser/out/online-round-results.png`, fullPage: true });
   await openHostMenu(host);
+  for (const page of [a, b]) {
+    await until(async () => (await page.locator(".lan-status").textContent()).includes("Paused by host"), "results pause reaches guest");
+    assert.equal(await page.locator(".lan-controller button:visible").count(), 0, "Host menu over results does not reveal tank controls");
+  }
   await closeHostMenu(host);
+  await checkResults({ pages: [a, b], screen: "Round results", until });
   await click(host, "Go");
   await until(() => enabled(a, "Done"), "between-round purchasing");
   await a.reload(); await until(() => enabled(a, "Done"), "rejoin purchasing");
@@ -421,6 +431,7 @@ try {
   await host.evaluate(() => { window.onlineApp.gs.current_shooter.selected_guidance = 37; });
   const bobStock = await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]);
   await until(() => enabled(b, "Fire"), "second-round aiming");
+  assert.equal(await b.locator(".lan-battle").isVisible(), true, "Battle controls return after results and purchasing");
   await click(b, "Fire");
   await b.getByLabel("Target X", { exact: true }).waitFor();
   await b.getByRole("button", { name: /^\d+: Alice$/ }).click();
@@ -435,6 +446,10 @@ try {
   await click(host, "Go");
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "finished");
   await until(async () => (await a.locator(".lan-status").textContent()).includes("Match complete"), "final results");
+  await checkResults({ pages: [a, b], screen: "Final results", until });
+  await b.reload();
+  await checkResults({ pages: [a, b], screen: "Final results", until });
+  await a.screenshot({ path: `${root}/test-browser/out/online-final-results.png`, fullPage: true });
   await host.screenshot({ path: `${root}/test-browser/out/online-host.png` });
   await click(host, "Go");
   await until(async () => (await a.locator(".lan-status").textContent()).includes("ended"), "room closed");

@@ -46,6 +46,10 @@ export function startController(roomId: string): void {
   let ready = false;
   const held = new Set<string>();
   const heldButtons = new Map<string, HTMLButtonElement>();
+  const keyLabels = new Map<string, string>();
+  const battleLabels: Record<string, string> = {
+    BracketLeft: "◀", Tab: "▶",
+  };
   let name: HTMLInputElement;
   let readyButton: HTMLButtonElement;
   let roster: Roster;
@@ -149,6 +153,8 @@ export function startController(roomId: string): void {
       ["Fire", "Space"], ["Enter", "Enter"], ["Esc", "Escape"],
     ]) {
       const b = button(label, () => {});
+      keyLabels.set(code, label);
+      b.setAttribute("aria-label", label);
       b.dataset.key = code;
       b.setAttribute("aria-keyshortcuts", code === "BracketLeft" ? "[" : code);
       b.onpointerdown = (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); key(code, true); };
@@ -247,6 +253,10 @@ export function startController(roomId: string): void {
     buildGame();
     heading.textContent = `${view.tank?.name ?? "Player"} · ${view.screen} · Round ${view.round}`;
     const t = view.tank;
+    const purchasing = view.screen === "Purchasing";
+    const results = view.screen === "Round results" || view.screen === "Final results";
+    // The host's menu is reported as Host setup, including over results.
+    const passive = results || view.screen === "Host setup";
     const useBattle = !!t && view.screen === "Battle" && !view.targeting &&
       !view.controls.some((c) => c.id === "plasma-charge");
     if (useBattle !== battleLayout) {
@@ -254,16 +264,20 @@ export function startController(roomId: string): void {
       battleLayout = useBattle;
       root.classList.toggle("lan-controller-battle", useBattle);
       battle.element.hidden = !useBattle;
-      heading.hidden = stats.hidden = keys.hidden = controls.hidden = useBattle;
       for (const [code, b] of heldButtons) {
-        const target = !useBattle || code === "Enter" ? keys : code === "Space" ? battle.fire :
-          code === "Escape" ? battle.escape : battle.keys;
-        target.append(b);
+        b.textContent = (useBattle && battleLabels[code]) || keyLabels.get(code)!;
+        b.title = keyLabels.get(code)!;
+        if (!useBattle || code === "Enter") keys.append(b);
+        else battle.mountKey(code, b);
       }
     }
+    heading.hidden = useBattle;
+    stats.hidden = controls.hidden = useBattle || passive;
+    keys.hidden = useBattle || purchasing || passive;
     if (t) {
       const [elev, side] = hudAngle(t.angle);
-      stats.textContent = `Health ${t.health} · Cash $${t.cash} · Angle ${elev}${side} · Power ${t.power} · ${t.weapon} (${t.ammo})`;
+      stats.textContent = purchasing ? `Cash $${t.cash}` :
+        `Health ${t.health} · Cash $${t.cash} · Angle ${elev}${side} · Power ${t.power} · ${t.weapon} (${t.ammo})`;
       if (useBattle) battle.update(t, room?.players.findIndex((p) => p.id === playerId) ?? 0, view.round);
     } else {
       stats.textContent = "";

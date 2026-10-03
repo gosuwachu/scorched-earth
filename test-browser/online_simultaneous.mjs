@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { openHostMenu, closeHostMenu } from "./dialogs.mjs";
+import { checkPreciseAim, checkResults, checkWeaponSelector } from "./online_battle.mjs";
 
 export async function checkSimultaneous({ host, a, b, base, root, click, enabled, until, pause }) {
   await host.evaluate(() => {
@@ -38,6 +39,7 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
     };
   });
   await until(async () => await enabled(a, "Fire") && await enabled(b, "Fire"), "both controllers enabled");
+  await checkPreciseAim({ host, page: a, until });
   assert.equal(await a.getByRole("button", { name: "Tank Control Panel", exact: true }).count(), 0);
   assert.equal(await b.getByRole("button", { name: "Inventory", exact: true }).count(), 0);
   const angles = () => host.evaluate(() => window.onlineApp.gs.tanks.map((t) => t.angle));
@@ -72,8 +74,11 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   assert.equal((await powers())[2], 500);
   await click(a, "Next weapon");
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].selected_weapon) === 1, "Alice weapon");
+  await checkWeaponSelector({ host, page: a, until });
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[1].selected_weapon), 0);
   await click(a, "Previous weapon");
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].selected_weapon) === 0, "Alice previous weapon");
+  await checkWeaponSelector({ host, page: a, until });
   await host.keyboard.press("ArrowLeft"); await host.keyboard.press("Space");
   assert.equal(await host.evaluate(() => window.simShots.length), 0);
   await host.screenshot({ path: `${root}/test-browser/out/online-simultaneous-host.png` });
@@ -143,6 +148,7 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   assert.equal(await enabled(b, "Fire"), true);
   await host.evaluate(() => window.onlineApp.gs.mass_kill());
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
+  await checkResults({ pages: [a, b], screen: "Round results", until });
   await click(host, "Go");
   await until(() => enabled(a, "Done"), "next round Alice shopping"); await click(a, "Done");
   await until(() => enabled(b, "Done"), "next round Bob shopping"); await click(b, "Done");

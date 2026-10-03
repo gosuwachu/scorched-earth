@@ -57,6 +57,9 @@ export async function checkHostShopping({ host, guest, click, enabled, until }) 
 
 /** Compare the guest rows with the live host shop, including painted sprites. */
 export async function checkShopRows(page, host) {
+  assert.equal(await page.locator(".lan-keys").isVisible(), false, "Purchasing hides the entire battle keypad");
+  assert.equal(await page.locator(".lan-battle").isVisible(), false);
+  assert.match(await page.locator(".lan-stats").innerText(), /^Cash \$\d+$/, "Purchasing shows cash without battle readouts");
   const expected = await host.evaluate(async () => {
     const { ITEMS } = await import("/src/weapons.ts");
     const shop = window.onlineApp.top;
@@ -104,7 +107,7 @@ export async function checkShopLayout(page, root, category) {
     }));
     assert.equal(layout.overflow, false, `${category}: no horizontal page overflow at ${width}px`);
     assert.ok(layout.rows.every((row) => row.height >= 44 && row.fits && row.nameFits && row.cellsFit), `${category}: readable rows and touch targets at ${width}px`);
-    if (width !== 390) await page.locator(".lan-controls:visible").screenshot({ path: `${root}/test-browser/out/online-shop-${category}-${width}.png` });
+    if (width !== 390) await page.screenshot({ path: `${root}/test-browser/out/online-shop-${category}-${width}.png`, fullPage: true });
   }
   await page.setViewportSize(original);
 }

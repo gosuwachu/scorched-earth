@@ -5,6 +5,7 @@ export async function checkBattleControls({ host, a, b, root, until }) {
   const original = a.viewportSize();
   const saved = await host.evaluate(() => window.onlineApp.gs.tanks.slice(0, 2).map((t) => ({
     tank_icon: t.tank_icon, angle: t.angle, health: t.health, power: t.power,
+    selected_weapon: t.selected_weapon, inventory: [...t.inventory],
   })));
   const canvas = (page) => page.locator(".lan-tank-preview canvas");
   await canvas(a).evaluate((node) => { window.battleCanvas = node; });
@@ -28,6 +29,18 @@ export async function checkBattleControls({ host, a, b, root, until }) {
     }
   }
   assert.ok(await canvas(a).evaluate((node) => node === window.battleCanvas), "State updates preserve the canvas");
+  for (const slot of [0, 7, 30, 31]) {
+    await host.evaluate((slot) => { window.onlineApp.gs.tanks[0].selected_weapon = slot; }, slot);
+    await checkWeaponSelector({ host, page: a, until });
+  }
+  await a.locator(".lan-battle-weapon-icon canvas").evaluate((node) => { window.weaponCanvas = node; });
+  await host.evaluate(() => { window.onlineApp.gs.tanks[0].inventory[31] = 0; });
+  await checkWeaponSelector({ host, page: a, until });
+  assert.ok(await a.locator(".lan-battle-weapon-icon canvas").evaluate((node) => node === window.weaponCanvas), "Ammo updates preserve the weapon icon");
+  await host.evaluate((saved) => Object.assign(window.onlineApp.gs.tanks[0], {
+    selected_weapon: saved.selected_weapon, inventory: saved.inventory,
+  }), saved[0]);
+  await checkWeaponSelector({ host, page: a, until });
   await host.evaluate(() => Object.assign(window.onlineApp.gs.tanks[0], { tank_icon: 3, angle: 45, health: 65, power: 600 }));
   await until(async () => await a.getByRole("meter", { name: "Health" }).getAttribute("aria-valuenow") === "65", "damaged health reaches the controller");
   assert.equal(await a.getByRole("meter", { name: "Health" }).getAttribute("aria-valuetext"), "Health 65/100");
@@ -42,8 +55,13 @@ export async function checkBattleControls({ host, a, b, root, until }) {
     await a.setViewportSize(viewport);
     const layout = await a.locator(".lan-battle").evaluate((battle) => {
       const root = document.querySelector(".lan-controller").getBoundingClientRect();
+      const bounds = (selector) => document.querySelector(selector).getBoundingClientRect().toJSON();
       return {
         width: root.width, height: root.height,
+        title: bounds(".lan-controller > .ui-title"), status: bounds(".lan-status"), battle: battle.getBoundingClientRect().toJSON(),
+        padding: parseFloat(getComputedStyle(document.querySelector(".lan-controller-body")).paddingTop),
+        meters: [bounds(".lan-angle"), bounds(".lan-power")],
+        arrows: ["ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"].map((code) => bounds(`button[data-key=${code}]`)),
         overflow: document.documentElement.scrollWidth > innerWidth,
         scroll: document.documentElement.scrollHeight > innerHeight + 1,
         targets: [...battle.querySelectorAll("button, summary")].filter((node) => node.checkVisibility()).map((node) => {
@@ -58,10 +76,24 @@ export async function checkBattleControls({ host, a, b, root, until }) {
     assert.equal(layout.width, viewport.width);
     assert.equal(layout.height, viewport.height);
     assert.ok(layout.targets.every((r) => r.width >= 44 && r.height >= 44 && r.right <= viewport.width && r.bottom <= viewport.height), "All battle actions fit and retain touch targets");
+    assert.ok(Math.abs(layout.status.top - layout.title.bottom - layout.padding) < 1, "Status stays at the top beneath the title");
+    assert.ok(layout.battle.top - layout.status.bottom <= 24, "Battle follows the status without vertical centering");
+    const [angle, power] = layout.meters;
+    const [up, left, down, right] = layout.arrows;
+    assert.ok(Math.abs(angle.top - power.top) < 1 && angle.right <= power.left, "Meters share one horizontal row");
+    assert.ok(Math.max(angle.bottom, power.bottom) <= Math.min(...layout.arrows.map((r) => r.top)), "Both meters stay above every aiming button");
+    assert.ok(up.bottom <= down.top && Math.abs(up.left + up.width / 2 - down.left - down.width / 2) < 1, "Power Up sits directly above Power Down");
+    assert.ok(Math.abs(left.top - down.top) < 1 && Math.abs(right.top - down.top) < 1 && left.right <= down.left && down.right <= right.left,
+      "Angle buttons flank Power Down");
   }
   await a.setViewportSize(original);
-  assert.deepEqual(await a.locator(".lan-battle-keys button").allTextContents(),
-    ["Previous weapon", "↑ Power", "Next weapon", "← Angle", "↓ Power", "Angle →"]);
+  for (const [group, labels] of [
+    ["Weapon selection", ["Previous weapon", "Next weapon"]],
+    ["Aiming controls", ["↑ Power", "← Angle", "↓ Power", "Angle →"]],
+  ]) {
+    assert.deepEqual(await a.getByRole("group", { name: group, exact: true }).getByRole("button")
+      .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), labels);
+  }
   assert.equal(await a.getByRole("button", { name: "Enter", exact: true }).count(), 0, "No duplicate Enter action in battle");
   const summary = a.locator(".lan-battle-more summary");
   await summary.focus(); await a.keyboard.press("Enter");
@@ -87,4 +119,61 @@ export async function checkBattleControls({ host, a, b, root, until }) {
   await host.evaluate((saved) => saved.forEach((state, index) => Object.assign(window.onlineApp.gs.tanks[index], state)), saved);
   await until(async () => await a.getByRole("meter", { name: "Health" }).getAttribute("aria-valuenow") === String(saved[0].health), "battle values restored");
   console.log("PASS: live guest tank designs/colors/angles, health, power, responsive layout and keyboard disclosure");
+}
+
+/** The selector uses the catalogue sprite and the host's live ammunition count. */
+export async function checkWeaponSelector({ host, page, until, index = 0 }) {
+  const expected = await host.evaluate(async (index) => {
+    const { ITEMS } = await import("/src/weapons.ts");
+    const { get_sprite, WEAPON_ICON_BASE, weapon_icon_palette } = await import("/src/sprites.ts");
+    const tank = window.onlineApp.gs.tanks[index], slot = tank.selected_weapon;
+    return {
+      label: `${ITEMS[slot].name} (${tank.inventory[slot]})`,
+      icon: get_sprite("A", slot, { color: WEAPON_ICON_BASE, pal: weapon_icon_palette(), scale: 2 }).canvas.toDataURL(),
+    };
+  }, index);
+  await until(async () => await page.locator(".lan-battle-weapon").textContent() === expected.label, "weapon name and parenthesized ammo");
+  assert.equal(await page.locator(".lan-battle-weapon-icon canvas").evaluate((node) => node.toDataURL()), expected.icon);
+  assert.ok(await page.locator(".lan-battle-weapon-icon canvas").evaluate((node) => {
+    const data = node.getContext("2d").getImageData(0, 0, node.width, node.height).data;
+    return data.some((value, index) => index % 4 === 3 && value > 0) &&
+      node.parentElement.getAttribute("aria-hidden") === "true" && getComputedStyle(node).imageRendering === "pixelated";
+  }), "Weapon icon is painted, decorative, and pixelated");
+}
+
+export async function checkResults({ pages, screen, until }) {
+  for (const page of pages) {
+    await page.getByRole("heading", { name: new RegExp(` · ${screen} · Round `) }).waitFor();
+    await until(async () => (await page.locator(".lan-status").textContent()).includes(
+      screen === "Round results" ? "Round complete" : "Match complete"), `${screen} reaches guest`);
+    for (const selector of [".lan-keys", ".lan-battle", ".lan-stats"]) {
+      assert.equal(await page.locator(selector).isVisible(), false, `${screen} hides ${selector}`);
+    }
+    assert.equal(await page.locator(".lan-controller button:visible").count(), 0, `${screen} has no tank actions`);
+  }
+}
+
+/** Exercise real pointer and keyboard taps against the host, in either battle mode. */
+export async function checkPreciseAim({ host, page, until }) {
+  const values = () => host.evaluate(() => {
+    const { angle, power } = window.onlineApp.gs.tanks[0];
+    return { angle, power };
+  });
+  for (const [name, property, step] of [
+    ["← Angle", "angle", 1], ["Angle →", "angle", -1],
+    ["↑ Power", "power", 1], ["↓ Power", "power", -1],
+  ]) {
+    const before = await values();
+    const button = page.getByRole("button", { name, exact: true });
+    const box = await button.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(120);
+    await page.mouse.up();
+    await until(async () => (await values())[property] === before[property] + step, `${name}: precise pointer tap`);
+    await page.waitForTimeout(400);
+    assert.deepEqual(await values(), { ...before, [property]: before[property] + step }, `${name}: tap does not repeat`);
+    await button.focus(); await page.keyboard.press("Enter");
+    await until(async () => (await values())[property] === before[property] + 2 * step, `${name}: accessible tap`);
+  }
 }

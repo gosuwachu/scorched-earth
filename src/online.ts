@@ -51,7 +51,6 @@ export class HostSession {
 
   get paused(): boolean { return !this.connection.connected || !this.room?.hostConnected; }
   get menuPaused(): boolean { return this.app.onlineMenuOpen; }
-  get keys(): Record<number, boolean> { return this.adapter?.keys(performance.now()) ?? {}; }
 
   showJoinLink(): void {
     if (!this.room?.started || !this.menuPaused || this.shareOpen) return;
@@ -59,8 +58,8 @@ export class HostSession {
     this.renderLobby();
   }
 
-  updateSimultaneous(dt: number): void {
-    this.adapter?.updateSimultaneous(dt, performance.now());
+  updateAim(): void {
+    this.adapter?.updateAim(performance.now());
   }
 
   beforeFrame(now: number): void {
