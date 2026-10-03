@@ -3,6 +3,7 @@ import { REMOTE_KEYS } from "../shared/online";
 import { Connection } from "./online_connection";
 import { button, el, installOnlineTheme, Roster, tankIcon } from "./online_ui";
 import { get_sprite, WEAPON_ICON_BASE, weapon_icon_palette } from "./sprites";
+import { hudAngle } from "./angles";
 import "./online.css";
 
 interface ControlNode {
@@ -239,7 +240,12 @@ export function startController(roomId: string): void {
     buildGame();
     heading.textContent = `${view.tank?.name ?? "Player"} · ${view.screen} · Round ${view.round}`;
     const t = view.tank;
-    stats.textContent = t ? `Health ${t.health} · Cash $${t.cash} · Angle ${t.angle}° · Power ${t.power} · ${t.weapon} (${t.ammo})` : "";
+    if (t) {
+      const [elev, side] = hudAngle(t.angle);
+      stats.textContent = `Health ${t.health} · Cash $${t.cash} · Angle ${elev}${side} · Power ${t.power} · ${t.weapon} (${t.ammo})`;
+    } else {
+      stats.textContent = "";
+    }
     const ids = new Set(view.controls.map((c) => c.id));
     for (const [id, record] of controlNodes) if (!ids.has(id)) { record.node.remove(); controlNodes.delete(id); }
     view.controls.forEach((c, index) => {

@@ -213,6 +213,19 @@ try {
   await until(() => enabled(a, "Space / Fire"), "Alice aiming");
   await click(a, "Back / Esc");
   assert.equal(await host.getByRole("dialog", { name: "System Menu", exact: true }).count(), 0, "Guest Escape never opens the host menu");
+  // Phone angles use the host HUD's elevation and direction, not raw aim values.
+  const startingAngle = await host.evaluate(() => window.onlineApp.gs.tanks[0].angle);
+  const displayedAngle = () => a.locator(".lan-stats").innerText().then((text) => text.match(/ · Angle (.*?) · /)?.[1]);
+  for (const [raw, label] of [[0, "0R"], [45, "45R"], [89, "89R"], [90, "90R"], [91, "89L"], [135, "45L"], [180, "0L"]]) {
+    await host.evaluate((angle) => { window.onlineApp.gs.tanks[0].angle = angle; }, raw);
+    await until(async () => await displayedAngle() === label, `phone angle ${raw} displays ${label}`);
+  }
+  await host.screenshot({ path: `${root}/test-browser/out/online-angle-host.png` });
+  await a.screenshot({ path: `${root}/test-browser/out/online-angle-phone.png`, fullPage: true });
+  await click(a, "Angle →");
+  await until(async () => await displayedAngle() === "1L", "phone angle refreshes after aiming");
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].angle), 179);
+  await host.evaluate((angle) => { window.onlineApp.gs.tanks[0].angle = angle; }, startingAngle);
   // Observe real adjustment tone playback on the host, without replacing it.
   await host.evaluate(async () => {
     const { sfx } = await import("/src/sound.ts");
@@ -425,7 +438,7 @@ try {
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
   await checkSimultaneous({ host, a, b, base, root, click, enabled, until, pause });
   assert.deepEqual(errors, []);
-  console.log("PASS: local choice, lobby, AI, mobile controls, ownership, holds, inventory, purchases, reconnects, replacement, round progression, match completion");
+  console.log("PASS: local choice, lobby, AI, mobile controls, host/phone angle format, ownership, holds, inventory, purchases, reconnects, replacement, round progression, match completion");
 } catch (error) {
   console.error(error);
   for (const context of browser?.contexts() ?? []) {

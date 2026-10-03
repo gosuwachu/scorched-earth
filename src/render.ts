@@ -42,6 +42,9 @@ import { blastPixel, flameColor } from "./combat_effects";
 import * as widgets from "./widgets";
 import * as _pal from "./palette";
 import { build_palette, LiveLUT } from "./palette";
+import { hudAngle } from "./angles";
+
+export { hudAngle } from "./angles";
 
 // ---------------------------------------------------------------------------
 // Integrator hooks for not-yet-ported deps (the widgets.ts precedent:
@@ -597,15 +600,6 @@ export function explosionRingIndex(r: number, maxr: number): number {
   let idx = Math.trunc(C.EXPLOSION_RING_BASE - (r * 20) / Math.max(1, maxr));
   idx = Math.max(C.EXPLOSION_LO, Math.min(C.EXPLOSION_HI, idx));
   return idx;
-}
-
-/** The HUD elevation map: internal 0-180 angle (0=E,90=up,180=W) -> (elev 0..90,
- *  side letter).  Mirrors _hud_angle. */
-export function hudAngle(angle: number): [number, string] {
-  if (angle <= 90) {
-    return [angle, "R"]; // East (right)
-  }
-  return [180 - angle, "L"]; // West (left)
 }
 
 /** Active shield's remaining HP as a percent of its full HP (_shield_pct). */
