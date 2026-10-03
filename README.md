@@ -1,10 +1,10 @@
-# Scorched Earth - HTML5 / TypeScript Port
+# Scorched Earth - Port
 
 A browser reimplementation of **Scorched Earth v1.5** (1995, DOS) by **Wendell Hicken** -
 "The Mother of All Games" - running natively on TypeScript + Canvas2D + Web Audio.
 No plugins, no WASM, no Python or DOS runtime: open it and play.
 
-### Play it now: https://digitalcybersoft.github.io/scorchedearth-html5/
+### Play it now: https://scorched.gosuwachu.fyi/
 
 Nothing to install - it is a static HTML5 page that runs in the browser.
 
