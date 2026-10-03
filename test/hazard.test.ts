@@ -157,6 +157,7 @@ type MockTank = {
   y: number;
   half_width: number;
   health: number;
+  power: number;
   shield_hp: number;
   shield_item: number;
   alive: boolean;
@@ -185,6 +186,7 @@ function makeTank(
     y,
     half_width: opts.half_width ?? 10,
     health: opts.health ?? 100,
+    power: 500,
     shield_hp: opts.shield_hp ?? 0,
     shield_item: opts.shield_item ?? 0,
     alive: opts.alive ?? true,

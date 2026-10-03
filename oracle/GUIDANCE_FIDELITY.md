@@ -24,6 +24,15 @@ Ordinary shield/tank/terrain contact precedes swept guidance acquisition.
 Force reflection and magnetic callbacks retain the existing combat order.
 Lazy Boy uses its separate DOS callback path.
 
+The browser now applies the documented health × 10 power limit to ordinary
+aiming and firing as well as Ballistic guidance, for local and online humans
+and AI in all three play modes. Hull damage immediately lowers an excessive
+selection; Batteries raise the available maximum without raising the selection.
+Saved games and pending target requests are clamped against current health when
+restored. `test/power.test.ts` and the local/online browser input checks cover
+these integration rules. This reuses the static DOS evidence above; it is not
+a new DOS runtime comparison of damage or repair timing.
+
 ## Reference fixtures and reproduction
 
 `test/fixtures/dos_guidance.json` contains **static DOS transcriptions**, not

@@ -1,4 +1,5 @@
 /** Host-side controller adapter. Reuses the real screens and widget operations. */
+import { clampPower } from "./power";
 import type { App } from "./main";
 import type { GameState } from "./game";
 import type { Tank } from "./objects";
@@ -115,7 +116,7 @@ export class RemoteAdapter {
     const tank = gs.current_shooter;
     const beforeAngle = tank.angle, beforePower = tank.power;
     tank.angle = Math.max(0, Math.min(180, tank.angle + (gs.move_mode ? 0 : delta.angle)));
-    tank.power = Math.max(0, Math.min(1000, tank.power + delta.power));
+    tank.power = clampPower(tank.health, tank.power + delta.power);
     sfx.adjustment("angle", beforeAngle, tank.angle, gs.cfg.is_on("SOUND"));
     sfx.adjustment("power", beforePower, tank.power, gs.cfg.is_on("SOUND"));
   }

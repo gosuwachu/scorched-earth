@@ -47,6 +47,7 @@
  *    faithful to the oracle's value and free of the libm hypot divergence.
  * ============================================================================
  */
+import { clampPower } from "./power";
 import * as C from "./constants";
 import * as scoring from "./scoring";
 import { sfx } from "./sound";
@@ -86,6 +87,7 @@ export interface Tank {
   half_width: number;
   // health / shield accumulators
   health: number;
+  power: number;
   shield_hp: number;
   shield_item: number;
   // hit counters (catalog 14 s.4.2); keyed by shooter player_index
@@ -252,6 +254,7 @@ export function _apply_health_direct(
     );
   }
   tank.health -= amount;
+  tank.power = clampPower(tank.health, tank.power);
   if (tank.health <= 0) {
     tank.health = 0;
     kill_tank(state, tank);
@@ -288,6 +291,7 @@ export function kill_tank(state: State, victim: Tank, weapon: unknown = null): v
   }
   victim.alive = false;
   victim.health = 0;
+  victim.power = 0;
   // NO award here: the binary awards inside the kill roulette (FUN_271b_0005
   // offset 006d -> FUN_4098_0263) when the dead-tank sweep PROCESSES the
   // corpse, not when health crosses zero.  The port's death queue fires the

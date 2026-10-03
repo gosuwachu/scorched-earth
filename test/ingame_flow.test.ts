@@ -817,6 +817,21 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     expect(t.contact_trigger).toBe(true);
   });
 
+  it("caps mouse and panel power, then rebuilds the cap after battery healing", () => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_BATTERY] = 1;
+    const { cp, t, st } = panelFor({ health: 30, power: 300, inv });
+    ingame.handle_game_event(st, md(center(byBox(st, "power")), 3));
+    expect(t.power).toBe(300);
+    const power = () => byLabel(cp.panel, "Remaining Power") as widgets.Spinner;
+    expect(power().hi).toBe(300);
+    power().set(1000); expect(t.power).toBe(300);
+    cp.dispatchAction("discharge");
+    expect([t.health, t.power, power().hi]).toEqual([40, 300, 400]);
+    power().adjust(1); expect(t.power).toBe(305);
+    power().set(1000); expect(t.power).toBe(400);
+  });
+
   it("Batteries with exactly one owned discharges directly (+10 health, no modal)", () => {
     const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
     inv[weapons.SLOT_BATTERY] = 1;

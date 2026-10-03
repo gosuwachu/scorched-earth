@@ -393,7 +393,8 @@ function expectTankRestored(t: SaveTank, s: TankSnap, label: string): void {
   expect(t.y, `${label} y`).toBe(s.y);
   expect(t.half_width, `${label} half_width`).toBe(s.half_width);
   expect(t.angle, `${label} angle`).toBe(s.angle);
-  expect(t.power, `${label} power`).toBe(s.power);
+  // Legacy snapshots predate the DOS health × 10 cap; see power.test.ts.
+  expect(t.power, `${label} power`).toBe(Math.max(0, Math.min(s.power, s.health * 10)));
   expect(t.health, `${label} health`).toBe(s.health);
   expect(t.alive, `${label} alive`).toBe(s.alive);
   expect(t.shield_hp, `${label} shield_hp`).toBe(s.shield_hp);
@@ -616,6 +617,14 @@ describe("savegame: load() + apply() round-trip restores the state exactly", () 
       expect(out.awaiting_human, `${bc.name} awaiting_human`).toBe(false);
     });
   }
+});
+
+it("restores an older overpowered save using the saved health cap", () => {
+  const state = mkState(vec.roundtrip[0].restored);
+  state.tanks[0].health = 30; state.tanks[0].power = 1000;
+  const data = load(save(state));
+  const restored = apply(data, mkState(vec.roundtrip[0].restored));
+  expect([restored.tanks[0].health, restored.tanks[0].power]).toEqual([30, 300]);
 });
 
 describe("savegame: serialize() round-trips through load()/apply() (no file I/O)", () => {

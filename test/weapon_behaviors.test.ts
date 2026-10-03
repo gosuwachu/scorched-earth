@@ -59,6 +59,7 @@ function mkTank(
     y: o.y ?? 100,
     half_width: o.half_width ?? 7,
     health: o.health ?? 100,
+    power: o.power ?? 500,
     shield_hp: o.shield_hp ?? 0,
     shield_item: o.shield_item ?? 0,
     shield_laserproof: o.shield_laserproof ?? false,

@@ -1,3 +1,4 @@
+import { maxPower } from "./power";
 import type { ControllerView } from "../shared/online";
 import { hudAngle } from "./angles";
 import { TANK_DEFAULT_HEALTH } from "./constants";
@@ -17,7 +18,11 @@ export function meter(label: string, max: number, className: string) {
   node.append(fill, value);
   return {
     node,
-    update(amount: number, text: string, left = 0, width = amount / max * 100, display = text): void {
+    setMax(value: number): void {
+      max = value;
+      node.setAttribute("aria-valuemax", String(max));
+    },
+    update(amount: number, text: string, left = 0, width = max > 0 ? amount / max * 100 : 0, display = text): void {
       node.setAttribute("aria-valuenow", String(Math.max(0, Math.min(max, amount))));
       node.setAttribute("aria-valuetext", text);
       value.textContent = display;
@@ -55,7 +60,7 @@ export class TankOverview {
     this.cash.textContent = `Cash $${tank.cash}`;
     this.round.textContent = `Round ${round}`;
     this.power.hidden = !showPower;
-    this.power.textContent = `Power ${tank.power}`;
+    this.power.textContent = `Power ${tank.power} / ${maxPower(tank.health)}`;
     this.shield.hidden = !tank.shield;
     this.shield.textContent = tank.shield ? `${tank.shield.name} ${tank.shield.percent}%` : "";
     this.health.node.hidden = !combat;

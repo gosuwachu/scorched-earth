@@ -1,4 +1,5 @@
 /** Shared host-owned firing request for local and online target selection. */
+import { clampPower } from "./power";
 import type { GameState } from "./game";
 import type { Tank } from "./objects";
 import { ITEMS } from "./weapons";
@@ -28,6 +29,7 @@ export function begin(state: GameState): boolean {
   const weapon = t.has_ammo(t.selected_weapon) ? t.selected_weapon : 0;
   const guidance = usable(t, weapon, state.cfg.play_mode);
   if (guidance === null || !needsTarget(guidance)) return false;
+  t.power = clampPower(t.health, t.power);
   state.pendingTarget = { shooter: t, weapon, guidance, angle: t.angle, power: t.power, point: null, target: null };
   t.guidance_target = null; t.guidance_target_pt = null;
   return true;
@@ -49,7 +51,7 @@ export function confirm(state: GameState): boolean {
   if (!p?.point || state.current_shooter !== p.shooter || state.phase !== "aim" || !p.shooter.alive ||
       (p.target && !p.target.alive) || !(p.shooter.inventory[p.guidance] > 0) || !p.shooter.has_ammo(p.weapon)) return false;
   const t = p.shooter;
-  t.angle = p.angle; t.power = p.power; t.selected_weapon = p.weapon; t.selected_guidance = p.guidance;
+  t.angle = p.angle; t.power = clampPower(t.health, p.power); t.selected_weapon = p.weapon; t.selected_guidance = p.guidance;
   t.guidance_target = p.target; t.guidance_target_pt = [...p.point];
   state.pendingTarget = null;
   if (state.cfg.play_mode === PLAYMODE_SYNCHRONOUS) state._sync_human_fire(t);

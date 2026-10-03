@@ -33,6 +33,7 @@
  * the same value; _shuffle() reproduces CPython random.shuffle (Fisher-Yates with
  * j = _randbelow(i+1)) against _pyrandom, where _randbelow(i+1) == _pyrandom.pick(i+1).
  */
+import { clampPower } from "./power";
 import * as C from "./constants";
 import { magneticLift, shieldContains, startShieldFade, SHIELD_FADE_SAMPLES, type ShieldFade } from "./shields";
 import * as physics from "./physics";
@@ -792,7 +793,7 @@ export class GameState {
       this.awaiting_human = false;
       const [ang, pw, slot] = ai.take_turn(this as unknown as ai.AIState, shooter);
       shooter.angle = pyInt(Math.max(0, Math.min(180, ang)));
-      shooter.power = pyInt(Math.max(0, Math.min(1000, pw)));
+      shooter.power = clampPower(shooter.health, pw);
       shooter.selected_weapon = slot;
       this.phase = TURN_START;
       this.timer = AI_TURN_DELAY; // brief pause, then fire
@@ -818,6 +819,7 @@ export class GameState {
     this.current_shooter = null;
     t.alive = false;
     t.health = 0;
+    t.power = 0;
     death.retreat_sequence(this as unknown as death.DState, t as unknown as death.DTank);
     // advance the round (SEQUENTIAL only; the live loops advance on their own clock).
     // No immediate win check: the staged death FX (death_queue) must play out and
@@ -854,6 +856,7 @@ export class GameState {
     if (t === null) {
       return [];
     }
+    t.power = clampPower(t.health, t.power);
     if (this.plasma_charge) return [];
     if (shooter === null && targeting.begin(this)) return [];
     if (t.ai_class === C.AI_HUMAN && t.selected_weapon === 31 && t.has_ammo(31) && t.batteries > 0 &&
@@ -895,6 +898,7 @@ export class GameState {
       const solved = guidance.solve_ballistic_power_launch(this.cfg, t, weapon);
       if (solved !== null) t.power = solved;
     }
+    t.power = clampPower(t.health, t.power);
     const finish = (): void => {
       if (guidanceSlot !== null) t.consume(guidanceSlot);
       t.selected_guidance = null;
@@ -1196,7 +1200,7 @@ export class GameState {
 
   _sync_record_lock(shooter: Tank, ang: number, pw: number, slot: number): void {
     shooter.angle = pyInt(Math.max(0, Math.min(180, ang)));
-    shooter.power = pyInt(Math.max(0, Math.min(1000, pw)));
+    shooter.power = clampPower(shooter.health, pw);
     shooter.selected_weapon = slot;
     this._sync_locks[shooter.player_index] = [shooter.angle, shooter.power, slot];
     if (this._sync_queue.length > 0 && this._sync_queue[0] === shooter.player_index) {
@@ -1381,7 +1385,7 @@ export class GameState {
       }
       const [ang, pw, slot] = ai.take_turn(this as unknown as ai.AIState, t);
       t.angle = pyInt(Math.max(0, Math.min(180, ang)));
-      t.power = pyInt(Math.max(0, Math.min(1000, pw)));
+      t.power = clampPower(t.health, pw);
       t.selected_weapon = slot;
       this.current_shooter = t; // for launch/laser draw + checks
       this.fire(t);
@@ -1457,7 +1461,7 @@ export class GameState {
     if (!this.sim_can_control(tank) || this.sim_charges.has(tank)) return;
     const beforeAngle = tank.angle, beforePower = tank.power;
     tank.angle = Math.max(0, Math.min(180, tank.angle + angle));
-    tank.power = Math.max(0, Math.min(1000, tank.power + power));
+    tank.power = clampPower(tank.health, tank.power + power);
     sfx.adjustment("angle", beforeAngle, tank.angle, this.cfg.is_on("SOUND"));
     sfx.adjustment("power", beforePower, tank.power, this.cfg.is_on("SOUND"));
   }
@@ -1541,7 +1545,7 @@ export class GameState {
     const beforeAngle = t.angle;
     const beforePower = t.power;
     t.angle = pyInt(Math.max(0, Math.min(180, ang)));
-    t.power = pyInt(Math.max(0, Math.min(1000, pw)));
+    t.power = clampPower(t.health, pw);
     sfx.adjustment("angle", beforeAngle, t.angle, this.cfg.is_on("SOUND"));
     sfx.adjustment("power", beforePower, t.power, this.cfg.is_on("SOUND"));
   }
@@ -2780,6 +2784,7 @@ export class GameState {
     for (const t of this.tanks) {
       t.alive = false;
       t.health = 0;
+      t.power = 0;
       t.score += share; // equal split, NO win_counter++
       t.cash = Math.max(0, t.cash + share); // awards feed cash too
     }

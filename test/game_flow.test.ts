@@ -291,7 +291,8 @@ function expectTank(got: TankSnap, want: TankSnap, tag: string): void {
   expect(got.cash, `${tag} cash`).toBe(want.cash);
   expect(got.win_counter, `${tag} win_counter`).toBe(want.win_counter);
   expect(got.angle, `${tag} angle`).toBe(want.angle);
-  expect(got.power, `${tag} power`).toBe(want.power);
+  // Legacy snapshots predate the DOS health × 10 cap; see power.test.ts.
+  expect(got.power, `${tag} power`).toBe(Math.max(0, Math.min(want.power, want.health * 10)));
   expect(got.color, `${tag} color`).toBe(want.color);
 }
 function expectProj(got: ProjSnap, want: ProjSnap, tag: string): void {

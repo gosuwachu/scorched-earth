@@ -105,8 +105,8 @@ export async function checkBattleControls({ host, a, b, root, until }) {
   assert.ok(await a.locator(".lan-battle-more").evaluate((node) => node.open), "State updates preserve More actions");
   assert.equal(await a.getByRole("button", { name: "Inventory", exact: true }).evaluate((node) => node === document.activeElement), true);
   await summary.click();
-  await host.evaluate(() => { window.onlineApp.gs.tanks[0].power = 1000; });
-  await until(async () => await a.getByRole("meter", { name: "Power" }).getAttribute("aria-valuenow") === "1000", "maximum power");
+  await host.evaluate(() => { window.onlineApp.gs.tanks[0].power = 650; });
+  await until(async () => await a.getByRole("meter", { name: "Power" }).getAttribute("aria-valuenow") === "650", "health-limited maximum power");
   assert.equal(await a.locator(".lan-power .lan-meter-fill").evaluate((node) => node.style.width), "100%");
   await a.setViewportSize({ width: 320, height: 320 });
   await a.locator(".lan-battle-more summary").click();
@@ -173,6 +173,42 @@ export async function checkPreciseAim({ host, page, until }) {
     await button.focus(); await page.keyboard.press("Enter");
     await until(async () => (await values())[property] === before[property] + 2 * step, `${name}: accessible tap`);
   }
+}
+
+/** Damage and real controller input share the host's health cap in both modes. */
+export async function checkHealthPower({ host, page, until, root }) {
+  const saved = await host.evaluate(async () => {
+    const { apply_fall_damage } = await import("/src/damage.ts");
+    const gs = window.onlineApp.gs, t = gs.tanks[0];
+    const saved = { health: t.health, power: t.power, inventory: [...t.inventory] };
+    t.health = 100; t.power = 1000; t.inventory[39] = 0;
+    apply_fall_damage(gs, t, 70);
+    return saved;
+  });
+  const meter = page.getByRole("meter", { name: "Power", exact: true });
+  await until(async () => await meter.getAttribute("aria-valuenow") === "300", "damage clamps selected power");
+  assert.equal(await meter.getAttribute("aria-valuemax"), "300");
+  assert.equal(await meter.innerText(), "300 / 300");
+  const up = page.getByRole("button", { name: "↑ Power", exact: true });
+  await up.click();
+  await up.hover(); await page.mouse.down(); await page.waitForTimeout(600); await page.mouse.up();
+  assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].power), 300, "Remote taps and holds cannot exceed the cap");
+  const mode = await host.evaluate(() => window.onlineApp.gs.cfg.PLAY_MODE);
+  await page.screenshot({ path: `${root}/test-browser/out/online-power-${mode.toLowerCase()}.png` });
+  if (mode === "SEQUENTIAL") {
+    await host.evaluate(() => { window.onlineApp.gs.tanks[0].inventory[39] = 1; });
+    await page.getByRole("button", { name: "Tank Control Panel", exact: true }).click();
+    await page.getByRole("button", { name: /^Discharge battery/ }).click();
+    await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].health) === 40, "battery heals");
+    assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].power), 300, "Healing keeps selected power");
+    await page.getByRole("button", { name: "Quit", exact: true }).click();
+    await until(async () => await meter.getAttribute("aria-valuemax") === "400", "healing refreshes the maximum");
+    await up.click();
+    await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].power) === 301, "new power is available after healing");
+  }
+  await host.evaluate((saved) => Object.assign(window.onlineApp.gs.tanks[0], saved), saved);
+  await until(async () => await meter.getAttribute("aria-valuenow") === String(saved.power), "power restored after check");
+  console.log(`PASS: ${mode} remote health-based power cap and meter`);
 }
 
 export async function checkDisabledBattle(page) {

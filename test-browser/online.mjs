@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { checkBattleControls, checkPreciseAim, checkResults, checkDisabledBattle, checkMovement } from "./online_battle.mjs";
+import { checkBattleControls, checkPreciseAim, checkHealthPower, checkResults, checkDisabledBattle, checkMovement } from "./online_battle.mjs";
 import { checkGuestEquipment, checkPanelLayout } from "./online_panel.mjs";
 import { checkTargetArrows } from "./online_targeting.mjs";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
@@ -229,6 +229,7 @@ try {
   await checkMovement({ host, a, b, root, until });
   await checkGuestReconnect(a, until);
   await checkPreciseAim({ host, page: a, until });
+  await checkHealthPower({ host, page: a, until, root });
   // Phone angles use the host HUD's elevation and direction, not raw aim values.
   const startingAngle = await host.evaluate(() => window.onlineApp.gs.tanks[0].angle);
   const displayedAngle = () => a.getByRole("meter", { name: "Angle", exact: true }).getAttribute("aria-valuetext").then((text) => text.replace("Angle ", ""));
@@ -299,7 +300,7 @@ try {
   await until(async () => await enabled(a, "Engage"), "tank controls resume");
   const beforePanelTicks = (await ticks()).length;
   await host.evaluate(() => { window.onlineApp.gs.tanks[0].power = 300; });
-  await until(async () => (await a.locator(".lan-panel .lan-overview-power").innerText()) === "Power 300", "readonly panel power updates");
+  await until(async () => (await a.locator(".lan-panel .lan-overview-power").innerText()) === "Power 300 / 1000", "readonly panel power updates");
   assert.equal((await ticks()).length, beforePanelTicks);
   assert.equal(await a.evaluate(() => window.audioStarts), 0);
   assert.equal(await b.evaluate(() => window.audioStarts), 0);

@@ -155,7 +155,8 @@ function expectTank(got: TankSnap, want: TankSnap, label: string): void {
   expect(got.cash, `${label} cash`).toBe(want.cash);
   expect(got.win_counter, `${label} win_counter`).toBe(want.win_counter);
   expect(got.angle, `${label} angle`).toBe(want.angle);
-  expect(got.power, `${label} power`).toBe(want.power);
+  // Legacy snapshots predate the DOS health × 10 cap; see power.test.ts.
+  expect(got.power, `${label} power`).toBe(Math.max(0, Math.min(want.power, want.health * 10)));
 }
 function expectProj(got: ProjSnap, want: ProjSnap, label: string): void {
   // px/py/vx/vy are flight-path floats -> toBeCloseTo(.,12); active is a boolean.

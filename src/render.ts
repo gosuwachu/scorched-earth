@@ -32,6 +32,7 @@
  * also seeds a fresh starfield per round).  Documented; excluded from the gate.
  */
 
+import { maxPower } from "./power";
 import * as pygame from "./pygame";
 import * as C from "./constants";
 import { shieldPixels, shieldColor, type ShieldVisualState } from "./shields";
@@ -1629,7 +1630,7 @@ export class Renderer {
     bar.set_alpha(190);
     bar.fill([0, 0, 0]);
     surf.blit(bar, [0, y]);
-    const maxv = t.health <= 0 ? 0 : Math.trunc(t.power as number) * 10;
+    const maxv = maxPower(t.health);
     const batt = t.inventory[weapons.SLOT_BATTERY];
     const para = t.inventory[weapons.SLOT_PARACHUTE];
     let shldN = 0;

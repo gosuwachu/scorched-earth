@@ -34,6 +34,7 @@
  *   the surface it is handed. The geometry + quote-wrap + go-rect math is faithful
  *   to ui.py:307-403.
  */
+import { clampPower } from "./power";
 import * as pygame from "./pygame";
 
 import * as C from "./constants";
@@ -484,7 +485,7 @@ export class HumanController {
         const whole = pyInt(hold.pf);
         hold.pf -= whole;
         const before = t.power;
-        t.power = Math.max(0, Math.min(1000, t.power + whole));
+        t.power = clampPower(t.health, t.power + whole);
         sfx.adjustment("power", before, t.power, state.cfg?.is_on("SOUND"));
       }
     } else {
@@ -510,9 +511,9 @@ export class HumanController {
       t.angle = Math.max(0, Math.min(180, t.angle - 1));
     } else if (k === pygame.K_UP || k === pygame.K_w) {
       // tap = +1 power
-      t.power = Math.max(0, Math.min(1000, t.power + 1));
+      t.power = clampPower(t.health, t.power + 1);
     } else if (k === pygame.K_DOWN || k === pygame.K_s) {
-      t.power = Math.max(0, Math.min(1000, t.power - 1));
+      t.power = clampPower(t.health, t.power - 1);
     } else if (k === pygame.K_TAB || k === pygame.K_RIGHTBRACKET) {
       HumanController._cycle_weapon(state, t, 1);
     } else if (k === pygame.K_LEFTBRACKET) {

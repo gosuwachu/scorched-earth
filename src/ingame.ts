@@ -59,6 +59,7 @@
  *   "clear_screen", "mass_kill", "quit_game", "reassign_players",
  *   "reassign_teams", "save_game", "restore_game", "new_game", "back"
  */
+import { clampPower, maxPower } from "./power";
 import * as targeting from "./targeting";
 import { compatible, needsTarget } from "./guidance";
 import type { GameState as EngineState } from "./game";
@@ -278,7 +279,7 @@ export function hud_hitboxes(state: GameState): { [control: string]: pygame.Rect
   boxes["weapon"] = new pygame.Rect(x_icon, 2, w - 8 - x_icon, f.get_height() + 2);
   // status-bar cells (only when enabled) - mirror render._draw_status_bar
   if (state.cfg.is_on("STATUS_BAR")) {
-    const maxv = t.health <= 0 ? 0 : Math.trunc(t.power) * 10;
+    const maxv = maxPower(t.health);
     const batt = t.inventory[weapons.SLOT_BATTERY];
     const para = t.inventory[weapons.SLOT_PARACHUTE];
     let shld_n = 0;
@@ -881,7 +882,7 @@ function _handle_hud_click(state: GameState, e: IngameEvent): string | null {
   let r = boxes["power"];
   if (r !== undefined && r.collidepoint(pos)) {
     const before = t.power;
-    t.power = Math.trunc(Math.max(0, Math.min(1000, t.power + (inc ? 1 : -1))));
+    t.power = clampPower(t.health, t.power + (inc ? 1 : -1));
     sfx.adjustment("power", before, t.power, state.cfg.is_on("SOUND"));
     return "_consumed";
   }
@@ -1207,7 +1208,7 @@ export class ControlPanelScreen implements Screen {
     let y = py + 32;
     const row = 26;
 
-    // Remaining Power: spinner (player power 0..1000, step 5)
+    // Remaining Power: health-limited spinner, step 5.
     add(
       new widgets.Spinner(
         x,
@@ -1216,11 +1217,11 @@ export class ControlPanelScreen implements Screen {
         () => t.power,
         (v: number) => {
           const before = t.power;
-          t.power = Math.trunc(v);
+          t.power = clampPower(t.health, v);
           sfx.adjustment("power", before, t.power, this.state.cfg.is_on("SOUND"));
         },
         0,
-        1000,
+        maxPower(t.health),
         5,
         String,
         pw - 32,

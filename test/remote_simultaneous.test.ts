@@ -77,6 +77,19 @@ describe.each(["sequential", "simultaneous"])("precise %s guest aiming", (mode) 
     expect([tank.angle, tank.power]).toEqual([93, 314]);
   });
 
+  it("caps remote taps, held input and snapshots at damaged health", () => {
+    const { gs, key, send, adapter, states } = controller();
+    const tank = gs.tanks[0]; tank.health = 30; tank.power = 299;
+    key("Alice", "ArrowUp");
+    send("Alice", { kind: "hold", keys: ["ArrowUp"] }, 400);
+    adapter.updateAim(600);
+    expect(tank.power).toBe(300);
+    expect(states().Alice.tank).toMatchObject({ health: 30, power: 300 });
+    key("Alice", "ArrowUp", false, 610);
+    key("Alice", "ArrowUp", true, 620);
+    expect(tank.power).toBe(300);
+  });
+
   it("clamps repeated input to integer angle and power limits", () => {
     const { gs, key, send, adapter } = controller();
     const tank = gs.tanks[0];

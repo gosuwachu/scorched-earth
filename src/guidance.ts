@@ -1,5 +1,6 @@
 /** DOS 1.5 guidance. See oracle/GUIDANCE_FIDELITY.md for addresses and limits.
  * The historical Python blend-based steering is deliberately superseded. */
+import { maxPower } from "./power";
 import { PHYSICS_DT, EFF_GRAVITY_FACTOR, EFF_WIND_FACTOR, PLAYMODE_SIMULTANEOUS } from "./constants";
 import { pyRound, type Projectile, type Tank } from "./objects";
 import type { Item } from "./weapons";
@@ -178,13 +179,13 @@ export function solve_ballistic_power_launch(cfg: GuidanceCfg, tank: Tank, _weap
     const dx = tx - (tank.x + 12 * c), up = tank.y - 4 - 12 * s - ty;
     const gravity = EFF_GRAVITY_FACTOR * cfg.GRAVITY, wind = EFF_WIND_FACTOR * cfg.wind;
     const time2 = 2 * (dx * s - up * c) / (gravity * c + wind * s);
-    const cap = Math.max(0, Math.min(1000, tank.health * 10));
+    const cap = maxPower(tank.health);
     if (!Number.isFinite(time2) || Math.abs(time2) < 1e-12) continue;
     const t = Math.sqrt(Math.abs(time2));
     const speed = Math.abs(c) > 1e-8 ? Math.abs((dx - wind * time2 / 2) / (t * c)) : Math.abs((up + gravity * time2 / 2) / (t * s));
     return Math.min(cap, Math.max(0, pyRound(speed)));
   }
-  return Math.max(0, Math.min(1000, tank.health * 10));
+  return maxPower(tank.health);
 }
 export function solve_ballistic_power(state: GuidanceState, tank: Tank, weapon: Item): number | null {
   return solve_ballistic_power_launch(state.cfg, tank, weapon);

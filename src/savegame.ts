@@ -62,6 +62,7 @@
  * restore reads an untrusted user blob; JSON + explicit apply() cannot execute
  * code and the body is auditable.
  */
+import { clampPower } from "./power";
 import { CONFIG_FIELDS } from "./config";
 import { NUM_ITEMS } from "./weapons";
 
@@ -713,8 +714,8 @@ export function applyTank(
   t.y = d.y;
   t.half_width = d.half_width;
   t.angle = d.angle;
-  t.power = d.power;
   t.health = d.health;
+  t.power = clampPower(t.health, d.power);
   t.alive = d.alive;
   t.shield_hp = d.shield_hp;
   t.shield_item = d.shield_item;

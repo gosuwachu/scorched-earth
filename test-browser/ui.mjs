@@ -290,6 +290,29 @@ try {
     const t = window.onlineApp.gs.current_shooter;
     return [t.shield_push, t.shield_deflect, t.shield_laserproof, t.shield_failproof];
   }), [false, false, false, false]);
+  // Real keyboard and panel controls enforce the same health-based power cap.
+  const savedPower = await page.evaluate(async () => {
+    const { apply_fall_damage } = await import("/src/damage.ts");
+    const gs = window.onlineApp.gs, t = gs.current_shooter;
+    const saved = { health: t.health, power: t.power, inventory: [...t.inventory] };
+    t.health = 100; t.power = 1000; t.inventory[39] = 1;
+    apply_fall_damage(gs, t, 70);
+    return saved;
+  });
+  await page.keyboard.down("ArrowUp"); await page.waitForTimeout(600); await page.keyboard.up("ArrowUp");
+  assert.equal(await page.evaluate(() => window.onlineApp.gs.current_shooter.power), 300);
+  await openControls();
+  await click("Increase Remaining Power:");
+  assert.equal(await page.evaluate(() => window.onlineApp.gs.current_shooter.power), 300);
+  await shot("power-damaged");
+  await page.getByRole("button", { name: /^Batteries:/ }).click(); await settled();
+  assert.deepEqual(await page.evaluate(() => {
+    const t = window.onlineApp.gs.current_shooter; return [t.health, t.power];
+  }), [40, 300]);
+  await click("Increase Remaining Power:");
+  assert.equal(await page.evaluate(() => window.onlineApp.gs.current_shooter.power), 305);
+  await shot("power-healed"); await click("Quit");
+  await page.evaluate((saved) => Object.assign(window.onlineApp.gs.current_shooter, saved), savedPower);
   await checkGuidance(page, { shot });
   // Sell, reassign and team dialogs use the same HTML adapter and real mutations.
   await page.evaluate(async () => { const app = window.onlineApp; const s = await import("/src/screens.ts"); const w = await import("/src/weapons.ts"); app.push(new s.SellScreen(app.gs, app.gs.current_shooter, w.SLOT_BATTERY, app.w, app.h)); });

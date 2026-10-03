@@ -1,3 +1,4 @@
+import { maxPower } from "./power";
 import type { ControllerView } from "../shared/online";
 import { hudAngle } from "./angles";
 import { button, el } from "./html/components";
@@ -95,7 +96,10 @@ export class BattleControls {
     }
     const offset = (90 - tank.angle) / 180 * 100;
     this.angle.update(tank.angle, `Angle ${elevation}${side}`, 50 + Math.min(0, offset), Math.abs(offset), `${elevation}° ${side}`);
-    this.power.update(tank.power, `Power ${tank.power}`, 0, tank.power / 10, String(tank.power));
+    const cap = maxPower(tank.health);
+    this.power.setMax(cap);
+    this.power.update(tank.power, `Power ${tank.power} of ${cap}`, 0,
+      cap > 0 ? tank.power / cap * 100 : 0, `${tank.power} / ${cap}`);
   }
 
   updateMovement(view: ControllerView, enabled: boolean): void {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { openHostMenu, closeHostMenu } from "./dialogs.mjs";
-import { checkPreciseAim, checkResults, checkWeaponSelector } from "./online_battle.mjs";
+import { checkPreciseAim, checkHealthPower, checkResults, checkWeaponSelector } from "./online_battle.mjs";
 
 export async function checkSimultaneous({ host, a, b, base, root, click, enabled, until, pause }) {
   await host.evaluate(() => {
@@ -40,6 +40,7 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   });
   await until(async () => await enabled(a, "Fire") && await enabled(b, "Fire"), "both controllers enabled");
   await checkPreciseAim({ host, page: a, until });
+  await checkHealthPower({ host, page: a, until, root });
   assert.equal(await a.getByRole("button", { name: "Tank Control Panel", exact: true }).count(), 0);
   assert.equal(await b.getByRole("button", { name: "Inventory", exact: true }).count(), 0);
   const angles = () => host.evaluate(() => window.onlineApp.gs.tanks.map((t) => t.angle));
