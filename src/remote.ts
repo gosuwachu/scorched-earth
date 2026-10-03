@@ -11,7 +11,7 @@ import * as movement from "./movement";
 import { TANK_DEFAULT_HEALTH } from "./constants";
 import * as targeting from "./targeting";
 import { ShopScreen, InventoryScreen, SellScreen } from "./screens";
-import { RemoteAimRepeat } from "./remote_aim";
+import { RemoteAimRepeat, RemoteTargetRepeat } from "./remote_aim";
 import { sfx } from "./sound";
 
 const keyCodes: Record<string, number> = {
@@ -27,13 +27,16 @@ export class RemoteHold {
   keys: Record<number, boolean> = {};
   private until = 0;
   private aim = new RemoteAimRepeat();
-  clear(): void { this.keys = {}; this.until = 0; this.aim.clear(); }
+  private target = new RemoteTargetRepeat();
+  clear(): void { this.keys = {}; this.until = 0; this.aim.clear(); this.target.clear(); }
   set(names: string[], now: number): void {
     this.get(now);
     this.keys = {};
     for (const name of names) if (keyCodes[name]) this.keys[keyCodes[name]] = true;
     this.aim.set(Number(!!this.keys[pg.K_LEFT]) - Number(!!this.keys[pg.K_RIGHT]),
       Number(!!this.keys[pg.K_UP]) - Number(!!this.keys[pg.K_DOWN]), now);
+    this.target.set(Number(!!this.keys[pg.K_RIGHT]) - Number(!!this.keys[pg.K_LEFT]),
+      Number(!!this.keys[pg.K_DOWN]) - Number(!!this.keys[pg.K_UP]), now);
     this.until = now + 500;
   }
   get(now: number): Record<number, boolean> {
@@ -43,6 +46,10 @@ export class RemoteHold {
   repeat(now: number): { angle: number; power: number } {
     this.get(now);
     return this.aim.take(now);
+  }
+  repeatTarget(now: number): { x: number; y: number } {
+    this.get(now);
+    return this.target.take(now);
   }
 }
 
@@ -97,8 +104,13 @@ export class RemoteAdapter {
     }
     const gs = this.app.gs as unknown as GameState | null;
     if (!this.enabled || this.app.onlineScreen !== "battle" || gs?.phase !== "aim" ||
-        gs.pendingTarget || gs.plasma_charge || !gs.current_shooter) return;
+        gs.plasma_charge || !gs.current_shooter) return;
     this.keys(now);
+    if (gs.pendingTarget) {
+      const delta = this.hold.repeatTarget(now);
+      this.moveTarget(gs, delta.x, delta.y);
+      return;
+    }
     const delta = this.hold.repeat(now);
     const tank = gs.current_shooter;
     const beforeAngle = tank.angle, beforePower = tank.power;
@@ -171,6 +183,16 @@ export class RemoteAdapter {
     return keys;
   }
 
+  private moveTarget(gs: GameState, dx: number, dy: number): void {
+    const pending = gs.pendingTarget;
+    if (!pending || (!dx && !dy)) return;
+    const [x, y] = pending.point ?? [Math.floor(gs.w / 2), Math.floor(gs.h / 2)];
+    const nextX = Math.max(0, Math.min(gs.w - 1, x + dx));
+    const nextY = Math.max(0, Math.min(gs.h - 2, y + dy));
+    // A blocked nudge must not detach a selected tank at the field edge.
+    if (!pending.point || x !== nextX || y !== nextY) targeting.setPoint(gs, nextX, nextY);
+  }
+
   private key(name: string, down: boolean): void {
     const code = keyCodes[name];
     if (!code) return;
@@ -190,7 +212,10 @@ export class RemoteAdapter {
       if (down && name.startsWith("Digit")) {
         const n = name === "Digit0" ? 10 : Number(name.slice(5));
         const t = targeting.tanks(gs)[n - 1];
-        if (t) targeting.selectTank(gs, t);
+        if (t) { this.release(); targeting.selectTank(gs, t); }
+      } else if (down) {
+        this.moveTarget(gs, Number(name === "ArrowRight") - Number(name === "ArrowLeft"),
+          Number(name === "ArrowDown") - Number(name === "ArrowUp"));
       }
       return;
     }
@@ -323,18 +348,14 @@ export class RemoteAdapter {
       }
       if (gs.pendingTarget) {
         const p = gs.pendingTarget;
-        this.add({ id: "target-instructions", kind: "label", label: "Choose a tank or enter a point. Confirm to fire." });
+        this.add({ id: "target-instructions", kind: "label", label: "Choose a tank or use the arrows to position the target. Confirm to fire." });
         for (const [i, tank] of targeting.tanks(gs).entries()) {
           this.add({ id: `target-tank-${tank.player_index}`, kind: "button", label: `${i + 1}: ${tank.name}` },
-            () => targeting.selectTank(gs, tank));
+            () => { this.release(); targeting.selectTank(gs, tank); });
         }
         for (const [axis, label, max, value] of [[0, "Target X", gs.w - 1, p.point?.[0] ?? Math.floor(gs.w / 2)],
           [1, "Target Y", gs.h - 2, p.point?.[1] ?? Math.floor(gs.h / 2)]] as const) {
-          this.add({ id: `target-${axis}`, kind: "number", label, min: 0, max, step: 1, value }, (v) => {
-            if (typeof v !== "number") return;
-            const point: [number, number] = p.point ? [...p.point] : [Math.floor(gs.w / 2), Math.floor(gs.h / 2)];
-            point[axis] = v; targeting.setPoint(gs, ...point);
-          });
+          this.add({ id: `target-${axis}`, kind: "readout", label, min: 0, max, value });
         }
         this.add({ id: "target-fire", kind: "button", label: "Fire at target", presentation: { footer: true, primary: true }, disabled: !p.point }, () => targeting.confirm(gs));
         this.add({ id: "target-cancel", kind: "button", label: "Cancel targeting", presentation: { footer: true } }, () => targeting.cancel(gs));

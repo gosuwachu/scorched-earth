@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { checkBattleControls, checkPreciseAim, checkResults, checkDisabledBattle, checkMovement } from "./online_battle.mjs";
 import { checkGuestEquipment, checkPanelLayout } from "./online_panel.mjs";
+import { checkTargetArrows } from "./online_targeting.mjs";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
 import { purchaseButton, checkHostShopping, checkShopRows, checkShopLayout, checkShopEdges, checkNoGuestActions, checkGuestReconnect } from "./online_shop.mjs";
@@ -339,24 +340,19 @@ try {
   assert.equal(await enabled(b, "Fire at target"), false);
   await host.locator("[data-targeting]").waitFor({ state: "visible" });
   await assertCompactTargetHud(host, false);
-  await a.getByRole("button", { name: /^\d+: Bob$/ }).click();
-  await until(async () => await host.evaluate(() => window.onlineApp.gs.pendingTarget?.target?.name) === "Bob", "target draft");
-  const xField = a.getByLabel("Target X", { exact: true });
-  for (const value of ["", "-1", "99999", "1.5"]) {
-    await xField.fill(value);
-    assert.equal(await enabled(a, "Fire at target"), false);
-  }
-  await xField.fill("200"); await xField.press("Tab");
-  await a.getByLabel("Target Y", { exact: true }).fill("100");
-  await a.getByLabel("Target Y", { exact: true }).press("Tab");
-  await until(async () => await host.evaluate(() => JSON.stringify(window.onlineApp.gs.pendingTarget?.point)) === "[200,100]", "coordinate draft");
+  const targetPoint = await checkTargetArrows({ page: a, host, waiting: b, until });
+  await a.keyboard.down("ArrowLeft");
+  await until(async () => (await host.evaluate(() => window.onlineApp.gs.pendingTarget.point))[0] < targetPoint[0], "target moving before pause");
   await openHostMenu(host);
   await until(async () => (await a.locator(".lan-status").textContent()).includes("Paused by host"), "targeting paused");
-  assert.deepEqual(await host.evaluate(() => window.onlineApp.gs.pendingTarget.point), [200, 100]);
+  const pausedPoint = await host.evaluate(() => window.onlineApp.gs.pendingTarget.point);
+  await a.waitForTimeout(600);
+  assert.deepEqual(await host.evaluate(() => window.onlineApp.gs.pendingTarget.point), pausedPoint);
+  await a.keyboard.up("ArrowLeft");
   await closeHostMenu(host);
   await until(() => enabled(a, "Fire at target"), "targeting resumes");
-  assert.equal(await a.getByLabel("Target X", { exact: true }).inputValue(), "200");
-  assert.equal(await a.getByLabel("Target Y", { exact: true }).inputValue(), "100");
+  assert.equal(await a.getByLabel("Target X", { exact: true }).innerText(), String(pausedPoint[0]));
+  assert.equal(await a.getByLabel("Target Y", { exact: true }).innerText(), String(pausedPoint[1]));
   await a.screenshot({ path: `${root}/test-browser/out/online-guidance.png`, fullPage: true });
   await host.screenshot({ path: `${root}/test-browser/out/online-guidance-host.png` });
   // Lost network on the active player's turn leaves the game waiting.
@@ -366,8 +362,8 @@ try {
   await contextA.setOffline(false);
   await a.reload();
   await until(() => enabled(a, "Fire at target"), "rejoin target selection");
-  assert.equal(await a.getByLabel("Target X", { exact: true }).inputValue(), "200");
-  assert.equal(await a.getByLabel("Target Y", { exact: true }).inputValue(), "100");
+  assert.equal(await a.getByLabel("Target X", { exact: true }).innerText(), String(pausedPoint[0]));
+  assert.equal(await a.getByLabel("Target Y", { exact: true }).innerText(), String(pausedPoint[1]));
   const replacement = await contextA.newPage(); wireErrors(replacement);
   await replacement.goto(joinUrl);
   await until(() => enabled(replacement, "Fire at target"), "replacement controller");

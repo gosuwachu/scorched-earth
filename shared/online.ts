@@ -18,7 +18,7 @@ export interface RoomView {
 export interface Control {
   id: string;
   label: string;
-  kind: "button" | "number" | "select" | "toggle" | "label";
+  kind: "button" | "number" | "readout" | "select" | "toggle" | "label";
   value?: number | boolean;
   min?: number;
   max?: number;

@@ -71,3 +71,55 @@ describe("guest hold timing", () => {
     }
   });
 });
+
+describe("guest target hold timing", () => {
+  it("delays for 350 ms, moves both axes equally and retains fractions across frame rates", () => {
+    for (const interval of [10, 20, 100]) {
+      const hold = new RemoteHold();
+      const total = { x: 0, y: 0 };
+      hold.set(["ArrowRight", "ArrowUp"], 0);
+      for (let now = interval; now <= 1000; now += interval) {
+        hold.set(["ArrowRight", "ArrowUp"], now);
+        const delta = hold.repeatTarget(now);
+        if (now <= 350) expect(delta).toEqual({ x: 0, y: 0 });
+        total.x += delta.x; total.y += delta.y;
+      }
+      expect(total).toEqual({ x: 62, y: -62 });
+      expect(hold.repeatTarget(1000)).toEqual({ x: 0, y: 0 });
+    }
+  });
+
+  it("caps both axes at 250 pixels per second", () => {
+    const hold = new RemoteHold();
+    hold.set(["ArrowLeft", "ArrowDown"], 0);
+    for (let now = 100; now <= 3000; now += 100) hold.set(["ArrowLeft", "ArrowDown"], now);
+    hold.repeatTarget(3000);
+    for (let now = 3100; now <= 4000; now += 100) hold.set(["ArrowLeft", "ArrowDown"], now);
+    expect(hold.repeatTarget(4000)).toEqual({ x: -250, y: 250 });
+  });
+
+  it("cancels opposing directions and restarts the delay on reversal or re-press", () => {
+    const hold = new RemoteHold();
+    hold.set(["ArrowRight"], 0);
+    hold.set(["ArrowRight"], 400);
+    expect(hold.repeatTarget(600)).toEqual({ x: 13, y: 0 });
+    hold.set(["ArrowLeft", "ArrowRight"], 610);
+    expect(hold.repeatTarget(700)).toEqual({ x: 0, y: 0 });
+    hold.set(["ArrowLeft"], 710);
+    expect(hold.repeatTarget(1060)).toEqual({ x: 0, y: 0 });
+    hold.set(["ArrowLeft"], 1100);
+    expect(hold.repeatTarget(1160)).toEqual({ x: -3, y: 0 });
+    hold.set([], 1170); hold.set(["ArrowLeft"], 1180);
+    expect(hold.repeatTarget(1530)).toEqual({ x: 0, y: 0 });
+  });
+
+  it.each([false, true])("stops and resets after explicit release=%s or heartbeat expiry", (release) => {
+    const hold = new RemoteHold();
+    hold.set(["ArrowDown"], 0); hold.set(["ArrowDown"], 400);
+    expect(hold.repeatTarget(600).y).toBeGreaterThan(0);
+    if (release) hold.clear();
+    expect(hold.repeatTarget(900)).toEqual({ x: 0, y: 0 });
+    hold.set(["ArrowDown"], 1000);
+    expect(hold.repeatTarget(1350)).toEqual({ x: 0, y: 0 });
+  });
+});

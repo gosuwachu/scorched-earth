@@ -1214,9 +1214,11 @@ class GameScreen extends Screen {
         _keyGetPressed(),
         dt,
       );
-    } else if (this._is_human_turn() && !(gs as unknown as import("./game").GameState).pendingTarget) {
+    } else if (this._is_human_turn()) {
       if (this.app.online) this.app.online.updateAim();
-      else ingame.update_game_input(gs as never, dt, _keyGetPressed() as never);
+      else if (!(gs as unknown as import("./game").GameState).pendingTarget) {
+        ingame.update_game_input(gs as never, dt, _keyGetPressed() as never);
+      }
     }
     (gs as unknown as { update(dt: number): void }).update(dt);
     if (gs.phase === ROUND_END) {

@@ -123,6 +123,21 @@ export async function checkPanelLayout(page, root, name) {
     assert.ok(layout.actions.every((r) => Math.abs(r.top - layout.actions[0].top) < 1 &&
       Math.abs(r.bottom - layout.actions[0].bottom) < 1), `${name}: footer buttons align at ${width}px`);
     assert.ok(layout.fields.every((r) => r.width >= 44 && r.height >= 44), `${name}: accessible touch targets`);
+    if (name === "targeting") {
+      const target = await page.locator(".lan-target-position").evaluate((node) => {
+        const rect = (selector) => node.querySelector(selector).getBoundingClientRect().toJSON();
+        return {
+          readouts: [...node.querySelectorAll("output")].map((output) => output.getBoundingClientRect().toJSON()),
+          up: rect("[data-key=ArrowUp]"), down: rect("[data-key=ArrowDown]"),
+          left: rect("[data-key=ArrowLeft]"), right: rect("[data-key=ArrowRight]"),
+        };
+      });
+      assert.equal(target.readouts.length, 2);
+      assert.ok(target.readouts.every((r) => r.bottom <= target.up.top && r.right <= width), "coordinates sit above the arrows");
+      assert.ok(target.up.bottom <= target.down.top && Math.abs(target.up.x - target.down.x) < 1, "up sits above down");
+      assert.ok(target.left.right <= target.down.left && target.down.right <= target.right.left &&
+        Math.abs(target.left.top - target.down.top) < 1 && Math.abs(target.right.top - target.down.top) < 1, "left/down/right share the lower row");
+    }
     await page.screenshot({ path: `${root}/test-browser/out/online-${name}-${width}.png`, fullPage: true });
   }
   await page.setViewportSize(original);

@@ -13,6 +13,7 @@ interface ControlNode {
   field?: HTMLInputElement | HTMLSelectElement;
   button?: HTMLButtonElement;
   label?: HTMLElement;
+  readout?: HTMLOutputElement;
   kind: Control["kind"];
   options?: string;
   optionSlots?: (number | null)[];
@@ -54,6 +55,10 @@ export function startController(roomId: string): void {
   const battleLabels: Record<string, string> = {
     BracketLeft: "◀", Tab: "▶",
   };
+  const targetLabels: Record<string, [string, string]> = {
+    ArrowUp: ["↑", "Move target up"], ArrowLeft: ["←", "Move target left"],
+    ArrowDown: ["↓", "Move target down"], ArrowRight: ["→", "Move target right"],
+  };
   let name: HTMLInputElement;
   let readyButton: HTMLButtonElement;
   let roster: Roster;
@@ -76,10 +81,12 @@ export function startController(roomId: string): void {
     for (const b of heldButtons.values()) b.dataset.held = "false";
   };
   const key = (code: string, down: boolean): void => {
-    if (view?.movement?.active && !view.movement.available && (code === "ArrowLeft" || code === "ArrowRight")) return;
+    if (!view?.targeting && view?.movement?.active && !view.movement.available && (code === "ArrowLeft" || code === "ArrowRight")) return;
     if (!allowed() || (view?.keys && !view.keys.includes(code)) ||
-        (view?.screen !== "Battle" && code !== "Escape") ||
-        (view?.targeting && code !== "Escape" && !code.startsWith("Digit")) || (down && held.has(code))) return;
+        (view?.screen !== "Battle" && !view?.targeting && code !== "Escape") ||
+        (view?.targeting && !targetLabels[code] && code !== "Escape" && !code.startsWith("Digit")) ||
+        (down ? held.has(code) : !held.has(code))) return;
+    if (down && view?.targeting && code.startsWith("Digit")) release();
     if (down) held.add(code); else held.delete(code);
     send({ kind: "key", key: code, down });
     const b = heldButtons.get(code);
@@ -98,11 +105,16 @@ export function startController(roomId: string): void {
     const normalBattle = view?.screen === "Battle" && !view.targeting && !view.controls.some((c) => c.id === "plasma-charge");
     const dialogEscape = ["Tank controls", "Retreat"].includes(view?.screen ?? "");
     for (const [code, b] of heldButtons) {
-      const relevant = (normalBattle && code !== "Enter") || (dialogEscape && code === "Escape");
+      const targetArrow = !!view?.targeting && !!targetLabels[code];
+      const relevant = targetArrow || (normalBattle && code !== "Enter") || (dialogEscape && code === "Escape");
       b.hidden = !relevant || (!!view?.keys && !view.keys.includes(code));
-      b.disabled = b.hidden || !allowed() || (!!view?.movement?.active && !view.movement.available &&
+      b.disabled = b.hidden || !allowed() || (!view?.targeting && !!view?.movement?.active && !view.movement.available &&
         (code === "ArrowLeft" || code === "ArrowRight"));
-      if (normalBattle) {
+      if (targetArrow) {
+        b.textContent = targetLabels[code][0];
+        b.setAttribute("aria-label", targetLabels[code][1]);
+        b.title = targetLabels[code][1];
+      } else if (normalBattle) {
         const moving = view?.movement?.active;
         const label = moving && code === "ArrowLeft" ? "Move left" : moving && code === "ArrowRight" ? "Move right" : keyLabels.get(code)!;
         b.textContent = battleLabels[code] || label;
@@ -115,14 +127,10 @@ export function startController(roomId: string): void {
       if (view) battle.updateMovement(view, allowed());
       keys.hidden = !allowed() || !dialogEscape;
     }
-    const invalidTarget = ["target-0", "target-1"].some((id) => {
-      const field = controlNodes.get(id)?.field;
-      return field instanceof HTMLInputElement && (!field.value || !field.validity.valid);
-    });
     for (const [id, record] of controlNodes) {
       const c = view?.controls.find((c) => c.id === id);
       if (record.field) record.field.disabled = !allowed() || !!c?.disabled;
-      if (record.button) record.button.disabled = !allowed() || !!c?.disabled || (id === "target-fire" && invalidTarget);
+      if (record.button) record.button.disabled = !allowed() || !!c?.disabled;
     }
     shop?.setEnabled(allowed());
     if (readyButton) readyButton.disabled = !connection.connected || !room?.hostConnected;
@@ -221,10 +229,19 @@ export function startController(roomId: string): void {
       node.dataset.controlId = c.id;
       record = { node, kind: c.kind };
       if (c.kind === "button") {
-        record.button = button(c.label, () => send({ kind: "control", id: c.id }));
+        record.button = button(c.label, () => {
+          if (view?.targeting) release();
+          send({ kind: "control", id: c.id });
+        });
         node.append(record.button);
       } else if (c.kind === "label") node.textContent = c.label;
-      else {
+      else if (c.kind === "readout") {
+        node.classList.add("lan-aim-group");
+        record.label = el("span", "", "lan-battle-label");
+        record.readout = el("output", "", "lan-coordinate-value");
+        record.readout.setAttribute("aria-live", "off");
+        node.append(record.label, record.readout);
+      } else {
         const label = el("label"); const text = el("span");
         const field = c.kind === "select" ? el("select") : el("input");
         if (field instanceof HTMLInputElement) field.type = c.kind === "toggle" ? "checkbox" : "number";
@@ -284,6 +301,10 @@ export function startController(roomId: string): void {
     record.node.classList.toggle("lan-owned-row", c.id.startsWith("owned-"));
     record.node.classList.toggle("lan-toggle", c.kind === "toggle");
     if (record.label) record.label.textContent = c.label;
+    if (record.readout) {
+      record.readout.value = String(c.value ?? "");
+      record.readout.setAttribute("aria-label", c.label);
+    }
     if (c.kind === "label") record.node.textContent = c.label;
     const field = record.field;
     field?.setAttribute("aria-label", c.label);
@@ -327,7 +348,7 @@ export function startController(roomId: string): void {
     shop.element.hidden = !useShop;
     const useBattle = !!t && view.screen === "Battle" && !view.targeting &&
       !view.controls.some((c) => c.id === "plasma-charge");
-    if (useBattle !== battleLayout) {
+    if (useBattle !== battleLayout || screenChanged) {
       release();
       battleLayout = useBattle;
       root.classList.toggle("lan-controller-battle", useBattle);
@@ -335,7 +356,8 @@ export function startController(roomId: string): void {
       for (const [code, b] of heldButtons) {
         b.textContent = (useBattle && battleLabels[code]) || keyLabels.get(code)!;
         b.title = keyLabels.get(code)!;
-        if (!useBattle || code === "Enter") keys.append(b);
+        if (view.targeting && targetLabels[code]) panel.targetKeys.append(b);
+        else if (!useBattle || code === "Enter") keys.append(b);
         else battle.mountKey(code, b);
       }
     }
@@ -405,7 +427,8 @@ export function startController(roomId: string): void {
   });
   window.addEventListener("keydown", (e) => {
     if (!gameBuilt || e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-    if (view?.screen !== "Battle" && e.code !== "Escape") return;
+    if (view?.screen !== "Battle" && !view?.targeting && e.code !== "Escape") return;
+    if (view?.targeting && !targetLabels[e.code] && e.code !== "Escape" && !e.code.startsWith("Digit")) return;
     // Native navigation/activation must work for the disclosure and focused controls.
     // Tab cycles weapons only when focus is outside an interactive control.
     if (e.target instanceof Element && e.target.closest("button, summary") &&

@@ -236,6 +236,21 @@ body.lan-phone { min-height: 100dvh; }
 .lan-panel .lan-keys button { min-height: 44px; flex: 1; }
 .lan-panel .lan-toggle label { min-height: 44px; display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: pointer; }
 .lan-panel .lan-owned-row { padding: 8px 0; border-bottom: 1px solid var(--ui-lo); font-variant-numeric: tabular-nums; }
+.lan-target-readouts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.lan-coordinate-value {
+  display: grid; place-items: center; min-height: 44px; font-variant-numeric: tabular-nums;
+  font-weight: bold; font-size: 1.3em; color: var(--ui-selection); background: var(--ui-field);
+  border: 2px solid; border-color: var(--ui-lo) var(--ui-hi) var(--ui-hi) var(--ui-lo);
+}
+.lan-target-directions {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px;
+  grid-template-areas: ". up ." "left down right";
+}
+.lan-target-directions button { min-height: 44px; width: 100%; font-size: 1.4em; touch-action: none; user-select: none; -webkit-user-select: none; }
+.lan-target-directions [data-key=ArrowUp] { grid-area: up; }
+.lan-target-directions [data-key=ArrowLeft] { grid-area: left; }
+.lan-target-directions [data-key=ArrowDown] { grid-area: down; }
+.lan-target-directions [data-key=ArrowRight] { grid-area: right; }
 .se-ui .lan-primary button { background: var(--ui-selection); color: var(--ui-title); }
 .se-ui .lan-primary button:disabled { background: var(--ui-bg); color: var(--ui-lo); }
 @media (min-width: 760px) {

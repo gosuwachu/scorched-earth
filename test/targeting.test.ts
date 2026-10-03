@@ -9,6 +9,7 @@ import * as ingame from "../src/ingame";
 import * as pg from "../src/pygame";
 import { RemoteAdapter } from "../src/remote";
 import type { App } from "../src/main";
+import type { Input } from "../shared/online";
 
 function game(slot = 37, mode = "SEQUENTIAL") {
   const cfg = new Config();
@@ -149,5 +150,136 @@ describe("online targeting authority", () => {
     remote.receive("0", resumed.context, 2, { kind: "control", id: "target-fire" });
     remote.receive("0", resumed.context, 2, { kind: "control", id: "target-fire" });
     expect(gs.projectiles).toHaveLength(1); expect(gs.tanks[0].inventory[37]).toBe(1);
+  });
+});
+
+// Guest ergonomics/ownership regression checks, not DOS input fixtures.
+describe("online target arrows", () => {
+  function setup(mode = "SEQUENTIAL") {
+    const gs = game(37, mode); gs.fire();
+    const app = { gs, top: {}, onlineScreen: "battle", transitioning: false, onlineMenuOpen: false,
+      handleRemote: (event: ingame.IngameEvent) => ingame.handle_game_event(gs as never, event),
+      _act: () => {} };
+    const roster = gs.tanks.map((t, i) => ({ id: String(i), name: t.name, icon: 0, ai: 0, ready: true, connected: true }));
+    const remote = new RemoteAdapter(app as unknown as App, roster);
+    const view = () => remote.states(roster)["0"];
+    let seq = 0;
+    const send = (input: Input, now = 0) => remote.receive("0", view().context, ++seq, input, now);
+    const key = (key: string, down = true, now = 0) => send({ kind: "key", key, down }, now);
+    return { gs, app, roster, remote, view, send, key };
+  }
+
+  it("publishes read-only center coordinates without selecting or accepting coordinate edits", () => {
+    const { gs, view, send, remote } = setup();
+    expect(view().controls.find((c) => c.id === "target-0")).toMatchObject({ kind: "readout", value: 160, min: 0, max: 319 });
+    expect(view().controls.find((c) => c.id === "target-1")).toMatchObject({ kind: "readout", value: 120, min: 0, max: 238 });
+    expect(view().controls.find((c) => c.id === "target-fire")?.disabled).toBe(true);
+    send({ kind: "control", id: "target-0", value: 10 });
+    send({ kind: "hold", keys: ["ArrowRight"] });
+    remote.updateAim(400);
+    expect(gs.pendingTarget?.point).toBeNull();
+  });
+
+  it.each(["SEQUENTIAL", "SYNCHRONOUS"])("nudges one pixel per tap in %s without changing tank aim or fuel", (mode) => {
+    const { gs, view, key, remote } = setup(mode);
+    const t = gs.tanks[0], fuel = t.fuel;
+    let now = 0;
+    for (const [code, expected] of [
+      ["ArrowRight", [161, 120]], ["ArrowUp", [161, 119]],
+      ["ArrowLeft", [160, 119]], ["ArrowDown", [160, 120]],
+    ] as const) {
+      key(code, true, now); key(code, true, now); // Browser key-repeat cannot add a second tap.
+      key(code, false, now + 10); remote.updateAim(now + 400);
+      expect(gs.pendingTarget?.point).toEqual(expected);
+      now += 500;
+    }
+    expect(view().controls.find((c) => c.id === "target-fire")?.disabled).toBe(false);
+    expect([t.angle, t.power, t.fuel]).toEqual([45, 250, fuel]);
+  });
+
+  it("moves held arrows on host frames and stops immediately on release", () => {
+    const { gs, key, send, remote } = setup();
+    key("ArrowRight"); key("ArrowUp");
+    remote.updateAim(350); expect(gs.pendingTarget?.point).toEqual([161, 119]);
+    send({ kind: "hold", keys: ["ArrowRight", "ArrowUp"] }, 400);
+    remote.updateAim(600); expect(gs.pendingTarget?.point).toEqual([174, 106]);
+    key("ArrowRight", false, 610); key("ArrowUp", false, 610);
+    remote.updateAim(1000); expect(gs.pendingTarget?.point).toEqual([174, 106]);
+    expect([gs.tanks[0].angle, gs.tanks[0].power]).toEqual([45, 250]);
+  });
+
+  it("clamps every edge and only detaches a tank when a nudge changes its point", () => {
+    const { gs, key, send, remote } = setup();
+    gs.tanks[1].x = 0; gs.tanks[1].y = 0;
+    send({ kind: "control", id: "target-tank-1" });
+    key("ArrowLeft"); key("ArrowUp");
+    expect(gs.pendingTarget?.point).toEqual([0, 0]);
+    expect(gs.pendingTarget?.target).toBe(gs.tanks[1]);
+    key("ArrowLeft", false); key("ArrowUp", false); key("ArrowRight");
+    expect(gs.pendingTarget?.point).toEqual([1, 0]);
+    expect(gs.pendingTarget?.target).toBeNull();
+    key("ArrowDown");
+    for (let now = 100; now <= 3000; now += 100) {
+      send({ kind: "hold", keys: ["ArrowRight", "ArrowDown"] }, now); remote.updateAim(now);
+    }
+    expect(gs.pendingTarget?.point).toEqual([319, 238]);
+    key("ArrowRight", false, 3010); key("ArrowDown", false, 3010);
+    key("ArrowLeft", true, 3020); key("ArrowUp", true, 3020);
+    expect(gs.pendingTarget?.point).toEqual([318, 237]);
+  });
+
+  it.each(["button", "digit"])("selecting a tank via %s stops a held nudge", (method) => {
+    const { gs, key, send, remote } = setup();
+    key("ArrowLeft"); send({ kind: "hold", keys: ["ArrowLeft"] }, 400);
+    remote.updateAim(600);
+    if (method === "button") send({ kind: "control", id: "target-tank-1" }, 610);
+    else key("Digit2", true, 610);
+    send({ kind: "hold", keys: ["ArrowLeft"] }, 700); remote.updateAim(800);
+    expect(gs.pendingTarget?.point).toEqual([260, 200]);
+    expect(gs.pendingTarget?.target).toBe(gs.tanks[1]);
+  });
+
+  it("rejects other players, stale contexts and replayed arrow presses", () => {
+    const { gs, view, remote } = setup();
+    const context = view().context;
+    const input: Input = { kind: "key", key: "ArrowRight", down: true };
+    remote.receive("1", context, 1, input, 0);
+    remote.receive("0", context - 1, 1, input, 0);
+    expect(gs.pendingTarget?.point).toBeNull();
+    remote.receive("0", context, 1, input, 0);
+    remote.receive("0", context, 2, { ...input, down: false }, 10);
+    remote.receive("0", context, 1, input, 20);
+    expect(gs.pendingTarget?.point).toEqual([161, 120]);
+  });
+
+  it.each(["expiry", "disconnect", "pause"])("preserves the draft but drops held movement after %s", (reason) => {
+    const { gs, key, send, remote, app, roster, view } = setup();
+    key("ArrowRight"); send({ kind: "hold", keys: ["ArrowRight"] }, 400);
+    remote.updateAim(600);
+    const point = [...gs.pendingTarget!.point!];
+    if (reason === "disconnect") { roster[0].connected = false; view(); roster[0].connected = true; view(); }
+    if (reason === "pause") { app.onlineMenuOpen = true; view(); app.onlineMenuOpen = false; view(); }
+    remote.updateAim(900);
+    send({ kind: "hold", keys: ["ArrowRight"] }, 1000); remote.updateAim(1200);
+    expect(gs.pendingTarget?.point).toEqual(point);
+    key("ArrowRight", true, 1300);
+    expect(gs.pendingTarget?.point).toEqual([point[0] + 1, point[1]]);
+  });
+
+  it.each(["target-cancel", "Escape", "target-fire", "turn"])("drops held target input on %s without leaking into aim", (exit) => {
+    const { gs, key, send, remote, view } = setup();
+    key("ArrowRight"); send({ kind: "hold", keys: ["ArrowRight"] }, 400); remote.updateAim(600);
+    const context = view().context;
+    if (exit === "Escape") key("Escape", true, 610);
+    else if (exit === "turn") { gs.current_shooter = gs.tanks[1]; view(); }
+    else send({ kind: "control", id: exit }, 610);
+    remote.receive("0", context, 100, { kind: "key", key: "ArrowUp", down: true }, 700);
+    remote.updateAim(800);
+    expect(Object.keys(remote.keys(800))).toHaveLength(0);
+    expect([gs.tanks[0].angle, gs.tanks[0].power]).toEqual([45, 250]);
+    if (exit !== "turn") {
+      expect(gs.pendingTarget).toBeNull();
+      expect(gs.tanks[0].inventory[37]).toBe(exit === "target-fire" ? 1 : 2);
+    }
   });
 });

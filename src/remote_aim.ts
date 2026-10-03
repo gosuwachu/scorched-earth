@@ -42,3 +42,20 @@ export class RemoteAimRepeat {
     return { angle: this.angle.take(now), power: this.power.take(now) };
   }
 }
+
+/** Screen coordinates use the power ramp equally in both directions. */
+export class RemoteTargetRepeat {
+  private x = new RepeatAxis(25, 220, 250);
+  private y = new RepeatAxis(25, 220, 250);
+
+  set(x: number, y: number, now: number): void {
+    this.x.set(x, now);
+    this.y.set(y, now);
+  }
+
+  clear(): void { this.set(0, 0, 0); }
+
+  take(now: number): { x: number; y: number } {
+    return { x: this.x.take(now), y: this.y.take(now) };
+  }
+}
