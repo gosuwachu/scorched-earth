@@ -167,6 +167,7 @@ try {
   assert.ok(await page.getByRole("heading", { name: "Player 3 (of 3)", exact: true }).isVisible());
   await nameInput.fill("Charlie"); await click("Done");
   assert.equal(await page.evaluate(() => window.onlineApp.top.constructor.name), "ShopScreen");
+  for (const name of ["^", "v"]) assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
   assert.equal(await page.evaluate(() => window.onlineApp.gs.tanks.length), 3);
   assert.equal(await page.evaluate(() => window.onlineApp.gs.cfg.MAXROUNDS), 2);
   const cash = await page.evaluate(() => window.onlineApp.top.tank.cash);

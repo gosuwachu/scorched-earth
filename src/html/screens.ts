@@ -74,6 +74,8 @@ export class ScreenContent implements Component<boolean> {
       }, { passive: false });
     }
     if (screen instanceof S.ShopScreen) {
+      view.hide(screen._scroll_up, true);
+      view.hide(screen._scroll_dn, true);
       const name = el("strong"); name.style.color = `rgb(${TEAM_RGB[(screen.tank.player_index ?? 0) % TEAM_RGB.length].join(",")})`;
       const cash = el("strong"); const rounds = el("span");
       const bar = el("div"); bar.style.display = "flex"; bar.style.justifyContent = "space-between"; bar.append(name, cash, rounds);

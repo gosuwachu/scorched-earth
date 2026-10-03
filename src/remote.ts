@@ -7,6 +7,8 @@ import * as pg from "./pygame";
 import * as W from "./widgets";
 import * as ingame from "./ingame";
 import * as weapons from "./weapons";
+import * as movement from "./movement";
+import { TANK_DEFAULT_HEALTH } from "./constants";
 import * as targeting from "./targeting";
 import { ShopScreen, InventoryScreen, SellScreen } from "./screens";
 import { RemoteAimRepeat } from "./remote_aim";
@@ -69,6 +71,7 @@ export class RemoteAdapter {
   private names = new Set<string>();
   private simultaneous = new Map<string, SimController>();
   private menuPaused = false;
+  private movementTank?: Tank;
 
   constructor(private app: App, private roster: Player[]) {}
 
@@ -99,7 +102,7 @@ export class RemoteAdapter {
     const delta = this.hold.repeat(now);
     const tank = gs.current_shooter;
     const beforeAngle = tank.angle, beforePower = tank.power;
-    tank.angle = Math.max(0, Math.min(180, tank.angle + delta.angle));
+    tank.angle = Math.max(0, Math.min(180, tank.angle + (gs.move_mode ? 0 : delta.angle)));
     tank.power = Math.max(0, Math.min(1000, tank.power + delta.power));
     sfx.adjustment("angle", beforeAngle, tank.angle, gs.cfg.is_on("SOUND"));
     sfx.adjustment("power", beforePower, tank.power, gs.cfg.is_on("SOUND"));
@@ -227,21 +230,32 @@ export class RemoteAdapter {
     if (action && !control.disabled) this.actions.set(control.id, action);
   }
 
-  private panelControls(panel: W.Panel): void {
+  private panelControls(panel: W.Panel, tankControls?: ingame.ControlPanelScreen): void {
     panel.widgets.forEach((widget, i) => {
       const id = `widget-${i}`;
       const label = W.plain(widget.label) || (widget instanceof W.Spinner ? W.plain(panel.widgets[i - 1]?.label ?? "Amount") : "");
-      const base = { id, label, disabled: !widget.enabled };
+      const section = tankControls?.controlSections.get(widget);
+      if (section === "Power and energy") return;
+      const footer = widget instanceof W.Button && !section;
+      const base = { id, label, disabled: !widget.enabled,
+        presentation: { section, footer, primary: footer && widget instanceof W.Button && widget.default } };
       if (widget instanceof W.Label) {
         this.add({ ...base, kind: "label" });
       } else if (widget instanceof W.Button) {
-        this.add({ ...base, kind: "button" }, () => this.app.dispatchAction(widget.action));
+        if (tankControls && widget.action === "discharge") {
+          const tank = tankControls.tank;
+          this.add({ ...base, kind: "button",
+            label: `Discharge battery (+10 health) · ${tank.inventory[weapons.SLOT_BATTERY]} left`,
+            disabled: base.disabled || tank.inventory[weapons.SLOT_BATTERY] <= 0 || tank.health >= TANK_DEFAULT_HEALTH,
+          }, () => this.app.dispatchAction("discharge_one"));
+        } else this.add({ ...base, kind: "button" }, () => this.app.dispatchAction(widget.action));
       } else if (widget instanceof W.Spinner) {
         this.add({ ...base, kind: "number", value: widget.get(), min: widget.lo, max: widget.hi, step: widget.step }, (v) => {
           if (typeof v === "number") widget.set(widget._clamp(Math.round(v / widget.step) * widget.step));
         });
       } else if (widget instanceof W.Selector) {
-        this.add({ ...base, kind: "select", value: widget.get_idx(), options: widget.options }, (v) => {
+        this.add({ ...base, kind: "select", value: widget.get_idx(), options: widget.options,
+          optionSlots: tankControls?.selectorSlots(widget) }, (v) => {
           if (typeof v === "number" && Number.isInteger(v) && v >= 0 && v < widget.options.length) widget.set_idx(v);
         });
       } else if (widget instanceof W.Toggle) {
@@ -286,7 +300,10 @@ export class RemoteAdapter {
     this.owner = owner?.ai === 0 ? owner.id : undefined;
     this.enabled = !!this.owner && !!owner?.connected && !this.app.transitioning &&
       (kind === "player" || (kind === "battle" && gs?.phase === "aim"));
-    const identity = [top, panel, gs?.pendingTarget, gs?.plasma_charge, gs?.phase, gs?.current_shooter, this.owner, this.enabled];
+    // A move strip belongs to one shooter; never let it leak into another turn.
+    if (gs && this.movementTank && (this.movementTank !== gs.current_shooter || gs.phase !== "aim")) gs.move_mode = false;
+    this.movementTank = gs?.move_mode ? gs.current_shooter ?? undefined : undefined;
+    const identity = [gs?.move_mode, top, panel, gs?.pendingTarget, gs?.plasma_charge, gs?.phase, gs?.current_shooter, this.owner, this.enabled];
     if (identity.some((v, i) => v !== this.identity[i])) {
       this.identity = identity;
       this.context++;
@@ -300,8 +317,8 @@ export class RemoteAdapter {
         const charge = gs.plasma_charge;
         this.add({ id: "plasma-charge", label: "Batteries for Plasma", kind: "number", value: charge.value,
           min: 0, max: charge.max, step: 1 }, (v) => { if (typeof v === "number") gs.set_plasma_charge(v); });
-        this.add({ id: "plasma-fire", label: "Fire Plasma", kind: "button" }, () => gs.confirm_plasma_charge());
-        this.add({ id: "plasma-cancel", label: "Cancel", kind: "button" }, () => gs.cancel_plasma_charge());
+        this.add({ id: "plasma-fire", label: "Fire Plasma", kind: "button", presentation: { footer: true, primary: true } }, () => gs.confirm_plasma_charge());
+        this.add({ id: "plasma-cancel", label: "Cancel", kind: "button", presentation: { footer: true } }, () => gs.cancel_plasma_charge());
         return;
       }
       if (gs.pendingTarget) {
@@ -319,18 +336,23 @@ export class RemoteAdapter {
             point[axis] = v; targeting.setPoint(gs, ...point);
           });
         }
-        this.add({ id: "target-fire", kind: "button", label: "Fire at target", disabled: !p.point }, () => targeting.confirm(gs));
-        this.add({ id: "target-cancel", kind: "button", label: "Cancel targeting" }, () => targeting.cancel(gs));
+        this.add({ id: "target-fire", kind: "button", label: "Fire at target", presentation: { footer: true, primary: true }, disabled: !p.point }, () => targeting.confirm(gs));
+        this.add({ id: "target-cancel", kind: "button", label: "Cancel targeting", presentation: { footer: true } }, () => targeting.cancel(gs));
         return;
       }
       for (const [id, label, key] of [
         ["inventory", "Inventory", "KeyI"], ["tank", "Tank controls", "KeyT"],
-        ["move", "Move / stop moving", "KeyF"], ["retreat", "Retreat", "KeyR"],
+        ["retreat", "Retreat", "KeyR"],
       ]) this.add({ id, label, kind: "button" }, () => this.key(key, true));
+      this.add({ id: "move", label: gs.move_mode ? "Finish moving" : "Move", kind: "button",
+        disabled: !gs.move_mode && !movement.can_move(gs.current_shooter!) }, () => this.key("KeyF", true));
       return;
     }
-    if (panel) this.panelControls(panel);
+    if (panel && !(top instanceof ShopScreen)) this.panelControls(panel,
+      top instanceof ingame.ControlPanelScreen && !top.discharge_modal ? top : undefined);
     if (top instanceof ShopScreen) {
+      this.add({ id: "inventory", label: "Inventory", kind: "button" }, () => this.app.dispatchAction("inventory"));
+      this.add({ id: "done", label: "Done", kind: "button" }, () => this.app.dispatchAction("pop"));
       this.add({ id: "category", label: "Category", kind: "select", value: top.category, options: ["Weapons", "Miscellaneous"] }, (v) => {
         if (v === 0 || v === 1) top._category_click(v);
       });
@@ -344,15 +366,15 @@ export class RemoteAdapter {
         }, () => { top.sel_row = top.items.indexOf(slot); top._buy_selected(); });
       }
     } else if (top instanceof InventoryScreen) {
-      this.add({ id: "weapon", label: "Weapon", kind: "select", value: top.weapon_slots.indexOf(top.tank.selected_weapon ?? -1),
+      this.add({ id: "weapon", label: "Weapon", kind: "select", presentation: { section: "Loadout" }, value: top.weapon_slots.indexOf(top.tank.selected_weapon ?? -1),
         options: top.weapon_slots.map((slot) => `${weapons.ITEMS[slot].name} (${top._count_str(slot)})`),
       }, (v) => { if (typeof v === "number" && top.weapon_slots[v] !== undefined) top._select_weapon(top.weapon_slots[v]); });
       const guidance = [null, ...top.guidance_slots];
-      this.add({ id: "guidance", label: "Guidance", kind: "select", value: guidance.indexOf(top.tank.selected_guidance ?? null),
+      this.add({ id: "guidance", label: "Guidance", kind: "select", presentation: { section: "Loadout" }, value: guidance.indexOf(top.tank.selected_guidance ?? null),
         options: guidance.map((slot) => slot === null ? "None" : weapons.ITEMS[slot].name),
       }, (v) => { if (typeof v === "number" && v >= 0 && v < guidance.length && Number.isInteger(v)) top._select_guidance(guidance[v]); });
       for (let slot = 0; slot < weapons.ITEMS.length; slot++) {
-        if (top.tank.inventory[slot] > 0) this.add({ id: `owned-${slot}`, kind: "label", label: `${weapons.ITEMS[slot].name}: ${top._count_str(slot)}` });
+        if (top.tank.inventory[slot] > 0) this.add({ id: `owned-${slot}`, kind: "label", presentation: { section: "Owned equipment" }, label: `${weapons.ITEMS[slot].name}: ${top._count_str(slot)}` });
       }
     }
   }
@@ -375,17 +397,19 @@ export class RemoteAdapter {
       if (sim) {
         const charge = gs!.sim_charges.get(sim.tank);
         result[p.id] = {
+          movement: { fuel: movement.fuel_units(sim.tank), active: false, available: false, reason: "Unavailable in simultaneous play" },
           context: sim.context, enabled: sim.enabled, screen: "Battle", round: gs!.round_index + 1,
           message: !sim.tank.alive ? "Your tank was destroyed. Watching the battle." :
             charge ? "Choose batteries for Plasma. The battle continues." : "Simultaneous battle — control your tank",
           keys: charge ? ["Space", "Enter", "Escape"] : simKeys,
           tank: { name: sim.tank.name, icon: sim.tank.tank_icon, health: sim.tank.health, cash: sim.tank.cash,
+            shield: sim.tank.shield_hp > 0 ? { name: weapons.ITEMS[sim.tank.shield_item].name, percent: ingame._shield_pct(sim.tank) } : undefined,
             angle: sim.tank.angle, power: sim.tank.power, weapon: weapons.ITEMS[sim.tank.selected_weapon]?.name ?? "",
             ammo: sim.tank.inventory[sim.tank.selected_weapon] },
           controls: sim.enabled && charge ? [
             { id: "plasma-charge", label: "Batteries for Plasma", kind: "number", value: charge.value, min: 0, max: charge.max, step: 1 },
-            { id: "plasma-fire", label: "Fire Plasma", kind: "button" },
-            { id: "plasma-cancel", label: "Cancel", kind: "button" },
+            { id: "plasma-fire", label: "Fire Plasma", kind: "button", presentation: { footer: true, primary: true } },
+            { id: "plasma-cancel", label: "Cancel", kind: "button", presentation: { footer: true } },
           ] : [],
         };
         return;
@@ -397,8 +421,13 @@ export class RemoteAdapter {
         active && !active.connected ? `Waiting for ${active.name} to reconnect.` :
         gs?.phase === "aim" || title === "Purchasing" ? `Waiting for ${active?.name ?? gs?.current_shooter?.name ?? "the host"}.` : "Shot in progress…";
       result[p.id] = {
+        batteryPrompt: top instanceof ingame.ControlPanelScreen && !!top.discharge_modal,
+        movement: t ? { fuel: movement.fuel_units(t), active: enabled && !!gs?.move_mode && gs.current_shooter === t,
+          available: enabled && t.alive && movement.can_move(t),
+          reason: !enabled ? "Waiting turn" : !t.mobile ? "Immobile tank" : !movement.can_move(t) ? "No fuel" : undefined } : undefined,
         context: this.context, enabled, targeting: !!gs?.pendingTarget, screen: title, message, round: (gs?.round_index ?? 0) + 1,
         tank: t ? { name: t.name, icon: t.tank_icon, health: t.health, cash: t.cash,
+          shield: t.shield_hp > 0 ? { name: weapons.ITEMS[t.shield_item].name, percent: ingame._shield_pct(t) } : undefined,
           angle: t.angle, power: t.power, weapon: weapons.ITEMS[t.selected_weapon]?.name ?? "",
           ammo: t.inventory[t.selected_weapon] } : undefined,
         controls: enabled ? this.controls : [],

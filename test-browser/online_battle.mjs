@@ -7,7 +7,7 @@ export async function checkBattleControls({ host, a, b, root, until }) {
     tank_icon: t.tank_icon, angle: t.angle, health: t.health, power: t.power,
     selected_weapon: t.selected_weapon, inventory: [...t.inventory],
   })));
-  const canvas = (page) => page.locator(".lan-tank-preview canvas");
+  const canvas = (page) => page.locator(".lan-battle .lan-tank-preview canvas");
   await canvas(a).evaluate((node) => { window.battleCanvas = node; });
   for (const [index, page] of [a, b].entries()) {
     for (const design of [0, 1, 2, 3, 4, 5]) {
@@ -24,7 +24,7 @@ export async function checkBattleControls({ host, a, b, root, until }) {
         }, { index, design, angle });
         await until(async () => await canvas(page).evaluate((node) => node.toDataURL()) === expected,
           `player ${index} design ${design}, angle ${angle} matches the game sprite`);
-        assert.equal(await page.getByRole("meter", { name: "Angle", exact: true }).getAttribute("aria-valuenow"), String(angle));
+        assert.equal(await page.getByRole("meter", { name: "Angle", exact: true, includeHidden: true }).getAttribute("aria-valuenow"), String(angle));
       }
     }
   }
@@ -44,9 +44,9 @@ export async function checkBattleControls({ host, a, b, root, until }) {
   await host.evaluate(() => Object.assign(window.onlineApp.gs.tanks[0], { tank_icon: 3, angle: 45, health: 65, power: 600 }));
   await until(async () => await a.getByRole("meter", { name: "Health" }).getAttribute("aria-valuenow") === "65", "damaged health reaches the controller");
   assert.equal(await a.getByRole("meter", { name: "Health" }).getAttribute("aria-valuetext"), "Health 65/100");
-  assert.equal(await a.locator(".lan-health .lan-meter-fill").evaluate((node) => node.style.width), "65%");
+  assert.equal(await a.locator(".lan-battle .lan-health .lan-meter-fill").evaluate((node) => node.style.width), "65%");
   assert.equal(await a.getByRole("meter", { name: "Power" }).getAttribute("aria-valuenow"), "600");
-  const preview = await canvas(a).boundingBox(), health = await a.locator(".lan-health").boundingBox();
+  const preview = await canvas(a).boundingBox(), health = await a.locator(".lan-battle .lan-health").boundingBox();
   assert.ok(health.y + health.height <= preview.y, "Health stays above the turret");
   for (const viewport of [
     { width: 320, height: 568 }, { width: 390, height: 844 },
@@ -91,7 +91,7 @@ export async function checkBattleControls({ host, a, b, root, until }) {
     ["Weapon selection", ["Previous weapon", "Next weapon"]],
     ["Aiming controls", ["↑ Power", "← Angle", "↓ Power", "Angle →"]],
   ]) {
-    assert.deepEqual(await a.getByRole("group", { name: group, exact: true }).getByRole("button")
+    assert.deepEqual(await a.getByRole("group", { name: group, exact: true }).locator("button[data-key]")
       .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), labels);
   }
   assert.equal(await a.getByRole("button", { name: "Enter", exact: true }).count(), 0, "No duplicate Enter action in battle");
@@ -143,7 +143,7 @@ export async function checkWeaponSelector({ host, page, until, index = 0 }) {
 
 export async function checkResults({ pages, screen, until }) {
   for (const page of pages) {
-    await page.getByRole("heading", { name: new RegExp(` · ${screen} · Round `) }).waitFor();
+    await page.getByRole("heading", { name: screen, exact: true }).waitFor();
     await until(async () => (await page.locator(".lan-status").textContent()).includes(
       screen === "Round results" ? "Round complete" : "Match complete"), `${screen} reaches guest`);
     for (const selector of [".lan-keys", ".lan-battle", ".lan-stats"]) {
@@ -165,15 +165,71 @@ export async function checkPreciseAim({ host, page, until }) {
   ]) {
     const before = await values();
     const button = page.getByRole("button", { name, exact: true });
-    const box = await button.boundingBox();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.waitForTimeout(120);
-    await page.mouse.up();
+    // Reconnect can show the frame before the host enables its controls.
+    await button.click({ delay: 120 });
     await until(async () => (await values())[property] === before[property] + step, `${name}: precise pointer tap`);
     await page.waitForTimeout(400);
     assert.deepEqual(await values(), { ...before, [property]: before[property] + step }, `${name}: tap does not repeat`);
     await button.focus(); await page.keyboard.press("Enter");
     await until(async () => (await values())[property] === before[property] + 2 * step, `${name}: accessible tap`);
   }
+}
+
+export async function checkDisabledBattle(page) {
+  for (const code of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]) {
+    const button = page.locator(`button[data-key=${code}]`);
+    assert.ok(await button.isVisible(), `${code} stays visible while waiting`);
+    assert.ok(await button.isDisabled(), `${code} is disabled while waiting`);
+  }
+  for (const name of ["Angle", "Power"]) assert.ok(await page.getByRole("meter", { name, exact: true }).isVisible());
+}
+
+export async function checkMovement({ host, a, b, root, until }) {
+  const saved = await host.evaluate(() => {
+    const t = window.onlineApp.gs.tanks[0];
+    const saved = { x: t.x, y: t.y, mobile: t.mobile, inventory: [...t.inventory], fuel_remainder: t.fuel_remainder, angle: t.angle, power: t.power };
+    t.mobile = true; t.inventory[46] = 0; t.fuel_remainder = 30;
+    return saved;
+  });
+  const state = () => host.evaluate(() => {
+    const gs = window.onlineApp.gs, t = gs.tanks[0];
+    return { x: t.x, fuel: t.fuel, angle: t.angle, power: t.power, moving: !!gs.move_mode };
+  });
+  const before = await state();
+  await until(async () => await a.getByRole("button", { name: "Move", exact: true }).isEnabled(), "movement available");
+  await a.getByRole("button", { name: "Move", exact: true }).click();
+  await until(async () => await a.getByRole("button", { name: "Finish moving", exact: true }).getAttribute("aria-pressed") === "true", "movement mode");
+  const left = a.getByRole("button", { name: "Move left", exact: true });
+  const box = await left.boundingBox();
+  await a.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await a.mouse.down();
+  await a.waitForTimeout(850); await a.mouse.up();
+  let moved = await state();
+  assert.equal(moved.x, before.x - 1, "Holding movement makes one engine step");
+  assert.equal(moved.angle, before.angle, "Movement never changes angle");
+  assert.ok(moved.fuel < before.fuel);
+  await a.getByRole("button", { name: "Move right", exact: true }).focus(); await a.keyboard.press("Enter");
+  await until(async () => (await state()).x === before.x, "accessible movement tap");
+  await a.screenshot({ path: `${root}/test-browser/out/online-movement.png`, fullPage: true });
+  await a.getByRole("button", { name: "Finish moving", exact: true }).click();
+  await until(async () => await a.getByRole("button", { name: "← Angle", exact: true }).isVisible(), "aiming restored");
+  const waiting = await b.getByRole("meter", { name: "Angle", exact: true }).getAttribute("aria-valuenow");
+  await b.locator("button[data-key=ArrowLeft]").dispatchEvent("click", { detail: 0 });
+  await b.locator(".lan-controller").click({ position: { x: 2, y: 2 } });
+  await b.keyboard.press("ArrowLeft");
+  await a.waitForTimeout(150);
+  assert.equal(await b.getByRole("meter", { name: "Angle", exact: true }).getAttribute("aria-valuenow"), waiting);
+  await host.evaluate(() => { const t = window.onlineApp.gs.tanks[0]; t.fuel_remainder = 1; });
+  await a.getByRole("button", { name: "Move", exact: true }).click();
+  await a.getByRole("button", { name: "Move left", exact: true }).click();
+  await until(async () => await a.getByRole("button", { name: "Move left", exact: true }).isDisabled(), "exhausted movement disabled");
+  assert.ok(await a.getByRole("button", { name: "Finish moving", exact: true }).isEnabled());
+  await a.keyboard.press("Escape");
+  await until(async () => await a.getByRole("button", { name: "Move", exact: true }).isDisabled(), "no fuel blocks entry");
+  await host.evaluate(() => { const t = window.onlineApp.gs.tanks[0]; t.fuel_remainder = 10; t.mobile = false; });
+  await until(async () => (await a.locator(".lan-movement-status").innerText()).includes("Immobile tank"), "immobile reason");
+  assert.ok(await a.getByRole("button", { name: "Move", exact: true }).isDisabled());
+  await host.evaluate((saved) => Object.assign(window.onlineApp.gs.tanks[0], saved), saved);
+  await a.bringToFront();
+  await until(async () => await a.getByRole("meter", { name: "Angle", exact: true }).getAttribute("aria-valuenow") === String(saved.angle), "movement state restored");
+  console.log("PASS: explicit guest movement, fuel limits, held-input isolation and disabled waiting controls");
 }

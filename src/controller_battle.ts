@@ -1,32 +1,9 @@
 import type { ControllerView } from "../shared/online";
 import { hudAngle } from "./angles";
-import { TANK_DEFAULT_HEALTH } from "./constants";
-import { el } from "./html/components";
-import { TEAM_RGB } from "./palette";
-import { Surface, SRCALPHA } from "./pygame";
-import { draw_tank, get_sprite, WEAPON_ICON_BASE, weapon_icon_palette } from "./sprites";
+import { button, el } from "./html/components";
+import { meter, TankOverview } from "./controller_frame";
+import { get_sprite, WEAPON_ICON_BASE, weapon_icon_palette } from "./sprites";
 import { ITEMS } from "./weapons";
-
-function meter(label: string, max: number, className: string) {
-  const node = el("div", "", `lan-meter ${className}`);
-  node.setAttribute("role", "meter");
-  node.setAttribute("aria-label", label);
-  node.setAttribute("aria-valuemin", "0");
-  node.setAttribute("aria-valuemax", String(max));
-  const fill = el("span", "", "lan-meter-fill");
-  const value = el("span", "", "lan-meter-value");
-  node.append(fill, value);
-  return {
-    node,
-    update(amount: number, text: string, left = 0, width = amount / max * 100, display = text): void {
-      node.setAttribute("aria-valuenow", String(Math.max(0, Math.min(max, amount))));
-      node.setAttribute("aria-valuetext", text);
-      value.textContent = display;
-      fill.style.left = `${left}%`;
-      fill.style.width = `${Math.max(0, Math.min(100, width))}%`;
-    },
-  };
-}
 
 /** Presentation only: inputs and action availability still belong to the remote adapter. */
 export class BattleControls {
@@ -37,28 +14,25 @@ export class BattleControls {
   readonly more = el("details", "", "lan-battle-more");
   readonly extra = el("div", "", "lan-controls");
   readonly escape = el("div", "", "lan-battle-escape");
-  private name = el("h2", "", "lan-battle-name");
-  private cash = el("div");
+  readonly actions = el("div", "", "lan-battle-actions");
+  private overview = new TankOverview();
+  readonly move: HTMLButtonElement;
+  private fuel = el("div", "", "lan-movement-status");
   private weapon = el("div", "", "lan-battle-weapon");
   private weaponIcon = el("span", "", "lan-battle-weapon-icon");
   private weaponName = "";
-  private round = el("div", "", "lan-battle-round");
-  private health = meter("Health", TANK_DEFAULT_HEALTH, "lan-health");
   private angle = meter("Angle", 180, "lan-angle");
   private power = meter("Power", 1000, "lan-power");
-  private surface = new Surface([48, 36], SRCALPHA);
-  private spriteKey = "";
 
-  constructor() {
+  constructor(toggleMovement: () => void) {
     this.element.setAttribute("aria-label", "Tank battle controls");
     this.element.hidden = true;
-    const overview = el("div", "", "lan-battle-overview");
-    const preview = el("div", "", "lan-tank-preview");
-    this.surface.canvas.setAttribute("role", "img");
-    preview.append(this.health.node, this.surface.canvas);
-    const info = el("div", "", "lan-battle-info");
-    info.append(this.name, this.cash, this.round);
-    overview.append(preview, info);
+    this.move = button("Move", toggleMovement);
+    this.move.setAttribute("aria-pressed", "false");
+    this.move.setAttribute("aria-describedby", "lan-movement-status");
+    this.fuel.id = "lan-movement-status";
+    const movement = el("div", "", "lan-battle-movement");
+    movement.append(this.move, this.fuel);
     const weapons = el("div", "", "lan-battle-weapons");
     weapons.setAttribute("role", "group");
     weapons.setAttribute("aria-label", "Weapon selection");
@@ -91,12 +65,13 @@ export class BattleControls {
       this.keyTargets.set(code, slot);
       directions.append(slot);
     }
-    const actions = el("div", "", "lan-battle-actions");
+    const actions = this.actions;
     const secondary = el("div", "", "lan-battle-secondary");
     this.more.append(el("summary", "More actions"), this.extra);
     secondary.append(this.panel, this.more, this.escape);
+    directions.append(movement);
     actions.append(weapons, aim, directions, this.fire, secondary);
-    this.element.append(overview, actions);
+    this.element.append(this.overview.element, actions);
     this.keyTargets.set("Space", this.fire);
     this.keyTargets.set("Escape", this.escape);
   }
@@ -107,8 +82,7 @@ export class BattleControls {
 
   update(tank: NonNullable<ControllerView["tank"]>, playerIndex: number, round: number): void {
     const [elevation, side] = hudAngle(tank.angle);
-    this.name.textContent = tank.name;
-    this.cash.textContent = `Cash $${tank.cash}`;
+    this.overview.update(tank, playerIndex, round);
     this.weapon.textContent = `${tank.weapon} (${tank.ammo})`;
     if (tank.weapon !== this.weaponName) {
       this.weaponName = tank.weapon;
@@ -119,18 +93,18 @@ export class BattleControls {
       this.weaponIcon.replaceChildren(...(sprite ? [sprite.canvas] : []));
       this.weaponIcon.hidden = !sprite;
     }
-    this.round.textContent = `Round ${round}`;
-    this.health.update(tank.health, `Health ${tank.health}/${TANK_DEFAULT_HEALTH}`);
     const offset = (90 - tank.angle) / 180 * 100;
     this.angle.update(tank.angle, `Angle ${elevation}${side}`, 50 + Math.min(0, offset), Math.abs(offset), `${elevation}° ${side}`);
     this.power.update(tank.power, `Power ${tank.power}`, 0, tank.power / 10, String(tank.power));
-    const color = TEAM_RGB[Math.max(0, playerIndex) % TEAM_RGB.length];
-    const spriteKey = `${tank.icon}:${tank.angle}:${color}`;
-    if (spriteKey !== this.spriteKey) {
-      this.spriteKey = spriteKey;
-      this.surface.fill([0, 0, 0, 0]);
-      draw_tank(this.surface, 24, 32, tank.icon, color, tank.angle, { scale: 2 });
-    }
-    this.surface.canvas.setAttribute("aria-label", `${tank.name}, tank design ${tank.icon + 1}, aiming ${elevation}${side}`);
+  }
+
+  updateMovement(view: ControllerView, enabled: boolean): void {
+    const movement = view.movement;
+    this.move.textContent = movement?.active ? "Finish moving" : "Move";
+    this.move.setAttribute("aria-pressed", String(!!movement?.active));
+    this.move.disabled = !enabled || !movement || (!movement.active && !movement.available);
+    const reason = !enabled ? "Waiting turn" : movement?.reason;
+    this.fuel.textContent = movement ? `Fuel ${movement.fuel}${reason ? ` · ${reason}` : movement.active ? " · Movement mode" : ""}` : "Movement unavailable";
+    this.element.classList.toggle("lan-moving", !!movement?.active);
   }
 }

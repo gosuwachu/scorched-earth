@@ -318,7 +318,7 @@ export function hud_hitboxes(state: GameState): { [control: string]: pygame.Rect
 }
 
 /** Active shield HP as a percent of full (mirrors render._shield_pct). */
-export function _shield_pct(t: Tank): number {
+export function _shield_pct(t: Pick<Tank, "shield_hp" | "shield_item">): number {
   if (t.shield_hp <= 0 || !t.shield_item) {
     return 0;
   }
@@ -1066,10 +1066,12 @@ export class ControlPanelScreen implements Screen {
   /** overlay numeric modal for multi-battery discharge; null unless open. */
   discharge_modal: _BatteryDischargeScreen | null;
   panel!: widgets.Panel;
+  readonly controlSections = new Map<widgets.Widget, string>();
 
   // private selection-state mirrors built each _build()
   private _g_slots: (number | null)[] = [];
   private _s_slots: number[] = [];
+  private _guidance_selector!: widgets.Selector;
   private _shield_selector!: widgets.Selector;
   private _pending_shield: number;
 
@@ -1106,6 +1108,13 @@ export class ControlPanelScreen implements Screen {
     if (!Number.isInteger(i) || i < 0 || i >= this._g_slots.length) return;
     const slot = this._g_slots[i];
     if (slot === null || this.tank.inventory[slot] > 0) this.tank.selected_guidance = slot;
+  }
+
+  /** Catalogue identities for guest previews, in the selector's actual order. */
+  selectorSlots(widget: widgets.Selector): (number | null)[] | undefined {
+    if (widget === this._guidance_selector) return [...this._g_slots];
+    if (widget === this._shield_selector) return this._s_slots.map((slot) => slot === 0 ? null : slot);
+    return undefined;
   }
 
   // ---- shields: preview owned/active shields (+ None); Engage deploys ----
@@ -1188,12 +1197,18 @@ export class ControlPanelScreen implements Screen {
     const px = Math.floor((w - pw) / 2);
     const py = Math.floor((h - ph) / 2);
     const p = new widgets.Panel(px, py, pw, ph, "Tank Control Panel");
+    this.controlSections.clear();
+    let section = "Power and energy";
+    const add = <T extends widgets.Widget>(widget: T): T => {
+      this.controlSections.set(widget, section);
+      return p.add(widget);
+    };
     const x = px + 16;
     let y = py + 32;
     const row = 26;
 
     // Remaining Power: spinner (player power 0..1000, step 5)
-    p.add(
+    add(
       new widgets.Spinner(
         x,
         y,
@@ -1213,33 +1228,34 @@ export class ControlPanelScreen implements Screen {
     );
     y += row;
     // Energy Left: read-only (health); shown as a label
-    p.add(new widgets.Label(x, y, `Energy Left: ${Math.max(0, Math.trunc(t.health))}`));
+    add(new widgets.Label(x, y, `Energy Left: ${Math.max(0, Math.trunc(t.health))}`));
     y += row;
+    section = "Fuel and movement";
     // Fuel Remaining: live unit count + move strip.  'f' from the panel (manual
     // DOC L1430): a mobile tank with fuel gets left/right move buttons; a fixed
     // emplacement or an empty tank shows the count only (movement.can_move gates).
-    p.add(new widgets.Label(x, y, `~Fuel Remaining: ${t.fuel}`));
+    add(new widgets.Label(x, y, `~Fuel Remaining: ${t.fuel}`));
     if (movement.can_move(t as unknown as movement.MovementTank)) {
       const bw = 40;
-      p.add(new widgets.Button(px + pw - 16 - 2 * bw - 6, y - 2, "< Move", "move_left", bw));
-      p.add(new widgets.Button(px + pw - 16 - bw, y - 2, "Move >", "move_right", bw));
+      add(new widgets.Button(px + pw - 16 - 2 * bw - 6, y - 2, "< Move", "move_left", bw));
+      add(new widgets.Button(px + pw - 16 - bw, y - 2, "Move >", "move_right", bw));
     }
     y += row;
+    section = "Equipment";
     // Guidance: None + the guidance items
-    p.add(
-      new widgets.Selector(
-        x,
-        y,
-        "~Guidance",
-        this._guidance_options(),
-        () => this._g_index(),
-        (i: number) => this._g_set(i),
-        pw - 32,
-      ),
+    this._guidance_selector = new widgets.Selector(
+      x,
+      y,
+      "~Guidance",
+      this._guidance_options(),
+      () => this._g_index(),
+      (i: number) => this._g_set(i),
+      pw - 32,
     );
+    add(this._guidance_selector);
     y += row;
     // Parachutes: toggle parachute_deployed (count shown)
-    p.add(
+    add(
       new widgets.Toggle(
         x,
         y,
@@ -1253,7 +1269,7 @@ export class ControlPanelScreen implements Screen {
     );
     y += row;
     // Triggers: toggle contact_trigger (count shown)
-    p.add(
+    add(
       new widgets.Toggle(
         x,
         y,
@@ -1267,7 +1283,7 @@ export class ControlPanelScreen implements Screen {
     );
     y += row;
     // Batteries: discharge button (one battery -> +10 health)
-    p.add(
+    add(
       new widgets.Button(
         x,
         y,
@@ -1277,6 +1293,7 @@ export class ControlPanelScreen implements Screen {
       ),
     );
     y += row;
+    section = "Shields";
     // Shields: cycle owned/active shields; only Engage deploys the choice.
     this._shield_selector = new widgets.Selector(
       x,
@@ -1287,7 +1304,7 @@ export class ControlPanelScreen implements Screen {
       (i: number) => this._s_set(i),
       pw - 32,
     );
-    p.add(this._shield_selector);
+    add(this._shield_selector);
     y += row + 6;
 
     // Engage commits the shield choice; Quit discards it. Enter engages.
@@ -1309,6 +1326,12 @@ export class ControlPanelScreen implements Screen {
       return null;
     }
     const act = this.panel.handle(event);
+    if (act === "discharge_one") {
+      // The guest offers one battery per click; local controls keep the count dialog.
+      this._discharge_battery();
+      this.panel = this._build();
+      return null;
+    }
     if (act === "discharge") {
       // >1 battery owned -> prompt for the count; exactly 1 (or none) -> discharge
       // directly, no prompt needed (gap 3).

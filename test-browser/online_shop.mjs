@@ -4,6 +4,7 @@ export const purchaseButton = (page, name) => page.getByRole("button", { name: n
 
 /** Host and guest share the current shopper's real controls and state. */
 export async function checkHostShopping({ host, guest, click, enabled, until }) {
+  for (const name of ["^", "v"]) assert.equal(await host.getByRole("button", { name, exact: true }).count(), 0);
   for (const name of ["Update", "Inventory", "Done", "Weapons", "Miscellaneous"]) {
     assert.ok(await enabled(host, name), `Host can use ${name} during purchasing`);
   }
@@ -34,9 +35,9 @@ export async function checkHostShopping({ host, guest, click, enabled, until }) 
     }), { cash: before.cash - count * before.price, owned: before.owned + count * 5 });
     await checkShopRows(guest, host);
   }
-  await until(async () => (await guest.locator(".lan-stats").innerText()).includes(`Cash $${before.cash - 2 * before.price}`), "host purchases reach guest");
+  await until(async () => (await guest.locator(".lan-shop-cash").innerText()).includes(`Cash $${before.cash - 2 * before.price}`), "host purchases reach guest");
   await click(host, "Miscellaneous");
-  await until(async () => await guest.getByLabel("Category", { exact: true }).inputValue() === "1", "host category reaches guest");
+  await until(async () => await guest.getByRole("button", { name: "Miscellaneous", exact: true }).getAttribute("aria-pressed") === "true", "host category reaches guest");
   await checkShopRows(guest, host);
   await click(host, "Weapons");
   await checkShopRows(guest, host);
@@ -45,6 +46,8 @@ export async function checkHostShopping({ host, guest, click, enabled, until }) 
   const cash = await host.evaluate(() => window.onlineApp.top.tank.cash);
   await host.context().setOffline(true);
   await host.evaluate(() => window.onlineApp.online.connection.socket.close());
+  await until(async () => (await guest.locator(".lan-status").innerText()).includes("Host unavailable"), "host loss reaches guest");
+  await checkNoGuestActions(guest);
   await until(async () => !await enabled(host, "Update"), "host purchasing pauses on connection loss");
   assert.equal(await enabled(host, "Done"), false);
   assert.equal(await host.locator(".ui-shop-row:enabled").count(), 0);
@@ -59,7 +62,8 @@ export async function checkHostShopping({ host, guest, click, enabled, until }) 
 export async function checkShopRows(page, host) {
   assert.equal(await page.locator(".lan-keys").isVisible(), false, "Purchasing hides the entire battle keypad");
   assert.equal(await page.locator(".lan-battle").isVisible(), false);
-  assert.match(await page.locator(".lan-stats").innerText(), /^Cash \$\d+$/, "Purchasing shows cash without battle readouts");
+  for (const name of ["^", "v", "Update"]) assert.equal(await page.getByRole("button", { name, exact: true }).count(), 0);
+  assert.match(await page.locator(".lan-shop-cash").innerText(), /^Cash \$\d+$/, "Purchasing shows cash without battle readouts");
   const expected = await host.evaluate(async () => {
     const { ITEMS } = await import("/src/weapons.ts");
     const shop = window.onlineApp.top;
@@ -88,8 +92,8 @@ export async function checkShopRows(page, host) {
 
 export async function checkShopLayout(page, root, category) {
   const original = page.viewportSize();
-  for (const width of [320, 390, 960]) {
-    await page.setViewportSize({ width, height: 844 });
+  for (const [width, height] of [[320, 568], [390, 844], [844, 390], [1440, 900]]) {
+    await page.setViewportSize({ width, height });
     const layout = await page.locator(".lan-shop-row").evaluateAll((rows) => ({
       overflow: document.documentElement.scrollWidth > window.innerWidth,
       rows: rows.map((row) => {
@@ -107,7 +111,59 @@ export async function checkShopLayout(page, root, category) {
     }));
     assert.equal(layout.overflow, false, `${category}: no horizontal page overflow at ${width}px`);
     assert.ok(layout.rows.every((row) => row.height >= 44 && row.fits && row.nameFits && row.cellsFit), `${category}: readable rows and touch targets at ${width}px`);
-    if (width !== 390) await page.screenshot({ path: `${root}/test-browser/out/online-shop-${category}-${width}.png`, fullPage: true });
+    const footer = await page.locator(".lan-shop-actions").boundingBox();
+    assert.ok(footer.y >= 0 && footer.y + footer.height <= height, `${category}: footer stays visible at ${width}x${height}`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 1), false);
+    await page.screenshot({ path: `${root}/test-browser/out/online-shop-${category}-${width}.png`, fullPage: true });
   }
   await page.setViewportSize(original);
+}
+
+export async function checkNoGuestActions(page) {
+  assert.equal(await page.locator(".lan-controller :is(button, input, select, summary):visible").count(), 0,
+    "Unavailable guest screens expose no action controls");
+}
+
+export async function checkShopEdges(page, host, until) {
+  const saved = await host.evaluate(() => {
+    const shop = window.onlineApp.top;
+    const saved = { cash: shop.tank.cash, inventory: [...shop.tank.inventory] };
+    shop.tank.cash = shop.econ.price[1];
+    shop._refresh_items();
+    return saved;
+  });
+  await checkShopRows(page, host);
+  const missile = purchaseButton(page, "Missile");
+  await missile.focus();
+  await missile.press("Enter");
+  await until(async () => await page.locator(".lan-shop-empty").isVisible(), "last affordable bundle leaves an empty shop");
+  assert.equal(await page.evaluate(() => document.activeElement === document.querySelector(".lan-shop-list")), true,
+    "Focus returns to the list when the purchased row disappears");
+  assert.ok(await page.getByRole("button", { name: "Done", exact: true }).isEnabled());
+  await host.evaluate((saved) => {
+    const shop = window.onlineApp.top;
+    shop.tank.cash = saved.cash;
+    shop.tank.inventory.splice(0, shop.tank.inventory.length, ...saved.inventory);
+    shop._refresh_items();
+  }, saved);
+  await checkShopRows(page, host);
+  const list = page.locator(".lan-shop-list");
+  await list.focus();
+  await page.keyboard.press("PageDown");
+  await until(async () => await list.evaluate((node) => node.scrollTop) > 0, "native keyboard list scrolling");
+  await page.getByRole("button", { name: "Miscellaneous", exact: true }).click();
+  await purchaseButton(page, "Battery").waitFor();
+  assert.equal(await list.evaluate((node) => node.scrollTop), 0, "category changes reset list scroll");
+  await page.getByRole("button", { name: "Weapons", exact: true }).click();
+  await checkShopRows(page, host);
+}
+
+/** Real transport loss across forms and battle; stale controls stay hidden until fresh state arrives. */
+export async function checkGuestReconnect(page, until) {
+  await page.context().setOffline(true);
+  await page.evaluate(() => window.onlineSocket.close());
+  await until(async () => (await page.locator(".lan-status").innerText()).includes("Connection lost"), "guest disconnected");
+  await checkNoGuestActions(page);
+  await page.context().setOffline(false);
+  await until(async () => !(await page.locator(".lan-status").innerText()).match(/Connection lost|Host unavailable|Waiting for the host…/), "guest reconnected");
 }

@@ -43,6 +43,9 @@ import * as widgets from "../src/widgets";
 import * as movement from "../src/movement";
 import * as C from "../src/constants";
 import * as weapons from "../src/weapons";
+import { RemoteAdapter } from "../src/remote";
+import type { App } from "../src/main";
+import type { Player } from "../shared/online";
 import { startShieldFade, type ShieldFade } from "../src/shields";
 import type { GameState, Tank, Cfg, IngameEvent, MouseState, InfoBox } from "../src/ingame";
 
@@ -822,6 +825,82 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     expect(cp.discharge_modal).toBeNull();
     expect(t.inventory[weapons.SLOT_BATTERY]).toBe(0);
     expect(t.health).toBe(80);
+  });
+
+  it.each([
+    { health: 70, stock: 3, healed: 80, remaining: 2 },
+    { health: 95, stock: 3, healed: 100, remaining: 2 },
+    { health: 100, stock: 3, healed: 100, remaining: 3 },
+    { health: 70, stock: 0, healed: 70, remaining: 0 },
+  ])("guest discharge at $health health with $stock batteries uses at most one without a dialog", ({ health, stock, healed, remaining }) => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_BATTERY] = stock;
+    const { cp, t } = panelFor({ health, inv });
+    expect(cp.dispatchAction("discharge_one")).toBeNull();
+    expect(cp.discharge_modal).toBeNull();
+    expect(t.health).toBe(healed);
+    expect(t.inventory[weapons.SLOT_BATTERY]).toBe(remaining);
+  });
+
+  it.each(["engage", "back"])("keeps the pending shield through single-battery discharge until %s", (action) => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_SUPER_MAG] = 1;
+    inv[weapons.SLOT_BATTERY] = 3;
+    const { cp, t } = panelFor({ health: 70, inv });
+    (byLabel(cp.panel, "Shields") as widgets.Selector).set_idx(1);
+    cp.dispatchAction("discharge_one");
+    cp.dispatchAction("discharge_one");
+    const selector = byLabel(cp.panel, "Shields") as widgets.Selector;
+    expect(selector.options[selector.get_idx()]).toBe("Super Mag");
+    expect(t.shield_hp).toBe(0);
+    expect(cp.dispatchAction(action)).toBe("back");
+    expect(t.health).toBe(90);
+    expect(t.inventory[weapons.SLOT_BATTERY]).toBe(1);
+    expect([t.shield_item, t.shield_hp, t.inventory[weapons.SLOT_SUPER_MAG]])
+      .toEqual(action === "engage" ? [weapons.SLOT_SUPER_MAG, 200, 0] : [0, 0, 1]);
+  });
+
+  it("publishes catalogue identities and enforces guest battery availability and ownership", () => {
+    const inv = new Array<number>(weapons.NUM_ITEMS).fill(0);
+    inv[weapons.SLOT_BATTERY] = 3;
+    inv[weapons.SLOT_SUPER_MAG] = 1;
+    inv[FIRST_GUID] = 1;
+    inv[37] = 1; // Lazy Boy
+    const { cp, st, t } = panelFor({ health: 80, inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 37 });
+    const roster: Player[] = ["Alice", "Bob"].map((name) => ({ id: name, name, icon: 3, ai: 0, ready: true, connected: true }));
+    const app = { gs: st, top: cp, onlineScreen: "player", onlineMenuOpen: false, transitioning: false,
+      dispatchAction: (action: string) => cp.dispatchAction(action) };
+    const adapter = new RemoteAdapter(app as unknown as App, roster);
+    const state = () => adapter.states(roster).Alice;
+    const controls = state().controls;
+    expect(controls.find((c) => c.label === "Guidance")?.optionSlots).toEqual([null, FIRST_GUID, 37]);
+    expect(controls.find((c) => c.label === "Shields")?.optionSlots).toEqual([null, weapons.SLOT_SHIELD, weapons.SLOT_SUPER_MAG]);
+    expect(controls.some((c) => c.presentation?.section === "Power and energy")).toBe(false);
+    expect(controls.some((c) => c.label.includes("Remaining Power"))).toBe(false);
+    expect(state().tank?.shield).toEqual({ name: "Shield", percent: 37 });
+    (byLabel(cp.panel, "Shields") as widgets.Selector).set_idx(2);
+    expect(state().tank?.shield).toEqual({ name: "Shield", percent: 37 }); // Preview is not deployed.
+    const battery = () => state().controls.find((c) => c.label.startsWith("Discharge battery"))!;
+    const discharge = { kind: "control" as const, id: battery().id };
+    adapter.receive("Bob", state().context, 1, discharge);
+    expect(t.health).toBe(80);
+    adapter.receive("Alice", state().context, 1, discharge);
+    expect([t.health, t.batteries, cp.discharge_modal]).toEqual([90, 2, null]);
+    adapter.receive("Alice", state().context, 2, discharge);
+    expect([t.health, t.batteries]).toEqual([100, 1]);
+    expect(battery().disabled).toBe(true);
+    adapter.receive("Alice", state().context, 3, discharge);
+    expect(t.batteries).toBe(1);
+    t.health = 80; t.inventory[weapons.SLOT_BATTERY] = 0;
+    expect(battery().disabled).toBe(true);
+    adapter.receive("Alice", state().context, 4, discharge);
+    expect(t.health).toBe(80);
+    cp.dispatchAction("engage");
+    expect(state().tank?.shield).toEqual({ name: "Super Mag", percent: 100 });
+    t.shield_hp = 100;
+    expect(state().tank?.shield).toEqual({ name: "Super Mag", percent: 50 });
+    t.shield_hp = 0;
+    expect(state().tank?.shield).toBeUndefined();
   });
 
   it("Batteries with none owned and full battery is a no-op (caller-visible: nothing changes)", () => {

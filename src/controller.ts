@@ -3,8 +3,9 @@ import { REMOTE_KEYS } from "../shared/online";
 import { Connection } from "./online_connection";
 import { button, el, installOnlineTheme, Roster, tankIcon } from "./online_ui";
 import { get_sprite, WEAPON_ICON_BASE, weapon_icon_palette } from "./sprites";
-import { hudAngle } from "./angles";
+import { PanelControls } from "./controller_panel";
 import { BattleControls } from "./controller_battle";
+import { ShopControls } from "./controller_shop";
 import "./online.css";
 
 interface ControlNode {
@@ -14,6 +15,9 @@ interface ControlNode {
   label?: HTMLElement;
   kind: Control["kind"];
   options?: string;
+  optionSlots?: (number | null)[];
+  icon?: HTMLElement;
+  iconSlot?: number | null;
   purchase?: { slot: number; marker: HTMLElement; owned: HTMLElement; name: HTMLElement; price: HTMLElement };
 }
 
@@ -53,12 +57,13 @@ export function startController(roomId: string): void {
   let name: HTMLInputElement;
   let readyButton: HTMLButtonElement;
   let roster: Roster;
-  let stats: HTMLElement;
-  let heading: HTMLElement;
-  let controls: HTMLElement;
+  let panel: PanelControls;
   let keys: HTMLElement;
   let battle: BattleControls;
+  let shop: ShopControls;
   let battleLayout = false;
+  let screenKey = "";
+  const focusHistory = new Map<string, HTMLElement>();
   const controlNodes = new Map<string, ControlNode>();
 
   const allowed = (): boolean => !ended && !!connection.connected && !!room?.hostConnected && !!view?.enabled;
@@ -71,7 +76,9 @@ export function startController(roomId: string): void {
     for (const b of heldButtons.values()) b.dataset.held = "false";
   };
   const key = (code: string, down: boolean): void => {
+    if (view?.movement?.active && !view.movement.available && (code === "ArrowLeft" || code === "ArrowRight")) return;
     if (!allowed() || (view?.keys && !view.keys.includes(code)) ||
+        (view?.screen !== "Battle" && code !== "Escape") ||
         (view?.targeting && code !== "Escape" && !code.startsWith("Digit")) || (down && held.has(code))) return;
     if (down) held.add(code); else held.delete(code);
     send({ kind: "key", key: code, down });
@@ -81,10 +88,33 @@ export function startController(roomId: string): void {
 
   function updateStatus(): void {
     if (ended) return;
+    const connected = connection.connected && !!room?.hostConnected;
+    // Keep mounted forms and rows for reconnect, but expose no stale actions.
+    content.hidden = !connected || (!!room?.started && !view);
+    content.inert = content.hidden;
     status.textContent = !connection.connected ? "Connection lost. Reconnecting…" : !room?.hostConnected ?
-      "Host unavailable. Waiting for the original host page to reconnect…" : view?.message ?? "Choose your tank and get ready.";
-    for (const [code, b] of heldButtons) b.disabled = !allowed() || (!!view?.keys && !view.keys.includes(code)) ||
-      (!!view?.targeting && code !== "Escape");
+      "Host unavailable. Waiting for the original host page to reconnect…" : view?.message ??
+        (room.started ? "Waiting for the host…" : "Choose your tank and get ready.");
+    const normalBattle = view?.screen === "Battle" && !view.targeting && !view.controls.some((c) => c.id === "plasma-charge");
+    const dialogEscape = ["Tank controls", "Retreat"].includes(view?.screen ?? "");
+    for (const [code, b] of heldButtons) {
+      const relevant = (normalBattle && code !== "Enter") || (dialogEscape && code === "Escape");
+      b.hidden = !relevant || (!!view?.keys && !view.keys.includes(code));
+      b.disabled = b.hidden || !allowed() || (!!view?.movement?.active && !view.movement.available &&
+        (code === "ArrowLeft" || code === "ArrowRight"));
+      if (normalBattle) {
+        const moving = view?.movement?.active;
+        const label = moving && code === "ArrowLeft" ? "Move left" : moving && code === "ArrowRight" ? "Move right" : keyLabels.get(code)!;
+        b.textContent = battleLabels[code] || label;
+        b.setAttribute("aria-label", label);
+        b.title = label;
+      }
+    }
+    if (gameBuilt) {
+      battle.actions.hidden = false;
+      if (view) battle.updateMovement(view, allowed());
+      keys.hidden = !allowed() || !dialogEscape;
+    }
     const invalidTarget = ["target-0", "target-1"].some((id) => {
       const field = controlNodes.get(id)?.field;
       return field instanceof HTMLInputElement && (!field.value || !field.validity.valid);
@@ -94,6 +124,7 @@ export function startController(roomId: string): void {
       if (record.field) record.field.disabled = !allowed() || !!c?.disabled;
       if (record.button) record.button.disabled = !allowed() || !!c?.disabled || (id === "target-fire" && invalidTarget);
     }
+    shop?.setEnabled(allowed());
     if (readyButton) readyButton.disabled = !connection.connected || !room?.hostConnected;
   }
 
@@ -145,7 +176,7 @@ export function startController(roomId: string): void {
     if (gameBuilt) return;
     gameBuilt = true;
     content.replaceChildren();
-    heading = el("h2"); stats = el("div", "", "lan-stats");
+    panel = new PanelControls();
     keys = el("div", "", "lan-keys");
     for (const [label, code] of [
       ["Previous weapon", "BracketLeft"], ["↑ Power", "ArrowUp"], ["Next weapon", "Tab"],
@@ -166,15 +197,28 @@ export function startController(roomId: string): void {
       b.oncontextmenu = (e) => e.preventDefault();
       heldButtons.set(code, b); keys.append(b);
     }
-    controls = el("div", "", "lan-controls");
-    battle = new BattleControls();
-    content.append(heading, stats, keys, controls, battle.element);
+    battle = new BattleControls(() => send({ kind: "control", id: "move" }));
+    shop = new ShopControls((value) => send({ kind: "control", id: "category", value }));
+    panel.escape.append(keys);
+    content.append(battle.element, shop.element, panel.element);
+  }
+
+  function updateSelectorIcon(record: ControlNode): void {
+    if (!record.icon || !(record.field instanceof HTMLSelectElement)) return;
+    record.icon.hidden = !record.optionSlots;
+    const slot = record.optionSlots?.[Number(record.field.value)] ?? null;
+    if (record.iconSlot === slot) return;
+    record.iconSlot = slot;
+    const sprite = slot === null ? null : get_sprite("A", slot, { color: WEAPON_ICON_BASE, pal: weapon_icon_palette(), scale: 2 });
+    record.icon.replaceChildren(...(sprite ? [sprite.canvas] : []));
   }
 
   function renderControl(c: Control): HTMLElement {
     let record = controlNodes.get(c.id);
     if (!record || record.kind !== c.kind) {
+      record?.node.remove();
       const node = el("div");
+      node.dataset.controlId = c.id;
       record = { node, kind: c.kind };
       if (c.kind === "button") {
         record.button = button(c.label, () => send({ kind: "control", id: c.id }));
@@ -184,13 +228,22 @@ export function startController(roomId: string): void {
         const label = el("label"); const text = el("span");
         const field = c.kind === "select" ? el("select") : el("input");
         if (field instanceof HTMLInputElement) field.type = c.kind === "toggle" ? "checkbox" : "number";
-        field.oninput = () => updateStatus();
+        field.oninput = () => { updateSelectorIcon(controlNodes.get(c.id)!); updateStatus(); };
         field.onchange = () => {
           if (field instanceof HTMLInputElement && field.type === "number" && (!field.value || !field.validity.valid)) return;
+          updateSelectorIcon(controlNodes.get(c.id)!);
           send({ kind: "control", id: c.id, value:
             field instanceof HTMLInputElement && field.type === "checkbox" ? field.checked : Number(field.value) });
         };
-        label.append(text, field); node.append(label);
+        label.append(text);
+        if (field instanceof HTMLSelectElement) {
+          const value = el("span", "", "lan-select-value");
+          const icon = el("span", "", "lan-select-icon");
+          icon.setAttribute("aria-hidden", "true");
+          value.append(icon, field); label.append(value);
+          record.icon = icon;
+        } else label.append(field);
+        node.append(label);
         record.field = field; record.label = text;
       }
       controlNodes.set(c.id, record);
@@ -227,11 +280,15 @@ export function startController(roomId: string): void {
         record.purchase = undefined;
       }
     }
+    record.node.classList.toggle("lan-primary", !!c.presentation?.primary);
+    record.node.classList.toggle("lan-owned-row", c.id.startsWith("owned-"));
+    record.node.classList.toggle("lan-toggle", c.kind === "toggle");
     if (record.label) record.label.textContent = c.label;
     if (c.kind === "label") record.node.textContent = c.label;
     const field = record.field;
     field?.setAttribute("aria-label", c.label);
     if (field instanceof HTMLSelectElement) {
+      record.optionSlots = c.optionSlots;
       const options = JSON.stringify(c.options);
       if (record.options !== options) {
         record.options = options;
@@ -245,18 +302,29 @@ export function startController(roomId: string): void {
       if (field instanceof HTMLInputElement && c.kind === "toggle") field.checked = !!c.value;
       else field.value = String(c.value ?? "");
     }
+    updateSelectorIcon(record);
     return record.node;
   }
 
   function renderView(): void {
     if (!view) return;
     buildGame();
-    heading.textContent = `${view.tank?.name ?? "Player"} · ${view.screen} · Round ${view.round}`;
+    const nextScreenKey = `${view.screen}:${!!view.batteryPrompt}:${!!view.targeting}:${view.controls.some((c) => c.id === "plasma-charge")}`;
+    const screenChanged = screenKey !== nextScreenKey;
+    const active = document.activeElement;
+    if (screenChanged && active instanceof HTMLElement && content.contains(active)) focusHistory.set(screenKey, active);
+    // Different panels can reuse widget IDs for unrelated actions.
+    if (screenChanged) {
+      for (const record of controlNodes.values()) record.node.remove();
+      controlNodes.clear();
+      panel.body.scrollTop = 0;
+      screenKey = nextScreenKey;
+    }
     const t = view.tank;
     const purchasing = view.screen === "Purchasing";
-    const results = view.screen === "Round results" || view.screen === "Final results";
-    // The host's menu is reported as Host setup, including over results.
-    const passive = results || view.screen === "Host setup";
+    const useShop = purchasing && !!t;
+    root.classList.toggle("lan-controller-shop", useShop);
+    shop.element.hidden = !useShop;
     const useBattle = !!t && view.screen === "Battle" && !view.targeting &&
       !view.controls.some((c) => c.id === "plasma-charge");
     if (useBattle !== battleLayout) {
@@ -271,30 +339,43 @@ export function startController(roomId: string): void {
         else battle.mountKey(code, b);
       }
     }
-    heading.hidden = useBattle;
-    stats.hidden = controls.hidden = useBattle || passive;
-    keys.hidden = useBattle || purchasing || passive;
-    if (t) {
-      const [elev, side] = hudAngle(t.angle);
-      stats.textContent = purchasing ? `Cash $${t.cash}` :
-        `Health ${t.health} · Cash $${t.cash} · Angle ${elev}${side} · Power ${t.power} · ${t.weapon} (${t.ammo})`;
-      if (useBattle) battle.update(t, room?.players.findIndex((p) => p.id === playerId) ?? 0, view.round);
-    } else {
-      stats.textContent = "";
-    }
-    const ids = new Set(view.controls.map((c) => c.id));
+    root.classList.add("lan-controller-game");
+    root.classList.toggle("lan-controller-panel", !useBattle && !useShop);
+    panel.element.hidden = useBattle || useShop;
+    if (t && useBattle) battle.update(t, room?.players.findIndex((p) => p.id === playerId) ?? 0, view.round);
+    const oldRows = [...shop.list.querySelectorAll<HTMLButtonElement>("button")];
+    const focusedRow = oldRows.indexOf(document.activeElement as HTMLButtonElement);
+    const scrollTop = shop.list.scrollTop;
+    const visibleControls = view.controls.filter((c) => !(useShop && c.id === "category") && !(useBattle && c.id === "move"));
+    const ids = new Set(visibleControls.map((c) => c.id));
     for (const [id, record] of controlNodes) if (!ids.has(id)) { record.node.remove(); controlNodes.delete(id); }
     const counts = new Map<HTMLElement, number>();
-    view.controls.forEach((c) => {
-      const target = !useBattle ? controls : c.id === "tank" ? battle.panel : battle.extra;
+    visibleControls.forEach((c) => {
+      const target = useShop ? shop.target(c) : !useBattle ? panel.target(c) : c.id === "tank" ? battle.panel : battle.extra;
       const index = counts.get(target) ?? 0;
       counts.set(target, index + 1);
       const node = renderControl(useBattle && c.id === "tank" ? { ...c, label: "Tank Control Panel" } : c);
       if (target.children[index] !== node) target.insertBefore(node, target.children[index] ?? null);
     });
+    if (useShop) {
+      shop.list.scrollTop = scrollTop;
+      if (focusedRow >= 0 && !oldRows[focusedRow].isConnected) {
+        const rows = [...shop.list.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+        (rows[Math.min(focusedRow, rows.length - 1)] ?? shop.list).focus({ preventScroll: true });
+      }
+      shop.update(view, room?.players.findIndex((p) => p.id === playerId) ?? 0);
+    }
+    if (!useBattle && !useShop) panel.update(view, room?.players.findIndex((p) => p.id === playerId) ?? 0);
     battle.panel.hidden = !counts.has(battle.panel);
     battle.more.hidden = !counts.has(battle.extra);
     updateStatus();
+    if (screenChanged && view.enabled) {
+      const remembered = focusHistory.get(screenKey);
+      const id = remembered?.closest<HTMLElement>("[data-control-id]")?.dataset.controlId;
+      const restored = remembered?.isConnected ? remembered : id ? controlNodes.get(id)?.node.querySelector<HTMLElement>("button, input, select") : null;
+      if (restored) restored.focus({ preventScroll: true });
+      else if (!useBattle && !useShop) panel.heading.focus({ preventScroll: true });
+    }
   }
 
   function receive(m: ServerMessage): void {
@@ -303,6 +384,7 @@ export function startController(roomId: string): void {
       try { localStorage.setItem(storageKey, token); } catch { /* warning was shown at boot */ }
       if (!room.started) lobby();
     } else if (m.type === "room" || m.type === "started") {
+      if (!m.room.hostConnected) { release(); view = undefined; }
       room = m.room;
       if (!room.started) lobby();
       else if (!gameBuilt) { buildGame(); status.textContent = "Waiting for the host…"; }
@@ -313,7 +395,7 @@ export function startController(roomId: string): void {
       release(); ended = true; view = undefined;
       status.textContent = m.message;
       content.replaceChildren();
-      root.classList.remove("lan-controller-battle");
+      root.classList.remove("lan-controller-game", "lan-controller-battle", "lan-controller-shop", "lan-controller-panel");
     } else if (m.type === "error") error.textContent = m.message;
     updateStatus();
   }
@@ -323,6 +405,7 @@ export function startController(roomId: string): void {
   });
   window.addEventListener("keydown", (e) => {
     if (!gameBuilt || e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (view?.screen !== "Battle" && e.code !== "Escape") return;
     // Native navigation/activation must work for the disclosure and focused controls.
     // Tab cycles weapons only when focus is outside an interactive control.
     if (e.target instanceof Element && e.target.closest("button, summary") &&

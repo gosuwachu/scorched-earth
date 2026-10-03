@@ -3,10 +3,11 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { checkBattleControls, checkPreciseAim, checkResults } from "./online_battle.mjs";
+import { checkBattleControls, checkPreciseAim, checkResults, checkDisabledBattle, checkMovement } from "./online_battle.mjs";
+import { checkGuestEquipment, checkPanelLayout } from "./online_panel.mjs";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
-import { purchaseButton, checkHostShopping, checkShopRows, checkShopLayout } from "./online_shop.mjs";
+import { purchaseButton, checkHostShopping, checkShopRows, checkShopLayout, checkShopEdges, checkNoGuestActions, checkGuestReconnect } from "./online_shop.mjs";
 import { checkNoOnlineBar, settledDialogs, openHostMenu, closeHostMenu } from "./dialogs.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -106,6 +107,7 @@ try {
   const b = await contextB.newPage(); wireErrors(b);
   await a.goto(joinUrl); await b.goto(joinUrl);
   await a.getByPlaceholder("Your name").fill("Alice");
+  await checkGuestReconnect(a, until);
   await click(a, "Choose tank 2"); await click(a, "Ready");
   await b.getByPlaceholder("Your name").fill("Bob"); await click(b, "Ready");
   await host.getByLabel("Computer difficulty").selectOption("1");
@@ -120,6 +122,7 @@ try {
   assert.equal(await host.getByRole("button", { name: "Save Game", exact: true }).count(), 0);
   assert.equal(await host.getByRole("button", { name: "End online game", exact: true }).count(), 0);
   await until(async () => (await a.locator(".lan-status").textContent()).includes("Paused by host"), "paused shopping controller");
+  await checkNoGuestActions(a);
   assert.equal(await enabled(a, "Done"), false);
   await click(host, "Join link");
   await host.getByRole("dialog", { name: "Join / reconnect", exact: true }).waitFor();
@@ -133,12 +136,14 @@ try {
   await until(() => enabled(a, "Done"), "shopping resumes");
   assert.equal(await enabled(b, "Fire"), false);
   assert.equal(await b.locator(".lan-shop-row:enabled").count(), 0, "Waiting guests cannot purchase");
+  await checkNoGuestActions(b);
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.cfg.MAXROUNDS), 2);
   await checkHostShopping({ host, guest: a, click, enabled, until });
   mkdirSync(`${root}/test-browser/out`, { recursive: true });
   await checkShopRows(a, host);
   await checkShopLayout(a, root, "weapons");
+  await checkShopEdges(a, host, until);
   await host.screenshot({ path: `${root}/test-browser/out/online-shop-host.png` });
   const cash = () => host.evaluate(() => window.onlineApp.gs.tanks[0].cash);
   const beforeCash = await cash();
@@ -148,25 +153,26 @@ try {
   }));
   await missile.scrollIntoViewIfNeeded();
   await missile.focus();
-  await missile.evaluate((button) => { window.shopButton = button; window.shopCanvas = button.querySelector("canvas"); window.shopScroll = window.scrollY; });
+  await missile.evaluate((button) => { window.shopButton = button; window.shopCanvas = button.querySelector("canvas"); window.shopScroll = document.querySelector(".lan-shop-list").scrollTop; });
   await missile.press("Enter");
   await until(async () => await cash() === beforeCash - beforeMissile.price, "one keyboard purchase applies on host");
   await checkShopRows(a, host);
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[1]), beforeMissile.owned + 5);
-  await until(async () => (await a.locator(".lan-stats").innerText()).includes(`Cash $${await cash()}`), "guest cash refreshes");
+  await until(async () => (await a.locator(".lan-shop-cash").innerText()).includes(`Cash $${await cash()}`), "guest cash refreshes");
   await pause(350);
   assert.ok(await missile.evaluate((button) => button === window.shopButton && button.querySelector("canvas") === window.shopCanvas &&
-    document.activeElement === button && window.scrollY === window.shopScroll), "Host updates preserve the button, icon, focus, and scroll");
+    document.activeElement === button && document.querySelector(".lan-shop-list").scrollTop === window.shopScroll), "Host updates preserve the button, icon, focus, and scroll");
   // A lost transport disables the existing purchase rows until the guest rejoins.
   await contextA.setOffline(true);
   await a.evaluate(() => window.onlineSocket.close());
-  await until(async () => await missile.isDisabled(), "disconnected purchases disabled");
+  await until(async () => (await a.locator(".lan-status").innerText()).includes("Connection lost"), "disconnected purchases hidden");
+  await checkNoGuestActions(a);
   assert.equal(await a.locator(".lan-shop-row:enabled").count(), 0);
   await contextA.setOffline(false);
   await until(async () => await missile.isEnabled(), "purchase controls restored after reconnect");
   assert.equal(await cash(), beforeCash - beforeMissile.price);
   const purchasedCash = await cash();
-  await a.getByLabel("Category", { exact: true }).selectOption("1");
+  await click(a, "Miscellaneous");
   await purchaseButton(a, "Battery").waitFor();
   await checkShopRows(a, host);
   await checkShopLayout(a, root, "misc");
@@ -180,6 +186,9 @@ try {
   assert.ok(equippedCash < purchasedCash);
   await click(host, "Inventory");
   await a.getByRole("heading", { name: /Inventory/ }).waitFor();
+  await checkPanelLayout(a, root, "inventory");
+  assert.equal(await a.locator(".lan-keys").isVisible(), false);
+  await checkGuestReconnect(a, until);
   await host.getByLabel("Weapons", { exact: true }).getByRole("button", { name: /^Missile\s/ }).click();
   assert.equal(await host.evaluate(() => window.onlineApp.top.tank.selected_weapon), 1);
   await until(async () => (await a.getByLabel("Weapon", { exact: true }).locator("option:checked").textContent()).startsWith("Missile ("), "host weapon selection reaches guest");
@@ -207,7 +216,7 @@ try {
   await host.waitForFunction(() => window.onlineApp.online.pending.length === 0);
   assert.equal(await host.evaluate(() => window.onlineApp.top.tank.name), "Bob", "Stale guest Done cannot skip the next shopper");
   assert.ok(await enabled(host, "Update"), "Host can assist the next shopper");
-  await b.getByLabel("Category", { exact: true }).selectOption("1");
+  await click(b, "Miscellaneous");
   await purchaseButton(b, "Lazy Boy").click();
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]) > 0, "Bob buys guidance");
   await click(b, "Done");
@@ -215,6 +224,9 @@ try {
   await click(a, "Esc");
   assert.equal(await host.getByRole("dialog", { name: "System Menu", exact: true }).count(), 0, "Guest Escape never opens the host menu");
   await checkBattleControls({ host, a, b, root, until });
+  await checkDisabledBattle(b);
+  await checkMovement({ host, a, b, root, until });
+  await checkGuestReconnect(a, until);
   await checkPreciseAim({ host, page: a, until });
   // Phone angles use the host HUD's elevation and direction, not raw aim values.
   const startingAngle = await host.evaluate(() => window.onlineApp.gs.tanks[0].angle);
@@ -277,25 +289,20 @@ try {
   assert.deepEqual(await ticks(), beforeMuteTicks);
   await click(a, "Tank Control Panel");
   await a.getByRole("heading", { name: /Tank controls/ }).waitFor();
+  await a.getByRole("button", { name: "Esc", exact: true }).waitFor();
+  assert.deepEqual(await a.locator(".lan-keys button:visible").allTextContents(), ["Esc"]);
+  await checkGuestReconnect(a, until);
   assert.equal(await enabled(host, "Engage"), false, "Host cannot operate combat tank controls");
   await openHostMenu(host);
   await closeHostMenu(host);
-  await until(async () => await a.getByLabel("Remaining Power:").isEnabled(), "tank controls resume");
+  await until(async () => await enabled(a, "Engage"), "tank controls resume");
   const beforePanelTicks = (await ticks()).length;
-  await a.getByLabel("Remaining Power:").fill("300");
-  await a.getByLabel("Remaining Power:").press("Tab");
-  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].power) === 300, "tank panel power");
-  assert.equal((await ticks()).length, beforePanelTicks + 1);
-  assert.equal((await ticks()).at(-1), 900);
+  await host.evaluate(() => { window.onlineApp.gs.tanks[0].power = 300; });
+  await until(async () => (await a.locator(".lan-panel .lan-overview-power").innerText()) === "Power 300", "readonly panel power updates");
+  assert.equal((await ticks()).length, beforePanelTicks);
   assert.equal(await a.evaluate(() => window.audioStarts), 0);
   assert.equal(await b.evaluate(() => window.audioStarts), 0);
-  // Exercise the nested equipment dialog using purchased batteries.
-  await host.evaluate(() => { window.onlineApp.gs.tanks[0].health = 80; });
-  await a.getByRole("button", { name: /^Batteries:/ }).click();
-  await a.getByLabel("Batteries to discharge:").fill("2");
-  await a.getByLabel("Batteries to discharge:").press("Tab");
-  await click(a, "Ok");
-  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].health) === 100, "battery discharge");
+  await checkGuestEquipment(a, host, root, until);
   assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[39]), 8);
   await a.getByLabel(/^Parachutes/).check();
   await a.getByLabel("Guidance", { exact: true }).selectOption({ label: "Lazy Boy" });
@@ -314,6 +321,9 @@ try {
   await until(() => enabled(a, "Fire"), "inventory closes");
   await click(a, "Retreat");
   await a.getByRole("button", { name: "Yes", exact: true }).waitFor();
+  await checkPanelLayout(a, root, "retreat");
+  assert.deepEqual(await a.locator(".lan-keys button:visible").allTextContents(), ["Esc"]);
+  await checkGuestReconnect(a, until);
   await click(a, "Esc");
   await a.getByRole("region", { name: "Tank battle controls" }).waitFor();
   await until(() => enabled(a, "Fire"), "retreat canceled");
@@ -321,6 +331,9 @@ try {
   const guidanceStock = await host.evaluate(() => window.onlineApp.gs.tanks[0].inventory[37]);
   await click(a, "Fire");
   await a.getByLabel("Target X", { exact: true }).waitFor();
+  await checkPanelLayout(a, root, "targeting");
+  assert.equal(await a.locator(".lan-keys").isVisible(), false);
+  await checkGuestReconnect(a, until);
   assert.equal(await enabled(a, "Fire at target"), false);
   assert.equal(await enabled(a, "← Angle"), false);
   assert.equal(await enabled(b, "Fire at target"), false);
@@ -373,6 +386,9 @@ try {
   });
   await click(a, "Fire");
   await a.getByLabel("Batteries for Plasma", { exact: true }).waitFor();
+  await checkPanelLayout(a, root, "plasma");
+  assert.equal(await a.locator(".lan-keys").isVisible(), false);
+  await checkGuestReconnect(a, until);
   assert.equal(await b.getByLabel("Batteries for Plasma", { exact: true }).count(), 0);
   await a.getByLabel("Batteries for Plasma", { exact: true }).fill("5");
   await a.getByLabel("Batteries for Plasma", { exact: true }).press("Tab");
@@ -410,6 +426,7 @@ try {
   await host.evaluate(() => { window.onlineApp.gs.mass_kill(); });
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "rankings");
   await checkResults({ pages: [a, b], screen: "Round results", until });
+  await checkGuestReconnect(a, until);
   await a.reload();
   await checkResults({ pages: [a, b], screen: "Round results", until });
   await a.screenshot({ path: `${root}/test-browser/out/online-round-results.png`, fullPage: true });

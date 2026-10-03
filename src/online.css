@@ -56,22 +56,22 @@ body.lan-phone { min-height: 100dvh; }
 
 .lan-controller button[data-held=true] { border-color: var(--ui-lo) var(--ui-hi) var(--ui-hi) var(--ui-lo); background: var(--ui-hi); }
 
-/* Only the normal battle fills the viewport; forms and shopping stay scrollable. */
-.lan-controller.lan-controller-battle {
+/* All in-game guest screens share the same responsive frame. */
+.lan-controller.lan-controller-game {
   --battle-gap: clamp(6px, 1.2dvh, 12px);
   max-width: none; width: 100%; min-height: 100dvh; margin: 0;
   display: flex; flex-direction: column;
   font-size: clamp(14px, 1.8dvh, 18px); line-height: 1.25;
 }
-.lan-controller-battle > .ui-title { padding-top: max(3px, env(safe-area-inset-top)); }
-.lan-controller-battle .lan-controller-body {
-  flex: 1; display: flex; flex-direction: column; justify-content: flex-start; gap: var(--battle-gap);
+.lan-controller-game > .ui-title { padding-top: max(3px, env(safe-area-inset-top)); }
+.lan-controller-game .lan-controller-body {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--battle-gap);
   width: 100%; max-width: 1080px; margin: 0 auto;
   padding: var(--battle-gap) max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
 }
-.lan-controller-battle .lan-status { margin: 0; padding: 6px; text-align: center; }
-.lan-controller-battle .lan-error { margin: 0; }
-.lan-controller-battle .lan-controller-body > :last-child { display: flex; flex-direction: column; }
+.lan-controller-game .lan-status { margin: 0; padding: 6px; text-align: center; }
+.lan-controller-game .lan-error { margin: 0; }
+.lan-controller-game .lan-controller-body > :last-child { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .lan-battle { flex: 1; display: flex; flex-direction: column; justify-content: flex-start; gap: var(--battle-gap); min-width: 0; }
 .lan-battle-overview {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -86,7 +86,7 @@ body.lan-phone { min-height: 100dvh; }
 }
 .lan-battle-info { min-width: 0; display: grid; gap: 8px; }
 .se-ui .lan-battle-name { margin: 0; font-size: 1.25em; }
-.lan-battle-round { font-size: .85em; }
+.lan-battle-round, .lan-overview-power, .lan-overview-shield { font-size: .85em; }
 .lan-battle-actions { display: flex; flex-direction: column; gap: var(--battle-gap); min-width: 0; }
 .lan-battle-label { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: .12em; }
 .lan-battle-weapons {
@@ -107,7 +107,7 @@ body.lan-phone { min-height: 100dvh; }
 }
 .lan-battle-directions {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
-  grid-template-areas: ". up ." "left down right";
+  grid-template-areas: "move up fuel" "left down right";
 }
 .lan-battle-directions > div { display: flex; }
 .lan-aim-up { grid-area: up; }
@@ -155,6 +155,7 @@ body.lan-phone { min-height: 100dvh; }
 .lan-battle-more .lan-controls > div { display: flex; }
 @media (max-width: 759px) and (max-height: 640px) {
   .lan-controller.lan-controller-battle { --battle-gap: 6px; }
+  .lan-battle-info { gap: 4px; }
   .lan-tank-preview canvas { height: 48px; }
   .lan-battle-weapons { padding: 4px 6px; grid-template-columns: 44px minmax(0, 1fr) 44px; }
   .lan-battle-equipped { gap: 1px; }
@@ -181,4 +182,63 @@ body.lan-phone { min-height: 100dvh; }
   .lan-battle-panel[hidden] ~ .lan-battle-more { grid-column: 1 / 3; }
   .lan-battle-more[open], .lan-battle-more[open] + .lan-battle-escape,
   .lan-battle-more[hidden] + .lan-battle-escape { grid-column: 1 / -1; }
+}
+
+/* Lists and forms scroll within the frame, leaving their actions in reach. */
+.lan-controller.lan-controller-shop, .lan-controller.lan-controller-panel { height: 100dvh; min-height: 440px; }
+.lan-shop { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--battle-gap); }
+.lan-shop-equipment { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--battle-gap); }
+.se-ui .lan-shop-equipment h2, .se-ui .lan-shop-hint, .se-ui .lan-shop-empty { margin: 0; }
+.lan-shop-hint { font-size: .85em; }
+.lan-shop-categories, .lan-shop-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.lan-shop button { min-height: 44px; width: 100%; }
+.lan-shop-categories button { padding: 5px; }
+.lan-shop-categories button[aria-pressed=true] { color: var(--ui-selection); box-shadow: inset 0 -3px var(--ui-selection); }
+.lan-shop-list {
+  flex: 1; min-height: 88px; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable;
+  background: var(--ui-bg); border: 2px solid; border-color: var(--ui-lo) var(--ui-hi) var(--ui-hi) var(--ui-lo);
+  overscroll-behavior-y: contain;
+}
+.lan-shop-actions button { margin: 0; text-align: center; }
+.se-ui .lan-shop-actions > :last-child button { background: var(--ui-selection); color: var(--ui-title); }
+.lan-shop-empty { padding: 8px; }
+@media (min-width: 760px) {
+  .lan-controller.lan-controller-shop, .lan-controller.lan-controller-panel { min-height: 320px; }
+  .lan-shop { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+  .lan-shop > .lan-battle-overview { align-self: start; }
+}
+
+.lan-battle-directions > .lan-battle-movement { display: contents; }
+.lan-battle-movement > button { grid-area: move; }
+.lan-movement-status { grid-area: fuel; align-self: center; text-align: center; font-size: 12px; }
+.lan-moving .lan-battle-directions { background: var(--ui-bg); outline: 2px solid var(--ui-selection); }
+.lan-battle button:disabled { color: #626262; border-style: solid; }
+.lan-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--battle-gap); }
+.lan-panel-main { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: var(--battle-gap); }
+.se-ui .lan-panel-main > h2 { margin: 0; }
+.lan-panel-content { min-height: 88px; overflow: auto; scrollbar-gutter: stable; overscroll-behavior-y: contain; flex: 1; }
+.lan-panel-group { border: 2px solid; border-color: var(--ui-lo) var(--ui-hi) var(--ui-hi) var(--ui-lo); padding: 8px; margin-bottom: 8px; }
+.lan-panel-group:last-child { margin-bottom: 0; }
+.lan-panel-group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+.lan-panel-group .lan-controls > div + div { margin-top: 8px; }
+.lan-panel .lan-controls label, .lan-panel .lan-controls button { margin: 0; }
+.lan-panel .lan-controls input[type=number] { width: 100%; }
+.lan-select-value { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.lan-select-value select { flex: 1; min-width: 0; }
+.lan-select-icon { display: flex; flex: none; justify-content: center; width: 26px; }
+.lan-select-icon canvas { display: block; max-width: 100%; height: auto; image-rendering: pixelated; }
+.lan-panel-footer { display: flex; flex-wrap: wrap; gap: 8px; }
+.lan-panel-footer > div { flex: 1 1 100px; }
+.lan-panel .lan-panel-footer > div { margin: 0; }
+.lan-panel-footer button { text-align: center; }
+.lan-panel-escape:has(.lan-keys[hidden]) { display: none; }
+.lan-panel .lan-keys { display: flex; margin: 0; }
+.lan-panel .lan-keys button { min-height: 44px; flex: 1; }
+.lan-panel .lan-toggle label { min-height: 44px; display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: pointer; }
+.lan-panel .lan-owned-row { padding: 8px 0; border-bottom: 1px solid var(--ui-lo); font-variant-numeric: tabular-nums; }
+.se-ui .lan-primary button { background: var(--ui-selection); color: var(--ui-title); }
+.se-ui .lan-primary button:disabled { background: var(--ui-bg); color: var(--ui-lo); }
+@media (min-width: 760px) {
+  .lan-panel { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+  .lan-panel > .lan-battle-overview { align-self: start; }
 }

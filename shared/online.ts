@@ -24,7 +24,11 @@ export interface Control {
   max?: number;
   step?: number;
   options?: string[];
+  /** Catalogue slots parallel to selector options; null represents None. */
+  optionSlots?: (number | null)[];
   disabled?: boolean;
+  /** Optional guest layout hints; actions and values remain host-owned. */
+  presentation?: { section?: string; footer?: boolean; primary?: boolean };
   /** Host shop values; the guest resolves the sprite locally by slot. */
   purchase?: {
     slot: number; name: string; owned: number; price: number; bundle: number; selected: boolean;
@@ -35,6 +39,8 @@ export interface ControllerView {
   /** When present, limit the phone's standard buttons to these controls. */
   keys?: string[];
   targeting?: boolean;
+  batteryPrompt?: boolean;
+  movement?: { fuel: number; active: boolean; available: boolean; reason?: string };
   context: number;
   enabled: boolean;
   screen: string;
@@ -43,6 +49,7 @@ export interface ControllerView {
   tank?: {
     name: string; icon: number; health: number; cash: number;
     angle: number; power: number; weapon: string; ammo: number;
+    shield?: { name: string; percent: number };
   };
   controls: Control[];
 }
