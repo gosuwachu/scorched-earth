@@ -5,7 +5,9 @@ import * as weapons from "../weapons";
 import * as sprites from "../sprites";
 import * as pg from "../pygame";
 import { TEAM_RGB } from "../palette";
-import { button, el, KeyedList, type Component } from "./components";
+import { sfx } from "../sound";
+import { saveVolumePreference } from "../audio_preferences";
+import { button, el, field, KeyedList, type Component } from "./components";
 import { PanelView, type WidgetActions } from "./widgets";
 
 export function position(node: HTMLElement, panel: W.Panel, x: number, y: number, width: number, height?: number): void {
@@ -44,6 +46,22 @@ export class ScreenContent implements Component<boolean> {
     if (screen instanceof S.RegistrationScreen) {
       const text = el("div", S.REGISTRATION_LINES.join("\n"), "ui-status");
       add(text, screen._text_x, screen._text_y, p.rect.w - 48);
+    }
+    if (screen instanceof S.OptionsScreen && screen.spec === "sound") {
+      const input = el("input"); input.type = "range";
+      input.min = "0"; input.max = "100"; input.step = "1";
+      input.setAttribute("aria-label", "Volume");
+      const output = el("output"); output.setAttribute("aria-hidden", "true");
+      const row = field("Volume:", input); row.append(output);
+      view.body.append(row); this.owned.push(row);
+      input.oninput = () => actions.change(() => saveVolumePreference(Number(input.value)));
+      this.updates.push((active) => {
+        const percent = String(Math.round(sfx.volume * 100));
+        input.disabled = !active;
+        if (input.value !== percent) input.value = percent;
+        input.setAttribute("aria-valuetext", `${percent}%`);
+        if (output.value !== `${percent}%`) output.value = `${percent}%`;
+      });
     }
     if (screen instanceof S.OptionsScreen && screen.spec === "weapons") {
       const section = el("section", "", "ui-weapon-options");

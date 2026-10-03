@@ -8,6 +8,7 @@ import { checkOptionHelp } from "./option_help.mjs";
 import { checkGuidance } from "./guidance_ui.mjs";
 import { checkMenuLayout, checkPlayerGrid } from "./menu_ui.mjs";
 import { checkSetupDialogs, settledDialogs } from "./dialogs.mjs";
+import { checkVolume } from "./volume_ui.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.UI_TEST_URL || "http://127.0.0.1:4320";
 let server, browser;
@@ -27,6 +28,8 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`${base}/test-browser/online_host.html`);
   await page.waitForFunction(() => !!window.onlineApp);
+  mkdirSync(`${root}/test-browser/out`, { recursive: true });
+  await checkVolume(page, (name) => page.screenshot({ path: `${root}/test-browser/out/ui-${name}.png` }));
   await page.evaluate(async () => {
     const { Panel } = await import("/src/widgets.ts");
     Panel.prototype.draw = () => { throw new Error("Production UI must not paint canvas panels"); };

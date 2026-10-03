@@ -519,6 +519,63 @@ describe("sound: play() event branches build the oracle-exact buffer", () => {
   });
 });
 
+describe("sound: master volume", () => {
+  it("applies before initialization and changes active and future sounds without rebuilding buffers", () => {
+    installMock();
+    const s = new Sfx();
+    expect(s.volume).toBe(1);
+    s.volume = 0.4;
+    expect(ctxOf(s)).toBeNull();
+    s.beep(440, 50);
+    s.start_fly("VEL", true);
+    const ctx = ctxOf(s);
+    const [master, flight] = ctx.createdGains;
+    expect(master.connections).toEqual([ctx.destination]);
+    expect(master.gain.value).toBe(0.4);
+    expect(ctx.started[0].connections).toEqual([master]);
+    expect(flight.connections).toEqual([master]);
+    expect(flight.gain.value).toBe(0.3);
+    const buffers = [...ctx.createdBuffers];
+    const sources = [...ctx.started];
+    s.volume = 0;
+    expect(master.gain.value).toBe(0);
+    expect(ctx.createdBuffers).toEqual(buffers);
+    expect(ctx.started).toEqual(sources);
+    s.volume = 0.7;
+    s.beep(440, 50, true);
+    expect(master.gain.value).toBe(0.7);
+    expect(ctx.started.at(-1)!.connections).toEqual([master]);
+    expect(ctx.createdBuffers).toEqual(buffers);
+    expect(ctx.createdGains).toEqual([master, flight]);
+  });
+
+  it("clamps finite levels, ignores nonfinite values, and keeps the SOUND gate independent", () => {
+    const s = new Sfx();
+    s.enabled = false;
+    s.volume = -1;
+    expect(s.volume).toBe(0);
+    s.volume = 2;
+    expect(s.volume).toBe(1);
+    s.volume = 0.25;
+    s.volume = NaN;
+    s.volume = Infinity;
+    expect(s.volume).toBe(0.25);
+    expect(s.enabled).toBe(false);
+    expect(() => s.beep(440, 50)).not.toThrow();
+  });
+
+  it("degrades safely when master gain creation fails", () => {
+    (globalThis as Record<string, unknown>).AudioContext = function () {
+      const ctx = new MockAudioContext();
+      ctx.failCreateGain = true;
+      return ctx;
+    };
+    const s = new Sfx();
+    expect(s.init()).toBe(false);
+    expect(() => { s.volume = 0.2; s.beep(440, 50); s.start_fly("VEL", true); }).not.toThrow();
+  });
+});
+
 describe("sound: continuous flight-loop (start_fly / fly_tone / stop_fly)", () => {
   it.each([
     { mode: "POS", proj: { sy: 70 } },
@@ -528,9 +585,10 @@ describe("sound: continuous flight-loop (start_fly / fly_tone / stop_fly)", () =
     const s = new Sfx();
     s.start_fly(mode, true);
     const ctx = ctxOf(s);
-    const gain = ctx.createdGains[0];
+    const [master, gain] = ctx.createdGains;
     expect(gain.gain.value).toBe(0.3);
-    expect(gain.connections).toEqual([ctx.destination]);
+    expect(gain.connections).toEqual([master]);
+    expect(master.connections).toEqual([ctx.destination]);
     const seed = flySourceOf(s)!;
     expect(seed.playbackRate.value).toBe(0.5);
     expect(seed.connections).toEqual([gain]);
@@ -545,12 +603,12 @@ describe("sound: continuous flight-loop (start_fly / fly_tone / stop_fly)", () =
     s.start_fly(mode, true);
     expect(flySourceOf(s)!.playbackRate.value).toBe(0.5);
     expect(flySourceOf(s)!.connections).toEqual([gain]);
-    expect(ctx.createdGains).toEqual([gain]);
+    expect(ctx.createdGains).toEqual([master, gain]);
 
     s.beep(200, 64, true);
     const beep = ctx.started[ctx.started.length - 1];
     expect(beep.playbackRate.value).toBe(1);
-    expect(beep.connections).toEqual([ctx.destination]);
+    expect(beep.connections).toEqual([master]);
   });
 
   it("start_fly seeds a looping 300 Hz source == oracle (300,60)", () => {
@@ -679,7 +737,7 @@ describe("sound: degradation when the context throws (never raises)", () => {
     ctx.failCreateGain = false;
     s.start_fly("VEL", true);
     expect(flySourceOf(s)).not.toBeNull();
-    expect(ctx.createdGains[0].gain.value).toBe(0.3);
+    expect(ctx.createdGains[1].gain.value).toBe(0.3);
   });
 
   it("a failing createBuffer yields no buffer, no source, no throw", () => {

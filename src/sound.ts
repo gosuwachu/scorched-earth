@@ -173,6 +173,16 @@ export class Sfx {
   private _ready = false; // context init attempted + ok
   private _init_failed = false; // init attempted + failed (don't retry)
   private _ctx: AudioCtx | null = null;
+  private _master_gain: AudioGainLike | null = null;
+  private _volume = 1;
+
+  /** Browser master volume, independent of the SOUND gate and tone synthesis. */
+  get volume(): number { return this._volume; }
+  set volume(value: number) {
+    if (!Number.isFinite(value)) return;
+    this._volume = _clamp(value, 0, 1);
+    if (this._master_gain !== null) this._master_gain.gain.value = this._volume;
+  }
   // sample-rate the context actually opened at (mirrors _mix_rate); SAMPLE_RATE
   // until a context exists, exactly like sound.py's getattr fallback.
   private _mix_rate = SAMPLE_RATE;
@@ -208,6 +218,10 @@ export class Sfx {
     }
     try {
       const ctx = new Ctor();
+      const gain = ctx.createGain();
+      gain.gain.value = this._volume;
+      gain.connect(ctx.destination);
+      this._master_gain = gain;
       this._ctx = ctx;
       // honour whatever the context actually opened (it may coerce the rate)
       this._mix_rate = ctx.sampleRate || SAMPLE_RATE;
@@ -422,7 +436,7 @@ export class Sfx {
       }
       const src = ctx.createBufferSource();
       src.buffer = buf;
-      src.connect(ctx.destination);
+      src.connect(this._master_gain);
       src.start();
       return src;
     } catch {
@@ -772,7 +786,7 @@ export class Sfx {
       if (this._fly_gain === null) {
         const gain = ctx.createGain();
         gain.gain.value = FLY_GAIN;
-        gain.connect(ctx.destination);
+        gain.connect(this._master_gain);
         this._fly_gain = gain;
       }
       const src = ctx.createBufferSource();

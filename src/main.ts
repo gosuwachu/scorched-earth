@@ -67,6 +67,7 @@ import * as joystick from "./joystick";
 import * as C from "./constants";
 import * as _pal from "./palette";
 import { sfx } from "./sound";
+import { loadVolumePreference } from "./audio_preferences";
 import { Config } from "./config";
 import { Renderer, setChooseTargetPredicate } from "./render";
 import { Screen } from "./screen";
@@ -618,6 +619,7 @@ export class App {
   private _debt = 0;
 
   constructor(surface: pygame.Surface, fullscreen = false, mayhem = false, fpsSecs = 0) {
+    loadVolumePreference();
     // diagnostics first (DIAGNOSTICS.md / diag.py): logging + the soft watchdog.
     diag.setup_logging();
     diag.install_faulthandler(); // no-op in browser (see diag.ts)
