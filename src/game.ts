@@ -48,6 +48,7 @@ import * as ai from "./ai";
 import * as scoring from "./scoring";
 import { Terrain, type MtnFile } from "./terrain";
 import { Economy } from "./economy";
+import { startOutlastRound, accrueOutlast, payOutlast, type OutlastRound } from "./outlast";
 import { Tank, Projectile } from "./objects";
 import * as weapons from "./weapons";
 import {
@@ -195,6 +196,7 @@ export class GameState {
   _pyrandom: Rng;
   terrain: Terrain;
   economy: Economy;
+  outlast: OutlastRound | null = null;
   tanks: Tank[];
   round_index: number; // DAT_5f38_e342
   current_shooter: Tank | null; // DAT_5f38_5182
@@ -384,6 +386,7 @@ export class GameState {
   }
 
   new_game(): void {
+    this.outlast = null;
     // FUN_33a1_001d init: seed cash from INITIAL_CASH, reset round index.
     this.round_index = 0;
     const cash = this.cfg.INITIAL_CASH;
@@ -455,6 +458,7 @@ export class GameState {
     sfx.field_height = this.h;
     this._place_tanks();
     this._reset_round_tanks();
+    this.outlast = this.cfg.is_on("OUTLAST_BONUS") ? startOutlastRound(this.tanks) : null;
     this._build_firing_order();
     this.reset_terrain_settle();
     this.plasma_charge = null; this.plasmaChoices.clear();
@@ -1051,6 +1055,13 @@ export class GameState {
 
   // ------------------------------------------------------------- main update
   update(dt: number): void {
+    this._update(dt);
+    // Includes early returns from settling and all three play modes. Batch
+    // deaths after the whole update, never in per-tank damage/death-FX loops.
+    accrueOutlast(this.outlast, this.tanks, this.cfg.team_mode);
+  }
+
+  private _update(dt: number): void {
     talk.tick(this as unknown as talk.SpeechState, dt); // expire on-screen speech bubbles
     this._tick_palette(dt); // rotate/re-ramp the cycling DAC bands (70 Hz wall-clock)
     this._tick_sky(); // bolts + flashes age every frame
@@ -2756,6 +2767,8 @@ export class GameState {
 
   // --------------------------------------------------------------- round end
   _end_round(): void {
+    accrueOutlast(this.outlast, this.tanks, this.cfg.team_mode);
+    payOutlast(this.outlast, this.tanks, this.economy);
     this.sim_charges.clear(); this.simAim.clear();
     scoring.survival_award(this as unknown as scoring.State);
     // Victory fanfare on the winner path: a round that ends with a surviving tank
@@ -2769,6 +2782,10 @@ export class GameState {
   }
 
   mass_kill(): void {
+    // Pay only previously earned bonuses: this administrative removal cannot
+    // create an outlast reward, even if it happens between simulation updates.
+    accrueOutlast(this.outlast, this.tanks, this.cfg.team_mode);
+    payOutlast(this.outlast, this.tanks, this.economy);
     this.sim_charges.clear(); this.simAim.clear();
     // System Menu -> Mass Kill (SCORCH.DOC:L1461-1469): kill EVERY tank, split the
     // round's survival pool EQUALLY with NO win/survival credit, then end the round.

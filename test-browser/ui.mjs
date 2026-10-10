@@ -61,6 +61,22 @@ try {
   await page.keyboard.press("Escape"); await settled();
   assert.equal(await page.evaluate(() => document.activeElement.textContent), "Sound");
   await checkOptionHelp(page, { click, settled, shot });
+  await click("Economics");
+  const outlast = page.getByRole("checkbox", { name: "Outlast bonus", exact: true });
+  assert.equal(await outlast.isChecked(), false, "outlast bonus defaults OFF");
+  await outlast.check();
+  assert.equal(await page.evaluate(() => window.onlineApp.cfg.OUTLAST_BONUS), "ON");
+  const outlastHelp = page.locator(`#${await outlast.getAttribute("aria-describedby")}`);
+  assert.match(await outlastHelp.textContent(), /\$500 cash/);
+  assert.match(await outlastHelp.textContent(), /Adds no score/);
+  assert.match(await outlastHelp.textContent(), /Simultaneous eliminations tie/);
+  assert.equal(await page.evaluate(async () => {
+    const { Config } = await import("/src/config.ts");
+    return Config.load(window.onlineApp.cfg.save()).OUTLAST_BONUS;
+  }), "ON", "outlast setting survives configuration save/load");
+  await shot("outlast-bonus");
+  await outlast.uncheck();
+  await click("Done");
   await click("Play Options");
   const tunneling = page.getByRole("checkbox", { name: "Tunneling", exact: true });
   assert.ok(await tunneling.isChecked(), "tunneling defaults ON");

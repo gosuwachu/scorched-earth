@@ -423,6 +423,7 @@ export const SUBMENUS: { [spec: string]: [string, SubmenuRow[]] } = {
     ["toggle", "COMPUTERS_BUY", "Computers ~Buy"],
     ["toggle", "FREE_MARKET", "~Free Market"],
     ["enum", "SCORING", "~Scoring Mode:"],
+    ["toggle", "OUTLAST_BONUS", "~Outlast bonus"],
   ]],
   // 2d Landscape (weather folded in)
   landscape: ["Landscape", [

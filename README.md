@@ -83,6 +83,15 @@ Space or Enter fires, number keys select a tank, F11 toggles fullscreen, Esc bac
 out. The menus, the weapon shop, and the in-game control panel (battery, parachute,
 shield) are mouse-driven.
 
+**Optional browser rule — Outlast bonus:** enable it in Economics to earn $500
+cash for each opponent eliminated while your tank remains alive. Rewards are
+paid once at round end, including to players who later die or retreat. They add
+no score, though Greedy rankings reflect the extra cash. The setting defaults
+off and changes take effect next round; this is an extension, not a DOS rule.
+Eliminations in the same game update tie, teammate eliminations earn nothing,
+and Mass Kill pays only rewards already earned. Waiting earns no money.
+The usual combat rewards, victory rewards, and interest rules still apply.
+
 ### Play together on a LAN
 
 Choose **Online** in the new-game dialog to play together using phones or browsers

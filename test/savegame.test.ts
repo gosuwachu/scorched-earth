@@ -177,7 +177,7 @@ for (const fld of CONFIG_FIELDS) CFG_TYPE[fld.name] = fld.type;
 function mkConfig(cfgDict: { [k: string]: number | string }, wind: number, le: number): SaveConfig {
   const cfg = {} as SaveConfig;
   for (const fld of CONFIG_FIELDS) {
-    cfg[fld.name] = cfgDict[fld.name];
+    cfg[fld.name] = fld.name === "OUTLAST_BONUS" ? "OFF" : cfgDict[fld.name];
   }
   cfg.wind = wind;
   cfg.live_elastic = le;
@@ -449,7 +449,7 @@ function expectStateRestored(st: SaveGameState, s: StateSnap, label: string): vo
     expect(
       (st.cfg as { [k: string]: number | string })[fld.name],
       `${label} cfg.${fld.name}`,
-    ).toBe(s.cfg[fld.name]);
+    ).toBe(fld.name === "OUTLAST_BONUS" ? "OFF" : s.cfg[fld.name]);
   }
   expect(st.cfg.wind, `${label} _wind`).toBe(s._wind);
   expect(st.cfg.live_elastic, `${label} _live_elastic`).toBe(s._live_elastic);
@@ -589,7 +589,12 @@ describe("savegame: save() byte-stream == Python savegame.save (THE HEART)", () 
       // reproduce the recorded bytes.
       const state = mkState(bc.presave);
       const got = save(state);
-      const want = hexToBytes(bc.blob_hex);
+      const legacy = hexToBytes(bc.blob_hex);
+      // Preserve every legacy byte except the explicit new configuration field;
+      // this browser extension has independent behavioral tests in outlast.test.
+      const body = new TextDecoder().decode(legacy.subarray(8))
+        .replace('},"_wind":', ',"OUTLAST_BONUS":"OFF"},"_wind":');
+      const want = new Uint8Array([...legacy.subarray(0, 8), ...new TextEncoder().encode(body)]);
       // Compare lengths first for a clear failure, then full bytes.
       expect(got.length, `${bc.name} blob length`).toBe(want.length);
       expect(bytesToArray(got), `${bc.name} blob bytes`).toEqual(bytesToArray(want));

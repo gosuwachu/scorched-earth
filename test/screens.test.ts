@@ -254,7 +254,13 @@ describe("screens: module data tables (verbatim, index-for-index)", () => {
   it("SUBMENUS keys + per-row (kind, cfg-key, label, numeric range) match", () => {
     expect(Object.keys(screens.SUBMENUS)).toEqual(vec.data.submenu_keys);
     for (const spec of vec.data.submenu_keys) {
-      const [title, fields] = screens.SUBMENUS[spec];
+      const [title, allFields] = screens.SUBMENUS[spec];
+      // Outlast is a browser extension; retain the legacy comparison for the
+      // original rows without changing the reference fixture.
+      const fields = allFields.filter((row) => row[1] !== "OUTLAST_BONUS");
+      if (spec === "economics") {
+        expect(allFields[allFields.length - 1]).toEqual(["toggle", "OUTLAST_BONUS", "~Outlast bonus"]);
+      }
       const want = vec.data.submenus[spec];
       expect(title, `${spec} title`).toBe(want.title);
       expect(fields.length, `${spec} row count`).toBe(want.rows.length);

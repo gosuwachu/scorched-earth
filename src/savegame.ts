@@ -64,6 +64,7 @@
  */
 import { clampPower } from "./power";
 import { CONFIG_FIELDS } from "./config";
+import { copyOutlastRound, type OutlastRound } from "./outlast";
 import { NUM_ITEMS } from "./weapons";
 
 // config.ts does not export its FieldType alias; redeclare the identical literal
@@ -409,6 +410,7 @@ export interface SaveTerrain {
 }
 
 export interface SaveGameState {
+  outlast?: OutlastRound | null;
   round_index: number;
   phase: string;
   timer: number;
@@ -436,6 +438,7 @@ export interface SaveGameState {
 
 // The plain serialized dict shape (what load() returns / serialize() builds).
 export interface SaveData {
+  outlast?: OutlastRound;
   round_index: number;
   phase: string;
   timer: number;
@@ -547,6 +550,8 @@ export function cfgFromDict(
   cfg: SaveConfig,
   d: { [k: string]: number | string },
 ): SaveConfig {
+  // An old save must not inherit this optional rule from the current game.
+  cfg.OUTLAST_BONUS = "OFF";
   for (const k of Object.keys(d)) {
     if (k in CONFIG_FIELD_TYPE) {
       (cfg as { [k: string]: number | string })[k] = d[k];
@@ -845,6 +850,7 @@ export function gridFromDict(d: { w: number; h: number; b64: string }): TerrainG
  * returns a plain JS dict for tests / callers that just want the data. */
 function serializeValueTree(state: SaveGameState): { [k: string]: JsonValue } {
   return {
+    ...(state.outlast ? { outlast: copyOutlastRound(state.outlast) as unknown as JsonValue } : {}),
     round_index: state.round_index, // DAT_5f38_e342
     phase: state.phase,
     timer: f(state.timer), // Python float (init 0.0, set to AI_TURN_DELAY etc.)
@@ -876,6 +882,7 @@ function serializeValueTree(state: SaveGameState): { [k: string]: JsonValue } {
  * by the field, as in the Python dict whose floats are Python floats). */
 export function serialize(state: SaveGameState): SaveData {
   return {
+    ...(state.outlast ? { outlast: copyOutlastRound(state.outlast) } : {}),
     round_index: state.round_index,
     phase: state.phase,
     timer: state.timer,
@@ -993,6 +1000,7 @@ export function apply(data: SaveData, state: SaveGameState): SaveGameState {
   }
 
   cfgFromDict(state.cfg, data.cfg);
+  state.outlast = data.outlast ? copyOutlastRound(data.outlast) : null;
   if (state.economy.cfg !== undefined) {
     state.economy.cfg = state.cfg;
   }

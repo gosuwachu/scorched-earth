@@ -28,6 +28,7 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
   calibrate: { text: "Measures a connected gamepad's center and range for the joystick pointer. Calibration lasts until the page is reloaded." },
   INTEREST_RATE: { text: "Unspent cash earns interest between rounds: 0.05 means 5%. This rate also affects the price of Auto Defense." },
   FREE_MARKET: { text: "Lets shop prices change between rounds according to demand. Selling equipment returns 65% of its current value instead of the usual 80%." },
+  OUTLAST_BONUS: { text: "Earn $500 cash per opponent eliminated while you remain alive, paid at round end even if you later die. Adds no score; Greedy rankings still reflect the cash. Simultaneous eliminations tie, and teammate eliminations earn nothing. Changes apply next round." },
   SCORING: {
     text: "Controls rewards and how players are ranked.",
     values: {

@@ -67,7 +67,7 @@ interface FieldSpec {
   type: FieldType;
 }
 
-// The 50 fields in declaration order (== dataclasses.fields(Config) order).
+// Legacy fields retain dataclasses.fields(Config) order; browser additions follow.
 export const CONFIG_FIELDS: FieldSpec[] = [
   // gameplay
   { name: "MAXPLAYERS", type: "int" },
@@ -127,6 +127,8 @@ export const CONFIG_FIELDS: FieldSpec[] = [
   { name: "TALK_DELAY", type: "int" },
   { name: "ATTACK_COMMENTS", type: "str" },
   { name: "DIE_COMMENTS", type: "str" },
+  // optional browser rules
+  { name: "OUTLAST_BONUS", type: "str" },
 ];
 
 const FIELD_TYPE: { [name: string]: FieldType } = {};
@@ -338,6 +340,7 @@ export class Config {
   COMPUTERS_BUY: string = "ON";
   FREE_MARKET: string = "OFF";
   SCORING: string = "STANDARD";
+  OUTLAST_BONUS: string = "OFF"; // browser extension; sampled at round start
   // physics
   GRAVITY: number = 0.2;
   AIR_VISCOSITY: number = 0; // 0-20 (note: live mult uses /10000)
