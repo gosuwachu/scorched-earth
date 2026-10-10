@@ -140,6 +140,118 @@ function enemyOf(gs: GameState): GameState["tanks"][number] {
   return gs.tanks.find((t) => t !== cur) ?? gs.tanks[1];
 }
 
+function checkTrail(condition: boolean, message: string): void {
+  if (!condition) throw new Error(`Projectile trail: ${message}`);
+}
+
+function buildTrailState(sky = "BLACK"): GameState {
+  const gs = buildState(2, { SKY: sky, TRACE: "OFF", BOMB_ICON: "SMALL" });
+  driveToAim(gs);
+  gs.terrain.grid.fill(C.COL_SKY);
+  for (let x = 0; x < W; x++) {
+    for (let y = 500; y < H; y++) gs.terrain.write(x, y, C.DIRT_SHADE_LO + 8);
+  }
+  gs.tanks.forEach((t, i) => { t.x = i ? 800 : 200; t.y = 499; });
+  return gs;
+}
+
+// Controlled renderer checks for the browser-only visibility enhancement.
+// Explicit times keep these captures independent of Playwright/capture speed.
+function trailDemo(sky: string, age = 0): StateMeta {
+  const gs = buildTrailState(sky);
+  const r = freshRenderer(gs), surf = newSurf();
+  r.render(surf, gs, 0);
+  const baseline = surf.get_at([255, 138]);
+  const p = new Projectile(gs.current_shooter, ITEMS[0], 200, 160, 0, 0);
+  gs.projectiles = [p];
+  r.render(surf, gs, 0);
+  for (let frame = 1; frame <= 6; frame++) {
+    p.sx = 200 + frame * 10; p.sy = 160 - frame * 4;
+    r.render(surf, gs, frame * 25);
+  }
+  const fresh = surf.get_at([255, 138]);
+  checkTrail(fresh[0] > baseline[0] + 30, `${sky} streak is not visible`);
+  checkTrail(surf.get_at([260, 136])[0] === 252, "missile head lost its full brightness");
+  checkTrail(surf.get_at([255, 137]).every((v, i) => v === surf.get_at([265, 137])[i]),
+    "streak is wider than one pixel");
+  if (age > 0) {
+    gs.projectiles = []; // impact/removal leaves only the fading residue
+    r.render(surf, gs, 150 + age);
+  }
+  const faded = surf.get_at([255, 138]);
+  // This pixel was crossed at 137.5 ms: interpolation must give a smooth fade
+  // along each segment as well as across successive frames (canvas rounding ±1).
+  const opacity = 0.65 * Math.max(0, 1 - (12.5 + age) / 150);
+  for (let channel = 0; channel < 3; channel++) {
+    checkTrail(Math.abs(faded[channel] - (baseline[channel] + (252 - baseline[channel]) * opacity)) <= 1,
+      `${sky} incorrect blend/fade at age ${age}: ${faded}`);
+  }
+  checkTrail(faded[3] === 255, "trail erased the sky's opacity");
+  checkTrail(gs.trace_marks.length === 0 && p.state.trace_path === undefined, "streak modified TRACE state");
+  blit(surf);
+  return { sky, age, baseline, fresh, faded };
+}
+
+function trailRules(): StateMeta {
+  const gs = buildTrailState();
+  const surf = newSurf();
+  const p = new Projectile(gs.current_shooter, ITEMS[0], 200, 160, 0, 0);
+  gs.projectiles = [p];
+  let r = freshRenderer(gs);
+  const seed = () => {
+    p.sx = 200; r.render(surf, gs, 0);
+    p.sx = 220; r.render(surf, gs, 25);
+  };
+  const dark = (label: string) => checkTrail(surf.get_at([210, 160])[0] === 0, label);
+  const visible = (label: string) => checkTrail(surf.get_at([210, 160])[0] > 0, label);
+  seed(); visible("ordinary shot lacks a trail");
+  gs.cfg.BOMB_ICON = "INVISIBLE";
+  r.render(surf, gs, 30); dark("invisible missile has a trail");
+  gs.cfg.BOMB_ICON = "SMALL";
+  r.render(surf, gs, 40); dark("old trail reappeared after enabling icons");
+
+  for (const kind of ["rolling", "tunneling", "penetrating", "effect", "inactive"]) {
+    r = freshRenderer(gs);
+    p.state = { [kind]: true };
+    p.mode = kind === "penetrating" ? 1 : -1;
+    p.active = kind !== "inactive";
+    p.weaponEffect = kind === "effect" ? { kind: "funky", trails: [], bursts: [], phase: "hold", hold: 0 } as never : undefined;
+    seed(); dark(`${kind} projectile gained an airborne streak`);
+  }
+  p.state = {}; p.mode = -1; p.active = true; p.weaponEffect = undefined;
+
+  for (const reset of ["round", "terrain", "state"]) {
+    r = freshRenderer(gs); seed();
+    if (reset === "round") gs.round_index++;
+    if (reset === "terrain") gs.terrain = buildTrailState().terrain;
+    r.render(surf, reset === "state" ? { ...gs } as GameState : gs, 30);
+    dark(`${reset} change retained an old trail`);
+  }
+
+  r = freshRenderer(gs);
+  p.sx = W - 5; r.render(surf, gs, 0);
+  p.sx = 5; r.render(surf, gs, 25);
+  dark("opposite-edge jump drew a cross-screen streak");
+
+  // Existing TRACE and Smoke Tracer persistence goes through the actual
+  // collection/flush path, independently of the transient visual history.
+  for (const item of [0, 11]) {
+    gs.cfg.TRACE = item === 0 ? "ON" : "OFF";
+    const traced = new Projectile(gs.current_shooter, ITEMS[item], 200, 160, 0, 0);
+    gs.projectiles = [traced]; gs.trace_marks = [];
+    r = freshRenderer(gs); r.render(surf, gs, 0);
+    traced.sx = 220;
+    gs._collect_trace(traced);
+    r.render(surf, gs, 25);
+    gs._flush_trace(traced); gs.projectiles = [];
+    r.render(surf, gs, 200);
+    visible(`item ${item} persistent trace was removed`);
+    checkTrail(gs.trace_marks.length > 0, `item ${item} trace was not retained`);
+  }
+  blit(surf);
+  return { invisible: true, exclusions: 5, resets: 3, edgeJump: true, persistentTraces: 2 };
+}
+
 interface StateMeta {
   [k: string]: unknown;
 }
@@ -168,6 +280,11 @@ function sweepSetters(panel: { widgets: unknown[] }): void {
 // renderer for the whole game; a fresh renderer per frame would re-seed the sky LUT
 // every frame and is NOT how the app animates).
 const STATES: { [name: string]: () => StateMeta } = {
+  trail_dark: () => trailDemo("BLACK"),
+  trail_bright: () => trailDemo("PLAIN"),
+  trail_fade: () => trailDemo("BLACK", 75),
+  trail_expired: () => trailDemo("BLACK", 150),
+  trail_rules: trailRules,
   // (a) in-battle frame at phase AIM.
   aim: () => {
     const gs = buildState(1, { SKY: "PLAIN" });
@@ -185,15 +302,16 @@ const STATES: { [name: string]: () => StateMeta } = {
     const gs = buildState(2, { SKY: "STARS" });
     driveToAim(gs);
     const r = freshRenderer(gs);
+    gs.current_shooter!.angle = 135; // launch away from the adjacent hillside
     gs.fire(); // launch current shooter's Baby Missile (ballistic)
     const surf = newSurf();
-    r.render(surf, gs); // launch frame: projectile object at the muzzle
+    r.render(surf, gs, 0); // launch frame: projectile object at the muzzle
     blit(surf);
     const atLaunch = gs.projectiles.length;
     // advance the flight a few rendered frames while it is still airborne
     for (let i = 0; i < 6 && gs.projectiles.length > 0 && gs.explosions.length === 0; i++) {
       gs.update(1 / 60);
-      r.render(surf, gs);
+      r.render(surf, gs, (i + 1) * 1000 / 60);
       blit(surf);
     }
     return {

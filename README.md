@@ -49,6 +49,10 @@ refer to a Python port:
    agreement with DOS. Funky Bomb, Sandhogs, and multi-layer terrain collapse now
    use corrected DOS-derived behavior; see [the evidence and limitations](oracle/WEAPON_FIDELITY.md).
 
+For browser visibility, airborne missiles have a thin streak that fades within
+150 ms. This is an intentional visual enhancement; the original persistent TRACE
+and Smoke Tracer paths and projectile physics remain separate.
+
 Current verification uses:
 
 - **DOS evidence:** fixtures extracted directly from the checked executable,

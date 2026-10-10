@@ -44,6 +44,7 @@ import * as widgets from "./widgets";
 import * as _pal from "./palette";
 import { build_palette, LiveLUT } from "./palette";
 import { hudAngle } from "./angles";
+import { ProjectileTrails } from "./projectile_trails";
 
 export { hudAngle } from "./angles";
 
@@ -639,11 +640,16 @@ export class Renderer {
   private _sky_lut_seeded = false;
   private _dirt_lo: number;
   private _dirt_hi: number;
+  private _projectileTrails: ProjectileTrails;
+  private _trailState: GameState | null = null;
+  private _trailTerrain: GameState["terrain"] | null = null;
+  private _trailRound: unknown;
 
   constructor(cfg: Cfg, width: number, height: number) {
     this.cfg = cfg;
     this.w = width;
     this.h = height;
+    this._projectileTrails = new ProjectileTrails(width, height);
     // at-rest fallback table (used before a frame's state LUT is available).
     this.pal = build_palette();
     this._active = this.pal;
@@ -740,7 +746,7 @@ export class Renderer {
   }
 
   // -------------------------------------------------------------- top level
-  render(surf: pygame.Surface, state: GameState): void {
+  render(surf: pygame.Surface, state: GameState, nowMs = performance.now()): void {
     this._lut = state.lut != null ? state.lut : null;
     this._active = this._lut !== null ? this._lut : this.pal;
     this.sync_sky(state);
@@ -756,6 +762,7 @@ export class Renderer {
       surf.ctx.putImageData(frame, 0, 0);
     }
     this._draw_trace_marks(surf, state);
+    this._draw_projectile_trails(surf, state, nowMs);
     this._draw_bolts(surf, state);
     for (const ring of getList<{ x: number; y: number; r: number }>(state, "plasma_rings")) {
       this._draw_plasma_ring(surf, ring);
@@ -1145,6 +1152,29 @@ export class Renderer {
   }
 
   // ------------------------------------------------------------ projectiles
+  private _draw_projectile_trails(surf: pygame.Surface, state: GameState, nowMs: number): void {
+    if (this._trailState !== state || this._trailTerrain !== state.terrain ||
+        this._trailRound !== state.round_index || this.cfg.BOMB_ICON.toUpperCase() === "INVISIBLE") {
+      this._projectileTrails.clear();
+      this._trailState = state;
+      this._trailTerrain = state.terrain;
+      this._trailRound = state.round_index;
+    }
+    if (this.cfg.BOMB_ICON.toUpperCase() === "INVISIBLE") return;
+    const airborne = state.projectiles.filter((p) => !p.weaponEffect && p.active !== false &&
+      !projStateValue(p, "rolling") && !projStateValue(p, "tunneling") && p.mode !== 1);
+    const pixels = this._projectileTrails.update(airborne, nowMs);
+    const ctx = surf.ctx;
+    ctx.save();
+    ctx.fillStyle = "rgb(252, 252, 252)";
+    for (const { x, y, opacity } of pixels) {
+      if (C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x, y))) continue;
+      ctx.globalAlpha = opacity;
+      ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.restore();
+  }
+
   private _draw_projectile(surf: pygame.Surface, p: ProjectileLike, state: GameState): void {
     if (p.weaponEffect) {
       this._draw_weapon_effect(surf, p.weaponEffect, state);
@@ -1739,17 +1769,19 @@ function tupRgb(row: RGB | number[]): RGB {
   return [Math.trunc(row[0]), Math.trunc(row[1]), Math.trunc(row[2])];
 }
 
-/** p.state.get("trace_path") supporting either a Map-like (.get) or a plain object. */
-function projTracePath(p: ProjectileLike): Array<[number, number]> | null {
+/** Read projectile state from either a Map-like (.get) or a plain object. */
+function projStateValue(p: ProjectileLike, key: string): unknown {
   const st = p.state;
   if (!st) {
     return null;
   }
-  let v: unknown;
   if (typeof (st as { get?: unknown }).get === "function") {
-    v = (st as { get(k: string): unknown }).get("trace_path");
-  } else {
-    v = (st as { [k: string]: unknown })["trace_path"];
+    return (st as { get(k: string): unknown }).get(key);
   }
+  return (st as { [k: string]: unknown })[key];
+}
+
+function projTracePath(p: ProjectileLike): Array<[number, number]> | null {
+  const v = projStateValue(p, "trace_path");
   return Array.isArray(v) ? (v as Array<[number, number]>) : null;
 }

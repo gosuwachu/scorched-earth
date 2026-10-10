@@ -56,6 +56,13 @@ frames around the interaction and the numeric outcomes, not just a final image.
 Runs reuse output paths, so preserve any needed before/after captures separately
 and use the latest summary to identify the scenarios that actually ran.
 
+The render driver checks the browser's 150 ms missile streak with explicit
+timestamps. `trail_dark.png`, `trail_bright.png`, `trail_fade.png`, and
+`trail_expired.png` capture its visibility and expiry; `flight.png` shows a normal
+launched shot. The assertions cover pixel blending, invisible/excluded shots,
+scene resets, edge jumps, and the independent persistent TRACE/Smoke Tracer paths.
+These are browser visibility checks, not DOS visual comparisons.
+
 The weapon driver also writes `weapons/simultaneous.json` and
 `weapons/simultaneous-*.png`: an underground explosion collapses while another
 shot stays airborne, with unchanged shot coordinates during the fall and resumed
