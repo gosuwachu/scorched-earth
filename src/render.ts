@@ -719,6 +719,13 @@ export class Renderer {
     }
     // baked skies: structure the binary does not palette-cycle.
     this.sky_rgb = makeSkyPlane(m, this.w, this.h).data;
+    if (m === "SUNSET") {
+      // Browser visibility adjustment: dim the cached sky so shots and wind
+      // readouts stand out. Keep the reference sky builder and palette intact.
+      for (let i = 0; i < this.sky_rgb.length; i++) {
+        this.sky_rgb[i] = Math.trunc(this.sky_rgb[i] * 0.4);
+      }
+    }
   }
 
   /** The sky as a fresh (W,H,3) column-major RGB buffer for this frame.  A
