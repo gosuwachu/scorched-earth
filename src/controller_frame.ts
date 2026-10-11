@@ -55,7 +55,7 @@ export class TankOverview {
     this.element.append(preview, info);
   }
 
-  update(tank: NonNullable<ControllerView["tank"]>, playerIndex: number, round: number, combat = true, showPower = false): void {
+  update(tank: NonNullable<ControllerView["tank"]>, round: number, combat = true, showPower = false): void {
     this.name.textContent = tank.name;
     this.cash.textContent = `Cash $${tank.cash}`;
     this.round.textContent = `Round ${round}`;
@@ -65,7 +65,7 @@ export class TankOverview {
     this.shield.textContent = tank.shield ? `${tank.shield.name} ${tank.shield.percent}%` : "";
     this.health.node.hidden = !combat;
     this.health.update(tank.health, `Health ${tank.health}/${TANK_DEFAULT_HEALTH}`);
-    const color = TEAM_RGB[Math.max(0, playerIndex) % TEAM_RGB.length];
+    const color = TEAM_RGB[tank.colorIndex % TEAM_RGB.length];
     const spriteKey = `${tank.icon}:${tank.angle}:${color}`;
     if (spriteKey !== this.spriteKey) {
       this.spriteKey = spriteKey;

@@ -31,9 +31,9 @@ export class ShopControls {
     this.element.append(this.overview.element, this.equipment);
   }
 
-  update(view: ControllerView, playerIndex: number): void {
+  update(view: ControllerView): void {
     const tank = view.tank;
-    if (tank) this.overview.update(tank, playerIndex, view.round, false);
+    if (tank) this.overview.update(tank, view.round, false);
     const category = view.controls.find((c) => c.id === "category");
     this.equipment.hidden = !view.enabled || !category;
     this.categoryDisabled = !category || !!category.disabled;

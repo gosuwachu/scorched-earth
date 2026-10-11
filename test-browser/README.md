@@ -20,6 +20,30 @@ driver when changing how a player reaches or activates those states. The render
 driver's coverage also does not establish application boot or online coverage;
 use the corresponding existing suites when those paths change.
 
+Online lobby, connection and controller changes use `online.mjs`. It starts a
+development server with WebSocket support unless `ONLINE_TEST_URL` is set.
+To share that server with the UI and render checks, start it once:
+
+```bash
+HOST=127.0.0.1 PORT=4317 npm run dev:lan
+```
+
+Then run the relevant drivers against it:
+
+```bash
+ONLINE_TEST_URL=http://127.0.0.1:4317 node test-browser/online.mjs
+UI_TEST_URL=http://127.0.0.1:4317 node test-browser/ui.mjs
+node test-browser/run.mjs http://127.0.0.1:4317
+```
+
+The online checks interrupt the initial join before the controller receives its
+token, verify recovery after a reload and with storage blocked, and remove
+disconnected first/middle lobby entries. They check stable player colours and
+input ownership through shopping, battle and subsequent rounds. Representative
+captures are `test-browser/out/online-colours-{lobby,shop,battle,round-two}-{host,phone}.png`.
+The sprite assertions compare phone pixels with the host tank's palette colour;
+these are browser consistency checks, not DOS visual comparisons.
+
 ## Reuse one development server
 
 Start Vite in a persistent terminal or tool session:
@@ -62,6 +86,15 @@ timestamps. `trail_dark.png`, `trail_bright.png`, `trail_fade.png`, and
 launched shot. The assertions cover pixel blending, invisible/excluded shots,
 scene resets, edge jumps, and the independent persistent TRACE/Smoke Tracer paths.
 These are browser visibility checks, not DOS visual comparisons.
+
+Off-screen missile indicators are covered by `indicator_dark.png`,
+`indicator_bright.png`, `indicator_no_hud.png`, and `indicator_target_hud.png`.
+The checks cover all edges/corners, grouped missile counts and nearest-distance
+labels, and unchanged HUD/wind pixels. `indicator_rules` checks invisible and
+non-airborne exclusions, grouping/separation, re-entry, removal and round resets.
+`indicator_flight.png` and `indicator_return.png` follow a normally fired high
+shot through exit and re-entry, checking that rendering leaves its trajectory
+unchanged. Distances are logical game pixels, independent of browser scaling.
 
 The weapon driver also writes `weapons/simultaneous.json` and
 `weapons/simultaneous-*.png`: an underground explosion collapses while another

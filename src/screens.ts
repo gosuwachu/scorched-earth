@@ -211,6 +211,7 @@ interface OwnTank {
   cash: number;
   inventory: number[];
   player_index?: number;
+  color_index?: number;
   name: string;
   has_ammo(slot: number): boolean;
   selected_weapon?: number;
@@ -1867,7 +1868,7 @@ export class ShopScreen extends Screen {
     const p = this.panel;
     // -- top bar (RE FUN_1dbc_1aa8.c:68-86): name (player color) | Cash | rounds
     const bar_y = p.rect.y + 26;
-    const pidx = this.tank.player_index ?? 0;
+    const pidx = this.tank.color_index ?? this.tank.player_index ?? 0;
     const name_col = palette.TEAM_RGB[pidx % palette.TEAM_RGB.length];
     _draw_accel_text(surf, this.tank.name, p.rect.x + 12, bar_y, name_col, W.font(15, true));
     // "Cash: $%ld" centered (no comma in the binary's printf).

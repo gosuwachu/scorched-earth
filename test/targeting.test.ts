@@ -135,7 +135,7 @@ describe("online targeting authority", () => {
   it("shares the pending draft, rejects other players/stale/replayed inputs and restores reconnect state", () => {
     const gs = game(); gs.fire();
     const app = { gs, top: {}, onlineScreen: "battle", transitioning: false } as unknown as App;
-    const roster = gs.tanks.map((t, i) => ({ id: String(i), name: t.name, icon: 0, ai: 0, ready: true, connected: true }));
+    const roster = gs.tanks.map((t, i) => ({ id: String(i), name: t.name, icon: 0, colorIndex: i, ai: 0, ready: true, connected: true }));
     const remote = new RemoteAdapter(app, roster);
     const view = remote.states(roster)["0"];
     expect(view.targeting).toBe(true); expect(view.controls.some((c) => c.id === "target-0")).toBe(true);
@@ -160,7 +160,7 @@ describe("online target arrows", () => {
     const app = { gs, top: {}, onlineScreen: "battle", transitioning: false, onlineMenuOpen: false,
       handleRemote: (event: ingame.IngameEvent) => ingame.handle_game_event(gs as never, event),
       _act: () => {} };
-    const roster = gs.tanks.map((t, i) => ({ id: String(i), name: t.name, icon: 0, ai: 0, ready: true, connected: true }));
+    const roster = gs.tanks.map((t, i) => ({ id: String(i), name: t.name, icon: 0, colorIndex: i, ai: 0, ready: true, connected: true }));
     const remote = new RemoteAdapter(app as unknown as App, roster);
     const view = () => remote.states(roster)["0"];
     let seq = 0;

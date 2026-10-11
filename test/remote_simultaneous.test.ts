@@ -14,7 +14,7 @@ function setup() {
     FALLING_TANKS: "OFF", SOUND: "OFF", TALKING_TANKS: "OFF" });
   const gs = createGameState(cfg, 640, 480, 17);
   const roster: Player[] = ["Alice", "Bob", "CPU"].map((name, i) => ({
-    id: name, name, icon: 3, ai: i === 2 ? 1 : 0, ready: true, connected: true,
+    id: name, name, icon: 3, colorIndex: i, ai: i === 2 ? 1 : 0, ready: true, connected: true,
   }));
   for (const p of roster) gs.add_player(p.name, p.ai, 0, p.icon);
   gs.new_game(); gs.start_round();

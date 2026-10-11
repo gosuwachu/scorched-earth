@@ -45,6 +45,7 @@ import * as _pal from "./palette";
 import { build_palette, LiveLUT } from "./palette";
 import { hudAngle } from "./angles";
 import { ProjectileTrails } from "./projectile_trails";
+import { layoutProjectileIndicators } from "./projectile_indicators";
 
 export { hudAngle } from "./angles";
 
@@ -641,6 +642,7 @@ export class Renderer {
   private _dirt_lo: number;
   private _dirt_hi: number;
   private _projectileTrails: ProjectileTrails;
+  private _indicatorFont: pygame.Font;
   private _trailState: GameState | null = null;
   private _trailTerrain: GameState["terrain"] | null = null;
   private _trailRound: unknown;
@@ -650,6 +652,7 @@ export class Renderer {
     this.w = width;
     this.h = height;
     this._projectileTrails = new ProjectileTrails(width, height);
+    this._indicatorFont = pygame.font.SysFont("consolas,couriernew,monospace", 9, true);
     // at-rest fallback table (used before a frame's state LUT is available).
     this.pal = build_palette();
     this._active = this.pal;
@@ -809,6 +812,7 @@ export class Renderer {
     for (const f of getList<FlashLike>(state, "flashes")) {
       this._draw_flash(surf, f);
     }
+    this._draw_projectile_indicators(surf, state);
     const charge = state.plasma_charge as { value: number; max: number } | null | undefined;
     if (charge && !this.htmlDialogs) {
       const layout = chargeLayout(this.w, this.h);
@@ -1152,6 +1156,38 @@ export class Renderer {
   }
 
   // ------------------------------------------------------------ projectiles
+  private _draw_projectile_indicators(surf: pygame.Surface, state: GameState): void {
+    if (this.cfg.BOMB_ICON.toUpperCase() === "INVISIBLE") return;
+    const lineHeight = this._indicatorFont.get_height();
+    const top = this._hud_bottom(state) + 6 + this.font.get_height() + 8;
+    const markers = layoutProjectileIndicators(state.projectiles.filter(isAirborneProjectile), this.w, this.h,
+      top, (text) => this._indicatorFont.size(text)[0], lineHeight);
+    const ctx = surf.ctx;
+    for (const marker of markers) {
+      ctx.save();
+      ctx.translate(marker.arrowX, marker.arrowY);
+      ctx.rotate(marker.angle);
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(5, 0); ctx.lineTo(2, 0); ctx.lineTo(2, 6);
+      ctx.lineTo(-2, 6); ctx.lineTo(-2, 0); ctx.lineTo(-5, 0);
+      ctx.closePath();
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "black";
+      ctx.stroke();
+      ctx.fillStyle = "rgb(255, 235, 40)";
+      ctx.fill();
+      ctx.restore();
+      marker.lines.forEach((line, i) => {
+        const label = this._indicatorFont.render(line, true, [252, 252, 252]);
+        const w = Math.min(label.get_width(), marker.textWidth);
+        ctx.drawImage(label.canvas, marker.textX + (marker.textWidth - w) / 2,
+          marker.textY + i * lineHeight, w, label.get_height());
+      });
+    }
+  }
+
   private _draw_projectile_trails(surf: pygame.Surface, state: GameState, nowMs: number): void {
     if (this._trailState !== state || this._trailTerrain !== state.terrain ||
         this._trailRound !== state.round_index || this.cfg.BOMB_ICON.toUpperCase() === "INVISIBLE") {
@@ -1161,8 +1197,7 @@ export class Renderer {
       this._trailRound = state.round_index;
     }
     if (this.cfg.BOMB_ICON.toUpperCase() === "INVISIBLE") return;
-    const airborne = state.projectiles.filter((p) => !p.weaponEffect && p.active !== false &&
-      !projStateValue(p, "rolling") && !projStateValue(p, "tunneling") && p.mode !== 1);
+    const airborne = state.projectiles.filter(isAirborneProjectile);
     const pixels = this._projectileTrails.update(airborne, nowMs);
     const ctx = surf.ctx;
     ctx.save();
@@ -1779,6 +1814,11 @@ function projStateValue(p: ProjectileLike, key: string): unknown {
     return (st as { get(k: string): unknown }).get(key);
   }
   return (st as { [k: string]: unknown })[key];
+}
+
+function isAirborneProjectile(p: ProjectileLike): boolean {
+  return !p.weaponEffect && p.active !== false && !projStateValue(p, "rolling") &&
+    !projStateValue(p, "tunneling") && p.mode !== 1;
 }
 
 function projTracePath(p: ProjectileLike): Array<[number, number]> | null {

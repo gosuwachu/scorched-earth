@@ -51,10 +51,10 @@ export class PanelControls {
     return group.controls;
   }
 
-  update(view: ControllerView, playerIndex: number): void {
+  update(view: ControllerView): void {
     this.heading.textContent = view.targeting ? "Choose target" : view.batteryPrompt ? "Discharge batteries" :
       view.controls.some((c) => c.id === "plasma-charge") ? "Charge Plasma" : view.screen;
-    if (view.tank) this.overview.update(view.tank, playerIndex, view.round, view.screen !== "Inventory", view.screen === "Tank controls");
+    if (view.tank) this.overview.update(view.tank, view.round, view.screen !== "Inventory", view.screen === "Tank controls");
     this.overview.element.hidden = !view.tank;
     this.targetPosition.hidden = !view.enabled || !view.targeting;
     let index = 1; // The persistent target-position section precedes the ordinary groups.

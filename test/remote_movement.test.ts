@@ -13,7 +13,7 @@ function setup() {
   Object.assign(cfg, { PLAY_MODE: "SEQUENTIAL", INITIAL_CASH: 0, MAX_WIND: 0,
     FALLING_TANKS: "OFF", SOUND: "OFF", TALKING_TANKS: "OFF" });
   const gs = createGameState(cfg, 640, 480, 17);
-  const roster: Player[] = ["Alice", "Bob"].map((name) => ({ id: name, name, icon: 3, ai: 0, ready: true, connected: true }));
+  const roster: Player[] = ["Alice", "Bob"].map((name, i) => ({ id: name, name, icon: 3, colorIndex: i, ai: 0, ready: true, connected: true }));
   for (const p of roster) gs.add_player(p.name, p.ai, 0, p.icon);
   gs.new_game(); gs.start_round();
   gs.phase = "aim"; gs.current_shooter = gs.tanks[0];

@@ -41,14 +41,14 @@ export class Roster {
       }
     }
     players.forEach((p, index) => {
-      const iconKey = `${p.icon}:${index}`;
+      const iconKey = `${p.icon}:${p.colorIndex}`;
       let entry = this.rows.get(p.id);
       if (!entry) {
         const row = el("li");
         row.dataset.playerId = p.id;
         const name = el("span", "", "lan-player-name");
         const status = el("small");
-        const icon = tankIcon(p.icon, index);
+        const icon = tankIcon(p.icon, p.colorIndex);
         const details = el("div", "", "lan-player-details");
         details.append(name, status);
         row.append(icon, details);
@@ -58,7 +58,7 @@ export class Roster {
         this.rows.set(p.id, entry);
       }
       if (entry.iconKey !== iconKey) {
-        const icon = tankIcon(p.icon, index);
+        const icon = tankIcon(p.icon, p.colorIndex);
         entry.icon.replaceWith(icon);
         entry.icon = icon;
         entry.iconKey = iconKey;

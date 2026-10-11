@@ -81,9 +81,9 @@ export class BattleControls {
     this.keyTargets.get(code)?.append(button);
   }
 
-  update(tank: NonNullable<ControllerView["tank"]>, playerIndex: number, round: number): void {
+  update(tank: NonNullable<ControllerView["tank"]>, round: number): void {
     const [elevation, side] = hudAngle(tank.angle);
-    this.overview.update(tank, playerIndex, round);
+    this.overview.update(tank, round);
     this.weapon.textContent = `${tank.weapon} (${tank.ammo})`;
     if (tank.weapon !== this.weaponName) {
       this.weaponName = tank.weapon;

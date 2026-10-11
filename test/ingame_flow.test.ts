@@ -882,7 +882,7 @@ describe("ingame_flow: ControlPanelScreen dispatch (real widgets.Panel routing)"
     inv[FIRST_GUID] = 1;
     inv[37] = 1; // Lazy Boy
     const { cp, st, t } = panelFor({ health: 80, inv, shield_item: weapons.SLOT_SHIELD, shield_hp: 37 });
-    const roster: Player[] = ["Alice", "Bob"].map((name) => ({ id: name, name, icon: 3, ai: 0, ready: true, connected: true }));
+    const roster: Player[] = ["Alice", "Bob"].map((name, i) => ({ id: name, name, icon: 3, colorIndex: i, ai: 0, ready: true, connected: true }));
     const app = { gs: st, top: cp, onlineScreen: "player", onlineMenuOpen: false, transitioning: false,
       dispatchAction: (action: string) => cp.dispatchAction(action) };
     const adapter = new RemoteAdapter(app as unknown as App, roster);

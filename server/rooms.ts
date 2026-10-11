@@ -10,6 +10,8 @@ interface Member extends Player { token: string; peer?: Peer; seq: number }
 interface Room {
   id: string; token: string; host?: Peer; players: Member[]; started: boolean;
   abandoned?: number; states: Record<string, ControllerView>;
+  /** Initial join credentials stay private; null revokes a removed member. */
+  joins: Map<string, string | null>;
 }
 
 /** Transport-independent room registry; the host remains the game authority. */
@@ -19,7 +21,7 @@ export class Rooms {
 
   private view(r: Room): RoomView {
     return { id: r.id, started: r.started, hostConnected: !!r.host, players: r.players.map(
-      ({ id, name, icon, ai, ready, connected }) => ({ id, name, icon, ai, ready, connected }),
+      ({ id, name, icon, colorIndex, ai, ready, connected }) => ({ id, name, icon, colorIndex, ai, ready, connected }),
     ) };
   }
 
@@ -30,6 +32,12 @@ export class Rooms {
 
   private changed(r: Room): void { this.broadcast(r, { type: "room", room: this.view(r) }); }
 
+  private nextColor(r: Room): number {
+    const used = new Set(r.players.map((p) => p.colorIndex));
+    for (let i = 0; i < 10; i++) if (!used.has(i)) return i;
+    throw new Error("No tank colour available.");
+  }
+
   disconnect(peer: Peer, now = Date.now()): void {
     const binding = this.bindings.get(peer);
     this.bindings.delete(peer);
@@ -38,7 +46,6 @@ export class Rooms {
     if (p && p.peer === peer) {
       p.peer = undefined;
       p.connected = false;
-      delete r.states[p.id];
       r.host?.send({ type: "release", player: p.id });
       delete r.states[p.id];
     } else if (!p && r.host === peer) {
@@ -70,7 +77,7 @@ export class Rooms {
     const bound = this.bindings.get(peer);
     if (!bound) {
       if (m.type === "create") {
-        const r: Room = { id: randomUUID(), token: randomUUID(), host: peer, players: [], started: false, states: {} };
+        const r: Room = { id: randomUUID(), token: randomUUID(), host: peer, players: [], started: false, states: {}, joins: new Map() };
         this.rooms.set(r.id, r);
         this.bindings.set(peer, { room: r });
         peer.send({ type: "created", room: this.view(r), token: r.token });
@@ -89,13 +96,19 @@ export class Rooms {
         this.changed(r);
         return;
       }
-      let p = r.players.find((p) => p.ai === 0 && p.token === m.token);
+      if (m.joinId !== undefined && (typeof m.joinId !== "string" || !/^[0-9a-f]{32}$/.test(m.joinId))) {
+        return fail("Invalid join identifier.", true);
+      }
+      const joinedId = m.joinId ? r.joins.get(m.joinId) : undefined;
+      if (!m.token && joinedId === null) return fail("Your player is no longer in this room.", true);
+      let p = r.players.find((p) => p.ai === 0 && (m.token ? p.token === m.token : p.id === joinedId));
       if (!p) {
         if (m.token) return fail("Your player is no longer in this room.", true);
         if (r.started) return fail("Game already started. Rejoin using the browser you originally joined with.", true);
         if (r.players.length >= 10) return fail("This room is full.", true);
-        p = { id: randomUUID(), token: randomUUID(), name: "Player", icon: 3, ai: 0, ready: false, connected: true, seq: -1 };
+        p = { id: randomUUID(), token: randomUUID(), name: "Player", icon: 3, colorIndex: this.nextColor(r), ai: 0, ready: false, connected: true, seq: -1 };
         r.players.push(p);
+        if (m.joinId) r.joins.set(m.joinId, p.id);
       }
       if (p.peer) {
         this.bindings.delete(p.peer);
@@ -134,7 +147,7 @@ export class Rooms {
       if (r.players.length >= 10) return fail("This room is full.");
       if (!Number.isInteger(m.ai) || m.ai < 1 || m.ai > 8 || !Number.isInteger(m.icon) || m.icon < 0 || m.icon > 6 ||
         typeof m.name !== "string" || !m.name.trim() || m.name.trim().length > 8) return fail("Invalid computer tank.");
-      r.players.push({ id: randomUUID(), token: "", name: m.name.trim(), icon: m.icon, ai: m.ai, ready: true, connected: true, seq: -1 });
+      r.players.push({ id: randomUUID(), token: "", name: m.name.trim(), icon: m.icon, colorIndex: this.nextColor(r), ai: m.ai, ready: true, connected: true, seq: -1 });
       this.changed(r);
     } else if (m.type === "remove" && !r.started) {
       const removed = r.players.find((p) => p.id === m.player);
@@ -144,6 +157,8 @@ export class Rooms {
         removed.peer.close();
       }
       r.players = r.players.filter((p) => p.id !== m.player);
+      for (const [joinId, id] of r.joins) if (id === m.player) r.joins.set(joinId, null);
+      delete r.states[m.player];
       this.changed(r);
     } else if (m.type === "start" && !r.started) {
       if (!canStart(r.players)) return fail("Start needs 2–10 tanks and every human connected and ready.");

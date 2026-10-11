@@ -137,6 +137,8 @@ export class Tank {
   reveal_type: number;
   team_id: number;
   color: number;
+  /** Online lobby colour assignment; gameplay indices remain contiguous. */
+  color_index?: number;
   tank_icon: number;
   mobile: boolean;
 

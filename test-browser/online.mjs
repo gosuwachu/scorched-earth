@@ -11,6 +11,7 @@ import { checkMassKillDisabled, massKillRound } from "./online_mass_kill.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
 import { purchaseButton, checkHostShopping, checkShopRows, checkShopLayout, checkShopEdges, checkNoGuestActions, checkGuestReconnect } from "./online_shop.mjs";
 import { checkNoOnlineBar, settledDialogs, openHostMenu, closeHostMenu } from "./dialogs.mjs";
+import { abandonedPlayer, checkJoinWithoutStorage, checkInitialJoin, checkLobbyRemoval, checkGameColours } from "./online_lobby.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const base = process.env.ONLINE_TEST_URL || "http://127.0.0.1:4317";
@@ -52,6 +53,7 @@ try {
   await until(async () => { try { return (await fetch(`${base}/api/lan`)).ok; } catch { return false; } }, "LAN server");
   const executablePath = process.env.CHROMIUM_PATH || ["/usr/bin/chromium", "/usr/bin/google-chrome"].find(existsSync);
   browser = await chromium.launch({ executablePath, args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"] });
+  mkdirSync(`${root}/test-browser/out`, { recursive: true });
   const hostContext = await browser.newContext({ viewport: { width: 1200, height: 900 } });
   const host = await hostContext.newPage(); wireErrors(host);
   await host.goto(`${base}/test-browser/online_host.html`);
@@ -89,13 +91,31 @@ try {
   assert.ok(await host.locator("canvas.lan-qr").evaluate((c) => c.width > 100 && c.height > 100));
   assert.equal(await enabled(host, "Start online game"), false);
 
+  await checkJoinWithoutStorage(browser, host, joinUrl, until);
+  const abandonedFirst = await abandonedPlayer(base, joinUrl);
+
   const contextA = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   const contextB = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true, isMobile: true });
   for (const context of [contextA, contextB]) {
-    await context.addInitScript(() => {
+    await context.addInitScript((loseFirstJoin) => {
       const Socket = window.WebSocket;
       window.WebSocket = class extends Socket {
-        constructor(...args) { super(...args); window.onlineSocket = this; }
+        constructor(...args) {
+          super(...args); window.onlineSocket = this;
+          if (!String(args[0]).endsWith("/online")) return;
+          let discarded = false;
+          this.addEventListener("message", (event) => {
+            if (discarded) { event.stopImmediatePropagation(); return; }
+            const message = JSON.parse(event.data);
+            if (loseFirstJoin && message.type === "joined" && !sessionStorage.getItem("online-lost-join")) {
+              sessionStorage.setItem("online-lost-join", JSON.stringify(message));
+              discarded = true;
+              event.stopImmediatePropagation();
+              this.close();
+              location.reload();
+            }
+          });
+        }
       };
       window.audioStarts = 0;
       const start = AudioBufferSourceNode.prototype.start;
@@ -103,21 +123,27 @@ try {
         window.audioStarts++;
         return start.apply(this, args);
       };
-    });
+    }, context === contextA);
   }
   let a = await contextA.newPage(); wireErrors(a);
   const b = await contextB.newPage(); wireErrors(b);
-  await a.goto(joinUrl); await b.goto(joinUrl);
+  await a.goto(joinUrl);
+  await a.getByPlaceholder("Your name").waitFor();
+  await checkInitialJoin(host, a, until);
+  const abandonedMiddle = await abandonedPlayer(base, joinUrl);
+  await b.goto(joinUrl);
   await a.getByPlaceholder("Your name").fill("Alice");
   await checkGuestReconnect(a, until);
   await click(a, "Choose tank 2"); await click(a, "Ready");
   await b.getByPlaceholder("Your name").fill("Bob"); await click(b, "Ready");
+  await checkLobbyRemoval(host, a, b, [abandonedFirst, abandonedMiddle], until, `${root}/test-browser/out`);
   await host.getByLabel("Computer difficulty").selectOption("1");
   await click(host, "Add computer");
   await until(() => enabled(host, "Start online game"), "ready lobby");
   await click(host, "Start online game");
   await host.waitForFunction(async () => (await import("/src/sound.ts")).sfx._ctx?.state === "running");
   await until(() => enabled(a, "Done"), "Alice shopping");
+  await checkGameColours(host, [a, b], until, `${root}/test-browser/out`, "shop");
   await checkNoOnlineBar(host);
   await openHostMenu(host);
   await checkMassKillDisabled(host);
@@ -143,7 +169,6 @@ try {
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.cfg.MAXROUNDS), 2);
   await checkHostShopping({ host, guest: a, click, enabled, until });
-  mkdirSync(`${root}/test-browser/out`, { recursive: true });
   await checkShopRows(a, host);
   await checkShopLayout(a, root, "weapons");
   await checkShopEdges(a, host, until);
@@ -204,7 +229,6 @@ try {
   assert.equal(await cash(), equippedCash);
   await click(host, "Done");
   await a.getByRole("heading", { name: /Purchasing/ }).waitFor();
-  mkdirSync(`${root}/test-browser/out`, { recursive: true });
   await a.screenshot({ path: `${root}/test-browser/out/online-shopping.png`, fullPage: true });
   const staleDone = await host.evaluate(() => {
     const session = window.onlineApp.online;
@@ -224,6 +248,7 @@ try {
   await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]) > 0, "Bob buys guidance");
   await click(b, "Done");
   await until(() => enabled(a, "Fire"), "Alice aiming");
+  await checkGameColours(host, [a, b], until, `${root}/test-browser/out`, "battle");
   await click(a, "Esc");
   assert.equal(await host.getByRole("dialog", { name: "System Menu", exact: true }).count(), 0, "Guest Escape never opens the host menu");
   await checkBattleControls({ host, a, b, root, until });
@@ -446,6 +471,7 @@ try {
   await host.evaluate(() => { window.onlineApp.gs.current_shooter.selected_guidance = 37; });
   const bobStock = await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[37]);
   await until(() => enabled(b, "Fire"), "second-round aiming");
+  await checkGameColours(host, [a, b], until, `${root}/test-browser/out`, "round-two");
   assert.equal(await b.locator(".lan-battle").isVisible(), true, "Battle controls return after results and purchasing");
   await click(b, "Fire");
   await b.getByLabel("Target X", { exact: true }).waitFor();

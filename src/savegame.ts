@@ -345,6 +345,7 @@ export interface TerrainGrid {
 
 export interface SaveTank {
   player_index: number;
+  color_index?: number;
   name: string;
   ai_class: number;
   reveal_type: number;
@@ -461,6 +462,7 @@ export interface SaveData {
 
 export interface SaveTankData {
   player_index: number;
+  color_index?: number;
   name: string;
   ai_class: number;
   reveal_type: number;
@@ -580,6 +582,7 @@ function tankToValueTree(t: SaveTank): { [k: string]: JsonValue } {
   const gt = t.guidance_target;
   return {
     player_index: t.player_index,
+    ...(t.color_index === undefined ? {} : { color_index: t.color_index }),
     name: t.name,
     ai_class: t.ai_class,
     reveal_type: t.reveal_type,
@@ -654,6 +657,7 @@ function tankToData(t: SaveTank): SaveTankData {
   };
   return {
     player_index: t.player_index,
+    ...(t.color_index === undefined ? {} : { color_index: t.color_index }),
     name: t.name,
     ai_class: t.ai_class,
     reveal_type: t.reveal_type,
@@ -713,6 +717,7 @@ export function applyTank(
   t.reveal_type = d.reveal_type ?? (d.ai_class ? d.ai_class - 1 : -1);
   t.team_id = d.team_id;
   t.color = d.color;
+  t.color_index = d.color_index;
   t.tank_icon = d.tank_icon;
   t.mobile = d.mobile;
   t.x = d.x;

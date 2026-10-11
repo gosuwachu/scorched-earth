@@ -15,11 +15,11 @@ export async function checkBattleControls({ host, a, b, root, until }) {
         const expected = await host.evaluate(async ({ index, design, angle }) => {
           const { Surface, SRCALPHA } = await import("/src/pygame.ts");
           const { draw_tank } = await import("/src/sprites.ts");
-          const { TEAM_RGB } = await import("/src/palette.ts");
+          const { TEAM_RGB, TANK_COLOR_BASE } = await import("/src/palette.ts");
           const t = window.onlineApp.gs.tanks[index];
           t.tank_icon = design; t.angle = angle;
           const surface = new Surface([48, 36], SRCALPHA);
-          draw_tank(surface, 24, 32, design, TEAM_RGB[index], angle, { scale: 2 });
+          draw_tank(surface, 24, 32, design, TEAM_RGB[t.color - TANK_COLOR_BASE], angle, { scale: 2 });
           return surface.canvas.toDataURL();
         }, { index, design, angle });
         await until(async () => await canvas(page).evaluate((node) => node.toDataURL()) === expected,

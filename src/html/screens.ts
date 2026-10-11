@@ -94,7 +94,7 @@ export class ScreenContent implements Component<boolean> {
     if (screen instanceof S.ShopScreen) {
       view.hide(screen._scroll_up, true);
       view.hide(screen._scroll_dn, true);
-      const name = el("strong"); name.style.color = `rgb(${TEAM_RGB[(screen.tank.player_index ?? 0) % TEAM_RGB.length].join(",")})`;
+      const name = el("strong"); name.style.color = `rgb(${TEAM_RGB[(screen.tank.color_index ?? screen.tank.player_index ?? 0) % TEAM_RGB.length].join(",")})`;
       const cash = el("strong"); const rounds = el("span");
       const bar = el("div"); bar.style.display = "flex"; bar.style.justifyContent = "space-between"; bar.append(name, cash, rounds);
       add(bar, p.rect.x + 12, p.rect.y + 26, screen._list_right - p.rect.x - 12);

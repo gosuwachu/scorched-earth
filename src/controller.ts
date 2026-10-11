@@ -37,9 +37,19 @@ export function startController(roomId: string): void {
   root.append(el("h1", "Scorched Earth", "ui-title"), body);
   document.body.append(root);
   const storageKey = `scorch-player:${roomId}`;
+  const joinKey = `scorch-join:${roomId}`;
   let token: string | undefined;
+  // Establish an identity before the first request, even if its response is lost.
+  let joinId = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
   try { token = localStorage.getItem(storageKey) || undefined; }
   catch { error.textContent = "Browser storage is unavailable. Keep this page open to retain your player."; }
+  if (!token) {
+    try {
+      const pending = localStorage.getItem(joinKey);
+      if (pending && /^[0-9a-f]{32}$/.test(pending)) joinId = pending;
+      localStorage.setItem(joinKey, joinId);
+    } catch { error.textContent = "Browser storage is unavailable. Keep this page open to retain your player."; }
+  }
   let playerId = "";
   let room: RoomView | undefined;
   let view: ControllerView | undefined;
@@ -61,6 +71,8 @@ export function startController(roomId: string): void {
   };
   let name: HTMLInputElement;
   let readyButton: HTMLButtonElement;
+  const designButtons: HTMLButtonElement[] = [];
+  let designColor = -1;
   let roster: Roster;
   let panel: PanelControls;
   let keys: HTMLElement;
@@ -147,18 +159,16 @@ export function startController(roomId: string): void {
       const label = el("label", "Name (up to 8 characters)"); label.append(name);
       icon = me?.icon ?? 3;
       const designs = el("div", "", "lan-designs");
-      const buttons: HTMLButtonElement[] = [];
       for (let i = 0; i < 6; i++) {
         const b = button("", () => {
           icon = i; ready = false;
-          buttons.forEach((b, n) => b.setAttribute("aria-pressed", String(n === icon)));
+          designButtons.forEach((b, n) => b.setAttribute("aria-pressed", String(n === icon)));
           readyButton.textContent = "Ready";
           if (name.value.trim()) connection.send({ type: "profile", name: name.value.trim(), icon, ready: false });
         });
         b.setAttribute("aria-label", `Choose tank ${i + 1}`);
         b.setAttribute("aria-pressed", String(i === icon));
-        b.append(tankIcon(i, room.players.findIndex((p) => p.id === playerId)));
-        buttons.push(b); designs.append(b);
+        designButtons.push(b); designs.append(b);
       }
       ready = me?.ready ?? false;
       readyButton = button(ready ? "Not ready" : "Ready", () => {
@@ -176,6 +186,10 @@ export function startController(roomId: string): void {
       };
       roster = new Roster();
       content.append(label, el("h2", "Choose your tank"), designs, readyButton, el("h2", "Players"), roster.element);
+    }
+    if (me && designColor !== me.colorIndex) {
+      designColor = me.colorIndex;
+      designButtons.forEach((b, i) => b.replaceChildren(tankIcon(i, designColor)));
     }
     roster.update(room.players);
   }
@@ -364,7 +378,7 @@ export function startController(roomId: string): void {
     root.classList.add("lan-controller-game");
     root.classList.toggle("lan-controller-panel", !useBattle && !useShop);
     panel.element.hidden = useBattle || useShop;
-    if (t && useBattle) battle.update(t, room?.players.findIndex((p) => p.id === playerId) ?? 0, view.round);
+    if (t && useBattle) battle.update(t, view.round);
     const oldRows = [...shop.list.querySelectorAll<HTMLButtonElement>("button")];
     const focusedRow = oldRows.indexOf(document.activeElement as HTMLButtonElement);
     const scrollTop = shop.list.scrollTop;
@@ -385,9 +399,9 @@ export function startController(roomId: string): void {
         const rows = [...shop.list.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
         (rows[Math.min(focusedRow, rows.length - 1)] ?? shop.list).focus({ preventScroll: true });
       }
-      shop.update(view, room?.players.findIndex((p) => p.id === playerId) ?? 0);
+      shop.update(view);
     }
-    if (!useBattle && !useShop) panel.update(view, room?.players.findIndex((p) => p.id === playerId) ?? 0);
+    if (!useBattle && !useShop) panel.update(view);
     battle.panel.hidden = !counts.has(battle.panel);
     battle.more.hidden = !counts.has(battle.extra);
     updateStatus();
@@ -403,7 +417,10 @@ export function startController(roomId: string): void {
   function receive(m: ServerMessage): void {
     if (m.type === "joined") {
       token = m.token; playerId = m.player; room = m.room;
-      try { localStorage.setItem(storageKey, token); } catch { /* warning was shown at boot */ }
+      try {
+        localStorage.setItem(storageKey, token);
+        localStorage.removeItem(joinKey);
+      } catch { error.textContent = "Browser storage is unavailable. Keep this page open to retain your player."; }
       if (!room.started) lobby();
     } else if (m.type === "room" || m.type === "started") {
       if (!m.room.hostConnected) { release(); view = undefined; }
@@ -421,7 +438,7 @@ export function startController(roomId: string): void {
     } else if (m.type === "error") error.textContent = m.message;
     updateStatus();
   }
-  const connection = new Connection(() => ({ type: "join", room: roomId, token }), receive, (connected) => {
+  const connection = new Connection(() => ({ type: "join", room: roomId, token, joinId: token ? undefined : joinId }), receive, (connected) => {
     if (!connected) { release(); view = undefined; }
     updateStatus();
   });

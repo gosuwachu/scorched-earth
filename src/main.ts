@@ -363,7 +363,7 @@ export interface GameStateLike {
   round_index?: number;
   live_sky?: string | null;
   rng: unknown;
-  add_player(name: string, ai_class: number, team: number, tank_icon: number): void;
+  add_player(name: string, ai_class: number, team: number, tank_icon: number, color_index?: number): void;
   new_game(): void;
   run_ai_buys(): void;
   begin_next_round(): void;
@@ -707,7 +707,7 @@ export class App {
     this.cfg.MAXPLAYERS = players.length;
     this.renderer = new Renderer(this.cfg, this.w, this.h);
     this._setup = players.map((p, i) => [p.name, p.ai, this.cfg.team_mode === C.TEAM_NONE ? 0 : i, p.icon]);
-    this._build_game();
+    this._build_game(players.map((p) => p.colorIndex));
   }
 
   /** main.py:393 -- render `stack` (lowest opaque upward) onto a fresh Surface. */
@@ -809,7 +809,7 @@ export class App {
   }
 
   /** main.py:474 -- build the GameState from the setup roster and seed the RNG. */
-  private _build_game(): void {
+  private _build_game(colorIndices?: number[]): void {
     if (_gameStateFactory === null) {
       // No engine wired: cannot start.  Surface the gap loudly (the menu stays up).
       diag.log.error("cannot start game: no GameStateFactory wired (engine not integrated)");
@@ -818,8 +818,8 @@ export class App {
     const seed = _newSeed();
     const gs = _gameStateFactory(this.cfg, this.w, this.h, seed);
     this.gs = gs;
-    for (const [name, ai_class, team, tank_icon] of this._setup) {
-      gs.add_player(name, ai_class, team, tank_icon);
+    for (const [i, [name, ai_class, team, tank_icon]] of this._setup.entries()) {
+      gs.add_player(name, ai_class, team, tank_icon, colorIndices?.[i]);
     }
     gs.new_game();
     diag.log.info(

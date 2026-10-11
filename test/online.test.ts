@@ -19,9 +19,9 @@ function setup() {
   const host = new Client();
   rooms.receive(host, { type: "create" });
   const created = host.last("created");
-  const join = () => {
+  const join = (joinId?: string) => {
     const p = new Client();
-    rooms.receive(p, { type: "join", room: created.room.id });
+    rooms.receive(p, { type: "join", room: created.room.id, joinId });
     return p;
   };
   return { rooms, host, created, join };
@@ -35,7 +35,7 @@ function state(context: number, enabled = true): ControllerView {
 
 describe("LAN room lifecycle", () => {
   it("requires a human, 2–10 tanks, and every human connected and ready", () => {
-    const p: Player = { id: "p", name: "P", icon: 3, ai: 0, ready: true, connected: true };
+    const p: Player = { id: "p", name: "P", icon: 3, colorIndex: 0, ai: 0, ready: true, connected: true };
     const ai = { ...p, id: "ai", ai: 6 };
     expect(canStart([p])).toBe(false);
     expect(canStart([ai, ai])).toBe(false);
@@ -123,6 +123,84 @@ describe("LAN room lifecycle", () => {
     another.rooms.disconnect(another.host, 0);
     another.rooms.expire(300_000);
     expect(participant.last("ended")).toBeDefined();
+  });
+});
+
+describe("initial join retries and stable lobby colours", () => {
+  const joinId = "0123456789abcdef0123456789abcdef";
+
+  it("reuses a player when the first join response was lost, including at capacity", () => {
+    const { rooms, host, join } = setup();
+    const first = join(joinId);
+    const identity = first.last("joined");
+    for (let i = 0; i < 9; i++) join();
+    rooms.disconnect(first);
+    for (let i = 0; i < 3; i++) {
+      // No server token is supplied: the phone never received the initial response.
+      const retry = join(joinId);
+      expect(retry.last("joined")).toMatchObject({ player: identity.player, token: identity.token });
+      expect(retry.last("joined").room.players).toHaveLength(10);
+      expect(retry.last("joined").room.players[0]).toMatchObject({ connected: true, colorIndex: 0 });
+      rooms.disconnect(retry);
+    }
+    expect(JSON.stringify(host.messages)).not.toContain(joinId);
+    expect(JSON.stringify(identity.room)).not.toContain(identity.token);
+  });
+
+  it("replaces an overlapping initial join and preserves its profile even after start", () => {
+    const { rooms, host, join } = setup();
+    const first = join(joinId);
+    ready(rooms, first);
+    rooms.receive(host, { type: "add-ai", ai: 1, name: "CPU", icon: 0 });
+    rooms.receive(host, { type: "start" });
+    const retry = join(joinId);
+    expect(first.closed).toBe(true);
+    expect(first.last("replaced")).toBeDefined();
+    rooms.disconnect(first);
+    expect(retry.last("joined").room.players[0]).toMatchObject({ name: "Alice", ready: true, connected: true, colorIndex: 0 });
+    expect(host.last("room").room.players).toHaveLength(2);
+    expect(host.last("room").room.players[0].connected).toBe(true);
+  });
+
+  it("revokes removed initial identities and rejects invalid credentials", () => {
+    const { rooms, host, join, created } = setup();
+    const first = join(joinId);
+    rooms.receive(host, { type: "remove", player: first.last("joined").player });
+    expect(join(joinId).last("error")).toMatchObject({ fatal: true, message: "Your player is no longer in this room." });
+    const removed = new Client();
+    rooms.receive(removed, { type: "join", room: created.room.id, token: first.last("joined").token });
+    expect(removed.last("error").fatal).toBe(true);
+    for (const invalid of ["", "short", "a".repeat(33), 42, null]) {
+      const client = new Client();
+      rooms.receive(client, { type: "join", room: created.room.id, joinId: invalid });
+      expect(client.last("error").fatal).toBe(true);
+    }
+    const valid = join("a".repeat(32));
+    const badToken = new Client();
+    rooms.receive(badToken, { type: "join", room: created.room.id, joinId: "a".repeat(32), token: "wrong" });
+    expect(badToken.last("error").fatal).toBe(true);
+    expect(valid.closed).toBe(false);
+    expect(host.last("room").room.players).toHaveLength(1);
+  });
+
+  it("reserves disconnected colours and reuses removed slots without renumbering survivors", () => {
+    const { rooms, host, join, created } = setup();
+    const clients = Array.from({ length: 10 }, () => join());
+    const before = host.last("room").room.players;
+    expect(before.map((p) => p.colorIndex)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    rooms.disconnect(clients[1]);
+    rooms.receive(host, { type: "remove", player: before[0].id });
+    rooms.receive(host, { type: "remove", player: before[5].id });
+    expect(host.last("room").room.players.map((p) => [p.id, p.colorIndex])).toEqual(
+      before.filter((p) => p.colorIndex !== 0 && p.colorIndex !== 5).map((p) => [p.id, p.colorIndex]),
+    );
+    rooms.receive(host, { type: "add-ai", ai: 1, name: "CPU", icon: 0 });
+    expect(host.last("room").room.players.at(-1)?.colorIndex).toBe(0);
+    expect(join().last("joined").room.players.at(-1)?.colorIndex).toBe(5);
+    const resumed = new Client();
+    rooms.receive(resumed, { type: "join", room: created.room.id, token: clients[1].last("joined").token });
+    expect(resumed.last("joined").room.players.find((p) => p.id === before[1].id)).toMatchObject({ colorIndex: 1, connected: true });
+    expect(join().last("error").message).toContain("full");
   });
 });
 

@@ -61,6 +61,7 @@ import * as C from "../src/constants";
 import * as sprites from "../src/sprites";
 import * as pygame from "../src/pygame";
 import * as widgets from "../src/widgets";
+import { projectileIndicatorStates } from "./projectile_indicators";
 
 const W = 1024;
 const H = 768;
@@ -280,6 +281,7 @@ function sweepSetters(panel: { widgets: unknown[] }): void {
 // renderer for the whole game; a fresh renderer per frame would re-seed the sky LUT
 // every frame and is NOT how the app animates).
 const STATES: { [name: string]: () => StateMeta } = {
+  ...projectileIndicatorStates(buildTrailState, freshRenderer, blit),
   trail_dark: () => trailDemo("BLACK"),
   trail_bright: () => trailDemo("PLAIN"),
   trail_fade: () => trailDemo("BLACK", 75),

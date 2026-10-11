@@ -376,8 +376,9 @@ export class GameState {
   }
 
   // ------------------------------------------------------------------ setup
-  add_player(name: string, ai_class = 0, team_id = 0, tank_icon = 0): Tank {
+  add_player(name: string, ai_class = 0, team_id = 0, tank_icon = 0, color_index?: number): Tank {
     const t = new Tank(this.tanks.length, name, ai_class, team_id, tank_icon);
+    t.color_index = color_index;
     // icon mobility: a wheelless icon is a fixed emplacement (no fuel, immobile)
     // per SCORCH.DOC:L336-340.  screens.tank_icon_mobile is the authority.
     t.mobile = tank_icon_mobile(tank_icon);
@@ -579,7 +580,7 @@ export class GameState {
       // carve the flat seat under the tank (FUN_33a1_08e7 conform) so the body
       // sits level on a slope.  Tanks are >= 15px apart and the footprint is 15px.
       this.terrain.level_under_tank(x, t.y, t.half_width);
-      t.color = tank_color_index(t.player_index);
+      t.color = tank_color_index(t.color_index ?? t.player_index);
     }
   }
 

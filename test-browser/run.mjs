@@ -151,7 +151,7 @@ async function main() {
         (r.ok ? JSON.stringify(r.meta) : `${r.error}`),
     );
     if (!r.ok && r.stack) console.error(r.stack);
-    if (name.startsWith("trail_") || name === "flight") {
+    if (name.startsWith("trail_") || name.startsWith("indicator_") || name === "flight") {
       await page.locator("#game").screenshot({ path: join(OUT, `${name}.png`) });
     }
   }

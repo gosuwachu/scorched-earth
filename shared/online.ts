@@ -3,6 +3,8 @@ export interface Player {
   id: string;
   name: string;
   icon: number;
+  /** Stable palette slot, independent of roster position. */
+  colorIndex: number;
   ai: number;
   ready: boolean;
   connected: boolean;
@@ -47,7 +49,7 @@ export interface ControllerView {
   message: string;
   round: number;
   tank?: {
-    name: string; icon: number; health: number; cash: number;
+    name: string; icon: number; colorIndex: number; health: number; cash: number;
     angle: number; power: number; weapon: string; ammo: number;
     shield?: { name: string; percent: number };
   };
@@ -62,7 +64,7 @@ export type Input =
 export type ClientMessage =
   | { type: "create" }
   | { type: "host-resume"; room: string; token: string }
-  | { type: "join"; room: string; token?: string }
+  | { type: "join"; room: string; token?: string; joinId?: string }
   | { type: "profile"; name: string; icon: number; ready: boolean }
   | { type: "add-ai"; ai: number; name: string; icon: number }
   | { type: "remove"; player: string }
