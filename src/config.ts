@@ -323,30 +323,31 @@ function pyStrip(s: string): string {
 }
 
 export class Config {
+  // Browser defaults intentionally customize the original game setup.
   // gameplay
   MAXPLAYERS: number = 2;
   MAXROUNDS: number = 10;
   ARMS: number = 4; // 0-4 weapon tier gate
   PLAY_MODE: string = "SEQUENTIAL";
-  PLAY_ORDER: string = "RANDOM";
+  PLAY_ORDER: string = "LOSERS-FIRST";
   TEAM_MODE: string = "NONE";
-  HOSTILE_ENVIRONMENT: string = "ON";
+  HOSTILE_ENVIRONMENT: string = "OFF";
   TUNNELLING: string = "ON"; // manual default; saved OFF still wins (binary no-cfg default was OFF)
   USELESS_ITEMS: string = "ON"; // binary no-cfg default (FUN_22a5_0005.c:600; manual says OFF)
   EXPLOSION_SCALE: string = "NORMAL";
   // economy
-  INITIAL_CASH: number = 0; // $0-$1,000,000
+  INITIAL_CASH: number = 10000; // $0-$1,000,000
   INTEREST_RATE: number = 0.05;
   COMPUTERS_BUY: string = "ON";
   FREE_MARKET: string = "OFF";
   SCORING: string = "STANDARD";
-  OUTLAST_BONUS: string = "OFF"; // browser extension; sampled at round start
+  OUTLAST_BONUS: string = "ON"; // browser extension; sampled at round start
   // physics
   GRAVITY: number = 0.2;
   AIR_VISCOSITY: number = 0; // 0-20 (note: live mult uses /10000)
   MAX_WIND: number = 200;
   CHANGING_WIND: string = "OFF";
-  ELASTIC: string = "NONE"; // Effect of Walls
+  ELASTIC: string = "RUBBER"; // Effect of Walls
   FALLING_TANKS: string = "ON";
   EDGES_EXTEND: number = 75; // off-screen tracking px
   DAMAGE_TANKS_ON_IMPACT: string = "ON"; // ON=damage on landing, OFF=while falling
@@ -375,7 +376,7 @@ export class Config {
   MOUSE_RATE: number = 0.5;
   // sound
   SOUND: string = "ON";
-  FLY_SOUND: string = "OFF";
+  FLY_SOUND: string = "POS";
   // talk
   TALKING_TANKS: string = "OFF";
   TALK_PROBABILITY: number = 100;
@@ -390,7 +391,7 @@ export class Config {
   live_elastic: number; // DAT_5f38_5154 current wall sub-mode
 
   constructor() {
-    // Mirror __post_init__: live_elastic = self.elastic (uses default ELASTIC="NONE").
+    // Mirror __post_init__: live_elastic = self.elastic (uses default ELASTIC="RUBBER").
     this.live_elastic = this.elastic;
   }
 

@@ -697,6 +697,8 @@ describe("screens: option value cycling (_enum_selector get_idx/set_idx)", () =>
   for (const ks of vec.option_cycle) {
     it(`${ks.key} cycle walk (idx + cfg token + display label)`, () => {
       const cfg = new Config();
+      // Start at the recorded token, independently of browser defaults.
+      (cfg as unknown as Record<string, unknown>)[ks.key] = ks.steps[0].token;
       const [tokens, display] = screens.ENUM_LABELS[ks.key];
       expect(tokens, `${ks.key} tokens`).toEqual(ks.tokens);
       expect(display, `${ks.key} display`).toEqual(ks.display);

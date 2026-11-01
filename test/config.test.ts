@@ -66,6 +66,20 @@ type ConfigVectors = {
 
 const vec = JSON.parse(readFileSync(VECTORS, "utf-8")) as ConfigVectors;
 
+// Intentional browser preferences, independent of the retained legacy fixtures.
+const browserDefaults: Record<string, number | string> = {
+  TUNNELLING: "ON",
+  PLAY_ORDER: "LOSERS-FIRST",
+  OUTLAST_BONUS: "ON",
+  FLY_SOUND: "POS",
+  ELASTIC: "RUBBER",
+  HOSTILE_ENVIRONMENT: "OFF",
+  INITIAL_CASH: 10000,
+};
+// Pin legacy parser/serializer scenarios to their original input configuration.
+const legacyDefaultsText = Object.entries(vec.defaults)
+  .map(([key, value]) => `${key}=${value}`).join("\n");
+
 /** Decode the oracle's JSON-safe numeric encoding back to a JS number. */
 function decNum(x: JsonNum): number {
   if (x === "Infinity") return Infinity;
@@ -98,7 +112,7 @@ function expectFieldEq(
   msg: string,
 ): void {
   const ftype = vec.field_types[name];
-  if (ftype === "str") {
+  if (ftype === "str" || name === "OUTLAST_BONUS") {
     expect(actual, msg).toBe(expected as string);
   } else {
     expectNumEq(actual as number, expected as JsonNum, msg);
@@ -138,11 +152,10 @@ describe("config: dataclass defaults, field order, post_init", () => {
     expect(tsTypes).toEqual({ ...vec.field_types, OUTLAST_BONUS: "str" });
   });
 
-  it("every default field value matches exactly", () => {
+  it("default fields match the retained values and browser preferences", () => {
     const c = new Config();
-    for (const name of vec.field_order) {
-      if (name === "TUNNELLING") continue; // ON is intentional; tunneling.test.ts covers it.
-      const expected = vec.defaults[name];
+    for (const { name } of CONFIG_FIELDS) {
+      const expected = browserDefaults[name] ?? vec.defaults[name];
       const actual = (c as unknown as { [k: string]: number | string })[name];
       expectFieldEq(name, actual, expected, `default ${name}`);
     }
@@ -151,7 +164,7 @@ describe("config: dataclass defaults, field order, post_init", () => {
   it("__post_init__ live globals (wind, live_elastic) match", () => {
     const c = new Config();
     expect(c.wind, "wind").toBe(vec.post_init.wind);
-    expect(c.live_elastic, "live_elastic").toBe(vec.post_init.live_elastic);
+    expect(c.live_elastic, "live_elastic").toBe(ELASTIC.RUBBER);
   });
 });
 
@@ -235,9 +248,8 @@ describe("config: load", () => {
   for (const lc of vec.load_cases) {
     describe(`load: ${lc.label}`, () => {
       it("parses every field to the Python value", () => {
-        const c = Config.load(lc.text);
+        const c = Config.load(`${legacyDefaultsText}\n${lc.text}`);
         for (const name of vec.field_order) {
-          if (name === "TUNNELLING" && !/^\s*TUNNELLING\s*=/im.test(lc.text)) continue;
           const expected = lc.parsed[name];
           const actual = (c as unknown as { [k: string]: number | string })[name];
           expectFieldEq(name, actual, expected, `${lc.label}.${name}`);
@@ -245,13 +257,13 @@ describe("config: load", () => {
       });
 
       it("post_init globals match", () => {
-        const c = Config.load(lc.text);
+        const c = Config.load(`${legacyDefaultsText}\n${lc.text}`);
         expect(c.wind, `${lc.label}.wind`).toBe(lc.post_init.wind);
-        expect(c.live_elastic, `${lc.label}.live_elastic`).toBe(lc.post_init.live_elastic);
+        expect(c.live_elastic, `${lc.label}.live_elastic`).toBe(ELASTIC.RUBBER);
       });
 
       it("derived properties match", () => {
-        const c = Config.load(lc.text);
+        const c = Config.load(`${legacyDefaultsText}\n${lc.text}`);
         const d = lc.derived;
         expect(c.scoring, `${lc.label}.scoring`).toBe(d.scoring);
         expect(c.team_mode, `${lc.label}.team_mode`).toBe(d.team_mode);
@@ -314,16 +326,16 @@ describe("config: save", () => {
         const realLoad = vec.load_cases.find((l) => l.label === "real_scorch.cfg");
         expect(realLoad, "real_scorch.cfg load fixture present").toBeTruthy();
         const c = Config.load(realLoad!.text);
-        expect(c.save(), "roundtrip_real save body").toBe(sc.body + "OUTLAST_BONUS=OFF\n");
+        expect(c.save(), "roundtrip_real save body").toBe(sc.body + "OUTLAST_BONUS=ON\n");
         return;
       }
       const mut = MUTATORS[sc.label];
       expect(mut, `mutator for ${sc.label}`).toBeTruthy();
-      const c = new Config();
+      const c = Object.assign(new Config(), vec.defaults, { TUNNELLING: "ON" });
       mut(c);
       // Preserve the legacy serialization comparison except the intentional
       // default change. Explicit ON/OFF roundtrips live in tunneling.test.ts.
-      expect(c.save(), `save body ${sc.label}`).toBe(sc.body.replace("TUNNELLING=OFF", "TUNNELLING=ON") + "OUTLAST_BONUS=OFF\n");
+      expect(c.save(), `save body ${sc.label}`).toBe(sc.body.replace("TUNNELLING=OFF", "TUNNELLING=ON") + "OUTLAST_BONUS=ON\n");
     });
   }
 });

@@ -188,7 +188,11 @@ setMtnRanges([]);
 // Config + GameState builders (mirror dump_game_flow.make_cfg / build).
 // ---------------------------------------------------------------------------
 function makeCfg(over: { [k: string]: string | number | boolean } = {}): Config {
-  const cfg = new Config();
+  // Keep the recorded scenarios independent of browser startup preferences.
+  const cfg = Object.assign(new Config(), {
+    PLAY_ORDER: "RANDOM", ELASTIC: "NONE", HOSTILE_ENVIRONMENT: "ON",
+    INITIAL_CASH: 0, OUTLAST_BONUS: "OFF",
+  });
   cfg.SOUND = "OFF";
   cfg.TALKING_TANKS = "OFF";
   cfg.FLY_SOUND = "OFF";

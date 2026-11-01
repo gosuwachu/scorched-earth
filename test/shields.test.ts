@@ -15,7 +15,10 @@ import { magneticLift, shieldColor } from "../src/shields";
 function game(item = 40, mode = "SEQUENTIAL", w = 320, h = 240) {
   const cfg = new Config();
   Object.assign(cfg, { PLAY_MODE: mode, SOUND: "OFF", FLY_SOUND: "OFF", TALKING_TANKS: "OFF",
-    INITIAL_CASH: 0, MAX_WIND: 0, FALLING_TANKS: "OFF", TRACE: "ON" });
+    INITIAL_CASH: 0, MAX_WIND: 0, FALLING_TANKS: "OFF", TRACE: "ON",
+    // Preserve the scenario's RNG order and wall behavior as defaults change.
+    PLAY_ORDER: "RANDOM", ELASTIC: "NONE", HOSTILE_ENVIRONMENT: "ON", OUTLAST_BONUS: "OFF" });
+  cfg.live_elastic = cfg.elastic;
   const gs = createGameState(cfg, w, h, 42);
   gs.add_player("A", 0, 0, 0); gs.add_player("B", 0, 0, 1); gs.new_game();
   gs.terrain.grid.fill(0);

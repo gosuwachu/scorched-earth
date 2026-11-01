@@ -87,7 +87,7 @@ shield) are mouse-driven.
 cash for each opponent eliminated while your tank remains alive. Rewards are
 paid once at round end, including to players who later die or retreat. They add
 no score, though Greedy rankings reflect the extra cash. The setting defaults
-off and changes take effect next round; this is an extension, not a DOS rule.
+on and changes take effect next round; this is an extension, not a DOS rule.
 Eliminations in the same game update tie, teammate eliminations earn nothing,
 and Mass Kill pays only rewards already earned. Waiting earns no money.
 The usual combat rewards, victory rewards, and interest rules still apply.

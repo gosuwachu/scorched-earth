@@ -7,7 +7,7 @@ import { apply, load, save, serialize, type SaveGameState } from "../src/savegam
 
 function game(n = 3, overrides: Partial<Config> = {}): GameState {
   const cfg = Object.assign(new Config(), {
-    OUTLAST_BONUS: "ON", MAXROUNDS: 3, MAX_WIND: 0, SKY: "PLAIN",
+    OUTLAST_BONUS: "ON", INITIAL_CASH: 0, MAXROUNDS: 3, MAX_WIND: 0, SKY: "PLAIN",
     SOUND: "OFF", TALKING_TANKS: "OFF", FALLING_TANKS: "OFF",
     ...overrides,
   });
@@ -42,9 +42,9 @@ function restore(gs: GameState, bytes: Uint8Array): void {
 }
 
 describe("optional outlast cash", () => {
-  it("defaults off and persists either setting", () => {
-    expect(new Config().OUTLAST_BONUS).toBe("OFF");
-    expect(Config.load("SCORING=GREEDY").OUTLAST_BONUS).toBe("OFF");
+  it("defaults on and persists either setting", () => {
+    expect(new Config().OUTLAST_BONUS).toBe("ON");
+    expect(Config.load("SCORING=GREEDY").OUTLAST_BONUS).toBe("ON");
     for (const value of ["ON", "OFF"]) {
       const cfg = Object.assign(new Config(), { OUTLAST_BONUS: value });
       expect(Config.load(cfg.save()).OUTLAST_BONUS).toBe(value);
