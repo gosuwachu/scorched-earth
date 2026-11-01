@@ -1,3 +1,4 @@
+import { shopIncome } from "./comeback";
 /** Host-side controller adapter. Reuses the real screens and widget operations. */
 import { clampPower } from "./power";
 import type { App } from "./main";
@@ -444,6 +445,7 @@ export class RemoteAdapter {
         active && !active.connected ? `Waiting for ${active.name} to reconnect.` :
         gs?.phase === "aim" || title === "Purchasing" ? `Waiting for ${active?.name ?? gs?.current_shooter?.name ?? "the host"}.` : "Shot in progress…";
       result[p.id] = {
+        income: top instanceof ShopScreen ? shopIncome(gs?.comeback, t?.player_index) : undefined,
         batteryPrompt: top instanceof ingame.ControlPanelScreen && !!top.discharge_modal,
         movement: t ? { fuel: movement.fuel_units(t), active: enabled && !!gs?.move_mode && gs.current_shooter === t,
           available: enabled && t.alive && movement.can_move(t),

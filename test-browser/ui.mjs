@@ -1,3 +1,4 @@
+import { checkComeback } from "./comeback_ui.mjs";
 // Real DOM interaction checks for the local UI and its shared component library.
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
@@ -63,7 +64,8 @@ try {
   await checkOptionHelp(page, { click, settled, shot });
   await click("Economics");
   const outlast = page.getByRole("checkbox", { name: "Outlast bonus", exact: true });
-  assert.equal(await outlast.isChecked(), false, "outlast bonus defaults OFF");
+  assert.equal(await outlast.isChecked(), true, "outlast bonus defaults ON");
+  await outlast.uncheck();
   await outlast.check();
   assert.equal(await page.evaluate(() => window.onlineApp.cfg.OUTLAST_BONUS), "ON");
   const outlastHelp = page.locator(`#${await outlast.getAttribute("aria-describedby")}`);
@@ -108,8 +110,10 @@ try {
   assert.equal(await players.count(), 0);
   assert.equal(await page.evaluate(() => document.activeElement.textContent), "Local");
   await page.keyboard.press("Shift+Tab"); assert.ok(await rounds.evaluate((node) => node === document.activeElement));
+  await page.keyboard.press("Shift+Tab"); assert.ok(await newGame.getByRole("combobox", { name: "Economy" }).evaluate((node) => node === document.activeElement));
   await page.keyboard.press("Shift+Tab"); assert.equal(await page.evaluate(() => document.activeElement.textContent), "Back");
-  await page.keyboard.press("Tab"); assert.ok(await rounds.evaluate((node) => node === document.activeElement));
+  await page.keyboard.press("Tab"); await page.keyboard.press("Tab");
+  assert.ok(await rounds.evaluate((node) => node === document.activeElement));
   for (const value of ["", "0", "1001", "1.5"]) {
     await rounds.fill(value); await click("Local"); await click("Online");
     assert.ok(await newGame.isVisible());
@@ -386,6 +390,7 @@ try {
   assert.ok(await nameInput.isVisible());
   await page.setViewportSize({ width: 800, height: 480 }); await shot("short-setup"); await click("Done"); await click("Done");
   await shot("short-shop");
+  await checkComeback(page, { click, settled, shot });
   assert.deepEqual(errors, []);
   console.log("HTML UI: local flow, native editing, focus, nested dialogs, shop, inventory, saves, and responsive layouts passed.");
 } finally { await browser?.close(); server?.kill(); }

@@ -26,11 +26,18 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
   },
   FIRE_DELAY: { text: "The original game's firing delay. Browser flight speed is fixed. Positive values preserve magnetic shield strength; 0 uses the original alternate magnetic timing." },
   calibrate: { text: "Measures a connected gamepad's center and range for the joystick pointer. Calibration lasts until the page is reloaded." },
-  INTEREST_RATE: { text: "Unspent cash earns interest between rounds: 0.05 means 5%. This rate also affects the price of Auto Defense." },
+  ECONOMY_MODE: {
+    text: "Fixed for the match. Combat rewards stay at 100%.",
+    values: {
+      CLASSIC: "Classic: existing rewards, interest, and optional Outlast cash.",
+      COMEBACK: "Comeback: everyone receives $5,000 before each subsequent shop, plus $500 per consecutive loss (up to $1,500). A win resets recovery; every other player loses, regardless of placement. Team results count; draws preserve streaks. No interest, Outlast cash, or final-round payment. Basic and Standard scoring only; Greedy switches to Standard.",
+    },
+  },
+  INTEREST_RATE: { text: "Unspent cash earns interest between rounds: 0.05 means 5%. Comeback disables cash interest. This rate still affects the price of Auto Defense." },
   FREE_MARKET: { text: "Lets shop prices change between rounds according to demand. Selling equipment returns 65% of its current value instead of the usual 80%." },
-  OUTLAST_BONUS: { text: "Earn $500 cash per opponent eliminated while you remain alive, paid at round end even if you later die. Adds no score; Greedy rankings still reflect the cash. Simultaneous eliminations tie, and teammate eliminations earn nothing. Changes apply next round." },
+  OUTLAST_BONUS: { text: "Earn $500 cash per opponent eliminated while you remain alive, paid at round end even if you later die. Adds no score; Greedy rankings still reflect the cash. Simultaneous eliminations tie, and teammate eliminations earn nothing. Changes apply next round. Disabled in Comeback economy." },
   SCORING: {
-    text: "Controls rewards and how players are ranked.",
+    text: "Controls rewards and how players are ranked. Comeback economy allows Basic and Standard only.",
     values: {
       BASIC: "Basic: rewards kills and survival, with no reward for individual hits; ranks by score.",
       STANDARD: "Standard: rewards damage, kills, and survival; ranks by score.",

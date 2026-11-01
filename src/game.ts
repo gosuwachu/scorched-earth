@@ -48,6 +48,7 @@ import * as ai from "./ai";
 import * as scoring from "./scoring";
 import { Terrain, type MtnFile } from "./terrain";
 import { Economy } from "./economy";
+import { createComeback, beginComebackRound, finishComebackRound, payComeback, recordCombatCash, type ComebackMatch } from "./comeback";
 import { startOutlastRound, accrueOutlast, payOutlast, type OutlastRound } from "./outlast";
 import { Tank, Projectile } from "./objects";
 import * as weapons from "./weapons";
@@ -197,6 +198,7 @@ export class GameState {
   terrain: Terrain;
   economy: Economy;
   outlast: OutlastRound | null = null;
+  comeback: ComebackMatch | null = null;
   tanks: Tank[];
   round_index: number; // DAT_5f38_e342
   current_shooter: Tank | null; // DAT_5f38_5182
@@ -388,6 +390,9 @@ export class GameState {
 
   new_game(): void {
     this.outlast = null;
+    this.comeback = this.cfg.ECONOMY_MODE.toUpperCase() === "COMEBACK" ? createComeback(this.tanks) : null;
+    // Greedy ranks wealth; recovery cash must never count toward that victory.
+    if (this.comeback && this.cfg.scoring === C.SCORING_GREEDY) this.cfg.SCORING = "STANDARD";
     // FUN_33a1_001d init: seed cash from INITIAL_CASH, reset round index.
     this.round_index = 0;
     const cash = this.cfg.INITIAL_CASH;
@@ -459,7 +464,8 @@ export class GameState {
     sfx.field_height = this.h;
     this._place_tanks();
     this._reset_round_tanks();
-    this.outlast = this.cfg.is_on("OUTLAST_BONUS") ? startOutlastRound(this.tanks) : null;
+    if (this.comeback) beginComebackRound(this.comeback);
+    this.outlast = !this.comeback && this.cfg.is_on("OUTLAST_BONUS") ? startOutlastRound(this.tanks) : null;
     this._build_firing_order();
     this.reset_terrain_settle();
     this.plasma_charge = null; this.plasmaChoices.clear();
@@ -2768,10 +2774,12 @@ export class GameState {
 
   // --------------------------------------------------------------- round end
   _end_round(): void {
+    if (this.comeback?.settled) return;
     accrueOutlast(this.outlast, this.tanks, this.cfg.team_mode);
     payOutlast(this.outlast, this.tanks, this.economy);
     this.sim_charges.clear(); this.simAim.clear();
     scoring.survival_award(this as unknown as scoring.State);
+    if (this.comeback) finishComebackRound(this.comeback, this.tanks, this.cfg.team_mode);
     // Victory fanfare on the winner path: a round that ends with a surviving tank
     // has a winner.  A mutual-kill round (no survivor) ends with no fanfare.
     if (this.tanks.some((t) => t.alive)) {
@@ -2783,6 +2791,7 @@ export class GameState {
   }
 
   mass_kill(): void {
+    if (this.comeback?.settled) return;
     // Pay only previously earned bonuses: this administrative removal cannot
     // create an outlast reward, even if it happens between simulation updates.
     accrueOutlast(this.outlast, this.tanks, this.cfg.team_mode);
@@ -2805,7 +2814,9 @@ export class GameState {
       t.power = 0;
       t.score += share; // equal split, NO win_counter++
       t.cash = Math.max(0, t.cash + share); // awards feed cash too
+      recordCombatCash(this.comeback, t.player_index, share);
     }
+    if (this.comeback) finishComebackRound(this.comeback, this.tanks, this.cfg.team_mode, true);
     this.round_index += 1;
     this.ranking = scoring.rank(this as unknown as scoring.State) as unknown as Tank[];
     this.phase = ROUND_END;
@@ -2813,13 +2824,15 @@ export class GameState {
 
   proceed_after_round(): void {
     // Called by main after the rankings screen: shop, then next round or end.
+    if (this.comeback && this.phase !== ROUND_END) return;
     if (this.round_index >= this.cfg.MAXROUNDS) {
       this.winner = this.ranking.length > 0 ? this.ranking[0] : null;
       this.phase = GAME_OVER;
       return;
     }
     // post-round economy: interest, annuity, market, AI buys
-    this.economy.accrue_interest(this.tanks as unknown as Parameters<Economy["accrue_interest"]>[0]);
+    if (this.comeback) payComeback(this.comeback, this.tanks, this.economy);
+    else this.economy.accrue_interest(this.tanks as unknown as Parameters<Economy["accrue_interest"]>[0]);
     // Annuity remaining-rounds N (FUN_1dbc_0105.c:19): MAXROUNDS - round - 1.
     this.economy.update_repeated_use(this.cfg.MAXROUNDS - this.round_index - 1);
     this.economy.market_update(this.tanks.length);

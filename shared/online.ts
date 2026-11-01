@@ -1,3 +1,4 @@
+import type { ShopIncome } from "./economy.js";
 /** LAN wire types. Game objects and simulation never cross this boundary. */
 export interface Player {
   id: string;
@@ -38,6 +39,7 @@ export interface Control {
 }
 
 export interface ControllerView {
+  income?: ShopIncome;
   /** When present, limit the phone's standard buttons to these controls. */
   keys?: string[];
   targeting?: boolean;

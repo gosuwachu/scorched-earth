@@ -129,6 +129,7 @@ export const CONFIG_FIELDS: FieldSpec[] = [
   { name: "DIE_COMMENTS", type: "str" },
   // optional browser rules
   { name: "OUTLAST_BONUS", type: "str" },
+  { name: "ECONOMY_MODE", type: "str" },
 ];
 
 const FIELD_TYPE: { [name: string]: FieldType } = {};
@@ -341,6 +342,7 @@ export class Config {
   COMPUTERS_BUY: string = "ON";
   FREE_MARKET: string = "OFF";
   SCORING: string = "STANDARD";
+  ECONOMY_MODE: string = "CLASSIC"; // browser extension; fixed at new_game
   OUTLAST_BONUS: string = "ON"; // browser extension; sampled at round start
   // physics
   GRAVITY: number = 0.2;

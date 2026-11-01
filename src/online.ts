@@ -10,6 +10,7 @@ import { RemoteAdapter } from "./remote";
 import { sfx } from "./sound";
 import { button, el, dialog, installOnlineTheme, Roster, type OnlineDialog } from "./online_ui";
 import { field } from "./html/components";
+import { economyChoice } from "./html/economy";
 import "./online.css";
 
 const AI_NAMES = ["Moron", "Shooter", "Poolshark", "Tosser", "Chooser", "Spoiler", "Cyborg", "Unknown"];
@@ -145,6 +146,7 @@ export class HostSession {
     this.addButton = undefined;
     this.box.body.replaceChildren(el("p", "Players watch this screen and use their own devices as controllers. Keep this host page open and visible."));
     this.box.body.append(this.status);
+    if (!this.room.started) this.box.body.append(economyChoice(this.app.cfg).element);
     this.box.footer.replaceChildren();
     const layout = el("div", "", "lan-lobby-layout");
     const sharing = el("section");
@@ -272,7 +274,8 @@ export function installOnline(app: App): void {
     const cancel = () => { if (!pending) box.close(() => returnFocus?.focus()); };
     const box = dialog("New game", { className: "ui-compact", sound: () => app.cfg.is_on("SOUND"), cancel });
     const rounds = gameNumberInput(app.cfg.MAXROUNDS, 1, 1000, (value) => { app.cfg.MAXROUNDS = value; });
-    box.body.append(field("Rounds", rounds), el("p", "Choose how to play."));
+    const economy = economyChoice(app.cfg);
+    box.body.append(economy.element, field("Rounds", rounds), el("p", "Choose how to play."));
     const local = button("Local", () => {
       if (!rounds.reportValidity()) return;
       box.close(() => showLocalGame(app, returnFocus));
@@ -284,6 +287,7 @@ export function installOnline(app: App): void {
       if (!rounds.reportValidity()) return;
       pending = true;
       rounds.disabled = true;
+      economy.select.disabled = true;
       info.textContent = "Connecting to the LAN service…";
       for (const b of box.footer.querySelectorAll("button")) b.disabled = true;
       void fetch("/api/lan", { signal: AbortSignal.timeout(5000) }).then(async (response) => {
@@ -295,6 +299,7 @@ export function installOnline(app: App): void {
       }).catch(() => {
         pending = false;
         rounds.disabled = false;
+        economy.select.disabled = false;
         info.textContent = "Start the LAN service with npm run lan (or npm run dev:lan), then open the host URL printed in the terminal. Local play remains available here.";
         for (const b of box.footer.querySelectorAll("button")) b.disabled = false;
         online.focus();

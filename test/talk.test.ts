@@ -61,6 +61,9 @@ type TalkVectors = {
 };
 
 const vec = JSON.parse(readFileSync(VECTORS, "utf-8")) as TalkVectors;
+// The retained capture's absolute temporary directory does not survive a checkout.
+// Load the shipped bytes here; keep the retained expected pools unchanged.
+const DATA_DIR = join(__dirname, "..", "public", "assets");
 
 // Node fs primitives injected into the env-agnostic loader, matching Python's
 // os.path.join / os.path.exists / os.listdir / open(rb).read() semantics.
@@ -116,7 +119,7 @@ function mkTalkConfig(talking: string, probability: number): TalkConfig {
 describe("talk: load_from_config parses the shipped pools verbatim", () => {
   const tc = load_from_config(
     mkCfgSource("OFF", 100, 50),
-    vec.data_dir,
+    DATA_DIR,
     NODE_FS,
   );
 
@@ -145,8 +148,8 @@ describe("talk: load_from_config parses the shipped pools verbatim", () => {
 // the same pools, proving _resolve + _read + _parse end-to-end on real bytes.
 describe("talk: _resolve + load on the real files (DOS case-insensitive)", () => {
   it("resolves lowercase cfg names to the uppercase shipped files", () => {
-    const ap = _resolve(vec.data_dir, "talk1.cfg", NODE_FS);
-    const dp = _resolve(vec.data_dir, "talk2.cfg", NODE_FS);
+    const ap = _resolve(DATA_DIR, "talk1.cfg", NODE_FS);
+    const dp = _resolve(DATA_DIR, "talk2.cfg", NODE_FS);
     // The shipped files are TALK1.CFG/TALK2.CFG; the resolver must find them.
     expect(existsSync(ap)).toBe(true);
     expect(existsSync(dp)).toBe(true);
@@ -162,7 +165,7 @@ describe("talk: _resolve + load on the real files (DOS case-insensitive)", () =>
   });
 
   it("a missing file yields an empty pool, not an error", () => {
-    const missing = _resolve(vec.data_dir, "nope-does-not-exist.cfg", NODE_FS);
+    const missing = _resolve(DATA_DIR, "nope-does-not-exist.cfg", NODE_FS);
     expect(_read(missing, NODE_FS.readFile)).toBe("");
     const tc = load(
       missing,

@@ -1,3 +1,5 @@
+import { IncomeBreakdown } from "./economy";
+import { shopIncome } from "../comeback";
 /** Screen-specific content composed from the shared HTML controls. */
 import * as S from "../screens";
 import * as W from "../widgets";
@@ -98,6 +100,9 @@ export class ScreenContent implements Component<boolean> {
       const cash = el("strong"); const rounds = el("span");
       const bar = el("div"); bar.style.display = "flex"; bar.style.justifyContent = "space-between"; bar.append(name, cash, rounds);
       add(bar, p.rect.x + 12, p.rect.y + 26, screen._list_right - p.rect.x - 12);
+      const income = new IncomeBreakdown();
+      add(income.element, screen._ctrl_x, p.rect.y + 242, 138);
+      this.updates.push(() => income.update(shopIncome(screen.state.comeback, screen.tank.player_index)));
       const list = new KeyedList<number>("div", String, (slot) => {
         const row = button("", () => actions.change(() => { screen.sel_row = screen.items.indexOf(slot); }));
         row.className = "ui-shop-row";

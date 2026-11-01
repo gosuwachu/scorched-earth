@@ -53,6 +53,7 @@
  *   TS savegame.save/load signatures differ from Python (save(state)->Uint8Array,
  *   load(bytes)->SaveData), so the host provider bridges to the byte store.
  */
+import type { ComebackMatch } from "./comeback";
 import * as pygame from "./pygame";
 import * as C from "./constants";
 import * as weapons from "./weapons";
@@ -234,6 +235,7 @@ function _owned_offensive(t: OwnTank): number[] {
 // the real GameState / Tank / Config in).
 // ---------------------------------------------------------------------------
 interface ShopState {
+  comeback?: ComebackMatch | null;
   economy: Economy;
   cfg: { MAXROUNDS: number; is_on(key: string): boolean };
   round_index: number;
@@ -307,7 +309,11 @@ function _enum_selector(
   label: string,
   w = 300,
 ): Selector {
-  const [tokens, display] = ENUM_LABELS[key];
+  const [allTokens, allDisplay] = ENUM_LABELS[key];
+  // Economy is chosen before entering settings; hide Greedy in both directions.
+  const count = key === "SCORING" && String(cfg.ECONOMY_MODE).toUpperCase() === "COMEBACK" ? 2 : allTokens.length;
+  const tokens = allTokens.slice(0, count);
+  const display = allDisplay.slice(0, count);
 
   const get_idx = (): number => {
     // Case-insensitive match: GRAPHICS_MODE tokens are mixed-case ("1024x768")

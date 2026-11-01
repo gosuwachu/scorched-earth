@@ -28,6 +28,7 @@
  *    .reverse() (which would flip tie order).
  *  - `a is b` (identity)             -> reference equality (===) on the tank objects.
  */
+import { recordCombatCash, type ComebackMatch } from "./comeback";
 import {
   TEAM_NONE,
   SCORING_BASIC,
@@ -54,6 +55,7 @@ export const HIT_POINT_MULT = 30; // FACT (VERIFY_FIXES.md 1c): a normal enemy-t
  * with the same lightweight mocks the oracle dumper builds.
  */
 export interface Tank {
+  player_index?: number;
   score: number;
   cash: number;
   team_id: number;
@@ -72,6 +74,7 @@ export interface Cfg {
 }
 
 export interface State {
+  comeback?: ComebackMatch | null;
   cfg: Cfg;
   tanks: Tank[];
   economy: Economy;
@@ -82,7 +85,7 @@ function floordiv(a: number, b: number): number {
   return Math.floor(a / b);
 }
 
-function _award(tank: Tank, amount: number): void {
+function _award(state: State, tank: Tank, amount: number): void {
   /* Credit an award to spendable cash (tank.cash, the binary's +0xbe) AND, as a
      PORT RECONSTRUCTION, the ranking total (tank.score). The binary's award path
      writes ONLY +0xbe (FUN_2089_0166; VERIFY_FIXES.md 1f - there is no +0xba store
@@ -92,8 +95,10 @@ function _award(tank: Tank, amount: number): void {
      the binary's literal behaviour. Cash floors at 0; no upward ceiling. (The
      prior port routed awards to score ONLY, so cash never grew -> the "earn $0"
      bug.) */
+  const previousCash = tank.cash;
   tank.score += amount;
   tank.cash = Math.max(0, tank.cash + amount);
+  recordCombatCash(state.comeback, tank.player_index, tank.cash - previousCash);
 }
 
 /** FUN_3a16_198d contract: same team / self = friendly (returns 0). */
@@ -113,10 +118,10 @@ export function award_kill(state: State, killer: Tank | null, victim: Tank): voi
     return;
   }
   if (friendly(state, killer, victim)) {
-    _award(killer, killer === victim ? SCORE_SELF_KILL : SCORE_TEAMMATE_KILL);
+    _award(state, killer, killer === victim ? SCORE_SELF_KILL : SCORE_TEAMMATE_KILL);
   } else {
     const bonus = state.cfg.scoring === SCORING_BASIC ? SCORE_KILL_BASIC : SCORE_KILL_STD;
-    _award(killer, bonus);
+    _award(state, killer, bonus);
   }
 }
 
@@ -144,11 +149,11 @@ export function award_hit(
     // FUN_4098_0308.c:41-47) execute the SAME code -> NO normal-vs-shield split.
     // The prior -1*damage shield case came from VERIFY_FIXES.md offsets that did
     // not reproduce (a cmp sequence, not the immediates); it was a bug.
-    _award(attacker, -15 * Math.trunc(damage));
+    _award(state, attacker, -15 * Math.trunc(damage));
   } else if (shield_hit) {
-    _award(attacker, SCORE_SHIELD_HIT_MULT * Math.trunc(damage));
+    _award(state, attacker, SCORE_SHIELD_HIT_MULT * Math.trunc(damage));
   } else {
-    _award(attacker, Math.trunc(damage * HIT_POINT_MULT));
+    _award(state, attacker, Math.trunc(damage * HIT_POINT_MULT));
   }
 }
 
@@ -168,7 +173,7 @@ export function survival_award(state: State): void {
   if (state.cfg.team_mode === TEAM_NONE) {
     for (const t of alive) {
       t.win_counter += 1;
-      _award(t, pool);
+      _award(state, t, pool);
     }
   } else {
     const team = alive[0].team_id;
@@ -178,9 +183,9 @@ export function survival_award(state: State): void {
     for (const t of members) {
       if (t.alive) {
         t.win_counter += 1;
-        _award(t, share);
+        _award(state, t, share);
       } else {
-        _award(t, floordiv(share, 2)); // dead teammate gets half
+        _award(state, t, floordiv(share, 2)); // dead teammate gets half
       }
     }
   }

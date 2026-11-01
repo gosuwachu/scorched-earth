@@ -182,3 +182,7 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
 .ui-target-tank { position: absolute; transform: translate(-50%, -100%); padding: 2px 5px; border: 1px solid #ffe16b; color: #fff9b0; background: #19152be6; font: bold 12px sans-serif; white-space: nowrap; }
 .ui-target-marker { position: absolute; transform: translate(-50%, -50%); color: #fff36b; text-shadow: 1px 1px #000, -1px -1px #000; font: bold 30px monospace; }
 canvas.is-targeting { cursor: crosshair; }
+
+.ui-income { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.ui-income > strong { display: block; }
+.ui-income > strong:last-child { margin-top: 5px; }

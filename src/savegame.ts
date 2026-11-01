@@ -64,6 +64,7 @@
  */
 import { clampPower } from "./power";
 import { CONFIG_FIELDS } from "./config";
+import { copyComeback, type ComebackMatch } from "./comeback";
 import { copyOutlastRound, type OutlastRound } from "./outlast";
 import { NUM_ITEMS } from "./weapons";
 
@@ -411,6 +412,7 @@ export interface SaveTerrain {
 }
 
 export interface SaveGameState {
+  comeback?: ComebackMatch | null;
   outlast?: OutlastRound | null;
   round_index: number;
   phase: string;
@@ -439,6 +441,7 @@ export interface SaveGameState {
 
 // The plain serialized dict shape (what load() returns / serialize() builds).
 export interface SaveData {
+  comeback?: ComebackMatch;
   outlast?: OutlastRound;
   round_index: number;
   phase: string;
@@ -554,6 +557,7 @@ export function cfgFromDict(
 ): SaveConfig {
   // An old save must not inherit this optional rule from the current game.
   cfg.OUTLAST_BONUS = "OFF";
+  cfg.ECONOMY_MODE = "CLASSIC";
   for (const k of Object.keys(d)) {
     if (k in CONFIG_FIELD_TYPE) {
       (cfg as { [k: string]: number | string })[k] = d[k];
@@ -856,6 +860,7 @@ export function gridFromDict(d: { w: number; h: number; b64: string }): TerrainG
 function serializeValueTree(state: SaveGameState): { [k: string]: JsonValue } {
   return {
     ...(state.outlast ? { outlast: copyOutlastRound(state.outlast) as unknown as JsonValue } : {}),
+    ...(state.comeback ? { comeback: copyComeback(state.comeback) as unknown as JsonValue } : {}),
     round_index: state.round_index, // DAT_5f38_e342
     phase: state.phase,
     timer: f(state.timer), // Python float (init 0.0, set to AI_TURN_DELAY etc.)
@@ -888,6 +893,7 @@ function serializeValueTree(state: SaveGameState): { [k: string]: JsonValue } {
 export function serialize(state: SaveGameState): SaveData {
   return {
     ...(state.outlast ? { outlast: copyOutlastRound(state.outlast) } : {}),
+    ...(state.comeback ? { comeback: copyComeback(state.comeback) } : {}),
     round_index: state.round_index,
     phase: state.phase,
     timer: state.timer,
@@ -1005,7 +1011,10 @@ export function apply(data: SaveData, state: SaveGameState): SaveGameState {
   }
 
   cfgFromDict(state.cfg, data.cfg);
-  state.outlast = data.outlast ? copyOutlastRound(data.outlast) : null;
+  state.comeback = data.comeback ? copyComeback(data.comeback) : null;
+  state.cfg.ECONOMY_MODE = state.comeback ? "COMEBACK" : "CLASSIC";
+  if (state.comeback && String(state.cfg.SCORING).toUpperCase() === "GREEDY") state.cfg.SCORING = "STANDARD";
+  state.outlast = !state.comeback && data.outlast ? copyOutlastRound(data.outlast) : null;
   if (state.economy.cfg !== undefined) {
     state.economy.cfg = state.cfg;
   }

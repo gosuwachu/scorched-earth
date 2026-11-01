@@ -257,3 +257,5 @@ body.lan-phone { min-height: 100dvh; }
   .lan-panel { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
   .lan-panel > .lan-battle-overview { align-self: start; }
 }
+
+.lan-shop .ui-income { grid-column: 1 / -1; width: 100%; }

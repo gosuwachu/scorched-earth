@@ -1,3 +1,4 @@
+import { IncomeBreakdown } from "./html/economy";
 import type { Control, ControllerView } from "../shared/online";
 import { button, el } from "./html/components";
 import { TankOverview } from "./controller_frame";
@@ -9,6 +10,7 @@ export class ShopControls {
   readonly actions = el("div", "", "lan-shop-actions lan-controls");
   private equipment = el("div", "", "lan-shop-equipment");
   private overview = new TankOverview();
+  private income = new IncomeBreakdown();
   private empty = el("p", "No equipment available in this category", "lan-shop-empty");
   private categories: HTMLButtonElement[];
   private category?: number | boolean;
@@ -28,10 +30,12 @@ export class ShopControls {
     this.list.setAttribute("aria-label", "Available equipment");
     this.equipment.append(el("h2", "Purchasing"), categories,
       el("p", "Tap an item to buy one bundle.", "lan-shop-hint"), this.empty, this.list, this.actions);
+    this.overview.element.append(this.income.element);
     this.element.append(this.overview.element, this.equipment);
   }
 
   update(view: ControllerView): void {
+    this.income.update(view.income);
     const tank = view.tank;
     if (tank) this.overview.update(tank, view.round, false);
     const category = view.controls.find((c) => c.id === "category");

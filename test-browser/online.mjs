@@ -91,6 +91,8 @@ try {
   assert.ok(await host.locator("canvas.lan-qr").evaluate((c) => c.width > 100 && c.height > 100));
   assert.equal(await enabled(host, "Start online game"), false);
 
+  await host.getByRole("combobox", { name: "Economy", exact: true }).selectOption("COMEBACK");
+  await host.screenshot({ path: `${root}/test-browser/out/online-comeback-lobby.png` });
   await checkJoinWithoutStorage(browser, host, joinUrl, until);
   const abandonedFirst = await abandonedPlayer(base, joinUrl);
 
@@ -462,7 +464,17 @@ try {
   await checkResults({ pages: [a, b], screen: "Round results", until });
   await click(host, "Go");
   await until(() => enabled(a, "Done"), "between-round purchasing");
+  const beforeReconnect = await host.evaluate(() => window.onlineApp.gs.tanks.map((t) => t.cash));
+  const hostIncome = host.getByRole("region", { name: "Round income", exact: true });
+  const guestIncome = a.getByRole("region", { name: "Round income", exact: true });
+  await until(async () => await guestIncome.isVisible(), "Comeback income reaches controller");
+  assert.equal(await guestIncome.innerText(), await hostIncome.innerText());
+  assert.match(await guestIncome.innerText(), /Resupply \+\$5,000/);
   await a.reload(); await until(() => enabled(a, "Done"), "rejoin purchasing");
+  assert.equal(await guestIncome.innerText(), await hostIncome.innerText());
+  assert.deepEqual(await host.evaluate(() => window.onlineApp.gs.tanks.map((t) => t.cash)), beforeReconnect);
+  await host.screenshot({ path: `${root}/test-browser/out/online-comeback-shop-host.png` });
+  await a.screenshot({ path: `${root}/test-browser/out/online-comeback-shop-phone.png`, fullPage: true });
   assert.ok(await enabled(host, "Update"), "Host can shop between rounds");
   await click(host, "Done"); await until(() => enabled(b, "Done"), "next shopper"); await click(b, "Done");
   await host.waitForFunction(() => window.onlineApp.onlineScreen === "battle");

@@ -44,6 +44,14 @@ captures are `test-browser/out/online-colours-{lobby,shop,battle,round-two}-{hos
 The sprite assertions compare phone pixels with the host tank's palette colour;
 these are browser consistency checks, not DOS visual comparisons.
 
+Comeback economy checks run through `ui.mjs` and `online.mjs`. The local driver
+selects the mode, checks the Greedy restriction, completes a controlled duel,
+and verifies the shop income breakdown and responsive layout. The online driver
+selects Comeback in the host lobby and checks matching host/controller income
+after a round and a controller reload, without duplicate credits. Captures include
+`ui-comeback-{setup,winner-shop,recovery-shop,mobile-shop}.png` and
+`online-comeback-{lobby,shop-host,shop-phone}.png` under `test-browser/out/`.
+
 ## Reuse one development server
 
 Start Vite in a persistent terminal or tool session:
