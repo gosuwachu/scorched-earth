@@ -569,10 +569,14 @@ export function step_sandhog(state: BState, proj: BProjectile): boolean {
   return proj.active;
 }
 
-export const LASER_BLEED = 0x28; // FUN_3319_01fe:96 energy bleed per beam pixel (40)
+export const LASER_BLEED = 0x28; // DOS FUN_3319_01fe:96 travel cost; also the extra dirt cost (40)
+// Browser balance: about 2.67x range in air and dirt, retaining DOS launch energy.
+export const LASER_TRAVEL_BLEED = 15;
+export const LASER_DIRT_BLEED = 15;
 
 export function fire_laser(state: BState, proj: BProjectile): void {
-  // 3319:01fe: 40 energy/pixel, another 40 when cutting dirt. A tank
+  // DOS 3319:01fe: 40 energy/pixel, another 40 when cutting dirt. The browser
+  // reduces both costs to 15 for an intentional range increase. A tank
   // stops the beam: energy/5 is discharged in <=10 HP pulses, subtracting
   // 50 from the pulse budget each time. Super Mag recharges by energy/100.
   state.current_weapon = proj.weapon;
@@ -591,7 +595,7 @@ export function fire_laser(state: BState, proj: BProjectile): void {
     pts.push([ix, iy]);
     if (state.terrain.is_dirt(ix, iy)) {
       state.terrain.carve_circle(ix, iy, 3);
-      energy -= LASER_BLEED;
+      energy -= LASER_DIRT_BLEED;
     }
     for (const tk of state.tanks) {
       if (
@@ -620,7 +624,7 @@ export function fire_laser(state: BState, proj: BProjectile): void {
       if (x < 1) x += state.terrain.w - 2;
       else if (x >= state.terrain.w - 1) x -= state.terrain.w - 2;
     }
-    energy -= LASER_BLEED; // bleed 0x28 per pixel
+    energy -= LASER_TRAVEL_BLEED;
   }
   proj.trail = pts;
   state.add_beam(pts);

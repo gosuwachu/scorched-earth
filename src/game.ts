@@ -950,7 +950,7 @@ export class GameState {
         weapon,
       );
       // d506 = field*10 (FUN_3319_0516:14).  `field` is LAUNCH POWER.  The Laser
-      // does NOT consume batteries.  The 0x28/px beam bleed gives range ~ energy/40.
+      // does NOT consume batteries. Browser travel and dirt costs are 15 instead of the DOS 40.
       proj.state["energy"] = Math.max(200, t.power) * 10;
       wb.fire_laser(this as unknown as wb.BState, proj as unknown as wb.BProjectile);
       finish();

@@ -162,7 +162,7 @@ describe("weapon_behaviors(more): laser cuts dirt; plasma-laser empty-trail term
     const t = new Terrain(360, 480);
     for (let x = 10; x < 60; x++) t.write(x, 100, C.COL_DIRT); // dirt along y=100
     const st = new State(t) as unknown as BState;
-    // energy bleeds 0x28 (40)/px, so a 50px march needs ~2000 energy.
+    // Browser travel costs 15/px plus 15 for each dirt cut.
     const proj = mkProj(ITEMS[32], { px: 10, py: 100, vx: 1, vy: 0, state: { energy: 2000 } });
     expect(t.is_dirt(15, 100)).toBe(true);
     wb.fire_laser(st, proj);

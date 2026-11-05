@@ -895,6 +895,26 @@ const ready = boot();
 
 // Reproducible weapon sequences for visual review and the browser gate.
 let weaponDemo: { gs: GameState; renderer: Renderer; surf: pygame.Surface; frame: number };
+function laserRangeDemo(power: number, dirt = false) {
+  const gs = buildState(42, { SKY: "PLAIN", FALLING_TANKS: "OFF", MTN_PERCENT: 0, ELASTIC: "NONE" });
+  driveToAim(gs);
+  gs.terrain.grid.fill(C.COL_SKY);
+  for (let x = 0; x < W; x++) for (let y = 500; y < H; y++)
+    gs.terrain.write(x, y, C.DIRT_SHADE_LO + 8);
+  const t = gs.current_shooter!;
+  gs.tanks.forEach((tank) => { tank.x = tank === t ? 100 : W - 100; tank.y = 499; });
+  t.x = 100; t.angle = 0; t.power = power; t.health = 100;
+  t.selected_weapon = 32; t.inventory[32] = 2;
+  if (dirt) for (let x = 112; x < W; x++) for (let y = 480; y < 500; y++)
+    gs.terrain.write(x, y, C.DIRT_SHADE_LO + 8);
+  const [p] = gs.fire(t);
+  const surf = newSurf();
+  freshRenderer(gs).render(surf, gs); blit(surf);
+  return { samples: p.trail.length, first: p.trail[0], last: p.trail.at(-1),
+    active: p.active, ammo: t.inventory[32], health: t.health };
+}
+Object.assign(window, { laserRangeDemo });
+
 function startWeaponDemo(idx: number, terrain = "flat"): void {
   const gs = buildState(42, { SKY: "PLAIN", FALLING_TANKS: "OFF", MTN_PERCENT: 0, SUSPEND_DIRT: 0 });
   driveToAim(gs);

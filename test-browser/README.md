@@ -117,6 +117,12 @@ shot stays airborne, with unchanged shot coordinates during the fall and resumed
 flight afterward. The assertions check animated falling, conserved soil, and
 complete settling without requiring an empty battlefield.
 
+The weapon driver fires Laser through the normal launch path at powers 200, 500,
+and 800, checking beam lengths in air and continuous dirt, ammunition consumption, and shooter
+health. It writes `weapons/laser-range.json` and `weapons/laser-range-*.png`.
+These cover the browser's intentional approximately 2.67x range adjustment, not DOS parity.
+Travel and extra dirt-cutting energy costs are both 15, compared with the original 40.
+
 After the relevant checks pass, run `npm test` and `npm run build` for code
 changes. Broaden or repeat verification only when another affected subsystem,
 new edit or failure warrants it.

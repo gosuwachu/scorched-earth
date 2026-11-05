@@ -16,6 +16,20 @@ try {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`${base}/test-browser/harness.html`);
   await page.evaluate(() => window.harnessReady);
+  const laserRanges = [];
+  for (const dirt of [false, true]) for (const [power, airSamples, dirtSamples] of [[200, 134, 107], [500, 334, 267], [800, 534, 427]]) {
+    // Continuous dirt needs a cut every four samples: 75 energy per group.
+    const samples = dirt ? dirtSamples : airSamples;
+    const meta = await page.evaluate(([p, d]) => window.laserRangeDemo(p, d), [power, dirt]);
+    assert.equal(meta.samples, samples);
+    assert.equal(meta.last[0] - meta.first[0], samples - 1);
+    assert.equal(meta.active, false);
+    assert.equal(meta.ammo, 1);
+    assert.equal(meta.health, 100);
+    await page.locator("#game").screenshot({ path: `${out}/laser-range-${dirt ? "dirt" : "air"}-${power}.png` });
+    laserRanges.push({ power, dirt, ...meta });
+  }
+  writeFileSync(`${out}/laser-range.json`, JSON.stringify(laserRanges, null, 2));
   const tunneling = [];
   for (const kind of ["thick", "thin", "off", "contact"]) {
     await page.evaluate((k) => window.startTunnelingDemo(k), kind);

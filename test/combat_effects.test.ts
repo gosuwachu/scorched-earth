@@ -136,7 +136,8 @@ describe("blast and energy semantics", () => {
       const p = new Projectile(gs.tanks[0], ITEMS[32], 90, 96, 1, 0); p.state.energy = 1000;
       wb.fire_laser(gs as unknown as wb.BState, p as unknown as wb.BProjectile);
       expect(p.trail[p.trail.length - 1]).toEqual([93, 96]);
-      expect(target.shield_hp).toBe(superMag ? 108 : 460);
+      // Three travel pixels cost 45: 955 energy gives 9 recharge or four pulses.
+      expect(target.shield_hp).toBe(superMag ? 109 : 460);
       expect(gs.beams).toHaveLength(1);
     }
   });

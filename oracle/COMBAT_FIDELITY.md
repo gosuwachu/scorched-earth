@@ -35,7 +35,16 @@ for eligibility, Contact Trigger interactions, runtime observations and limits.
 | 29 Dirt Charge | `25a0:0081` | Ordinary projectile, then upward random dirt spray extending one third of the field height. |
 | 30 Earth Disrupter | `262c:013e` | 100 brightness/speaker cycles, followed by forced animated collapse even at full dirt suspension. |
 | 31 Plasma | `3770:0009` | Centered on its owner, charge 0–10 Batteries, textured blast, longer hold and blue cleanup; excludes owner and dirt, makes no crater. |
-| 32 Laser | `3319:0004/0516` | Power-based energy, 40 per pixel plus 40 through dirt, small dirt cuts, ten-point damage pulses; Super Mag converts energy into shield recharge. |
+| 32 Laser | `3319:0004/0516` | Power-based energy, small dirt cuts, ten-point damage pulses; Super Mag converts energy into shield recharge. DOS travel costs 40 per pixel plus 40 per dirt cut; the browser intentionally reduces both costs to 15 (see below). |
+
+The browser Laser has an intentional balance adjustment: travel costs 15 energy
+per pixel and each dirt cut costs another 15, giving about 2.67 times the DOS range
+in air and uniform dirt, subject to integer rounding, field boundaries and tank
+interception. Launch energy and the radius-three terrain cut are unchanged. Damage and
+Super Mag recharge still use remaining energy: close-contact discharge is
+unchanged, while distant hits retain more energy. `test/laser.test.ts` and the
+weapon browser driver's `laser-range-*` captures check this browser behavior;
+they are not DOS parity evidence. Original DOS fixtures remain unchanged.
 
 `33a1:1061` applies explosion scaling only to selected families. At width 320,
 scales are 0.5/0.75/1; other modes use 1/2/3. Standard blast damage is rounded
