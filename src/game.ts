@@ -917,6 +917,7 @@ export class GameState {
       this._enter_firing();
     };
     t.consume(slot);
+    t.consume(weapons.SLOT_LASER_SIGHT); // One charge per launch, including a salvo.
     // Auto-switch off a depleted weapon (FUN_38b5_145b.c:16-20): fall the selection
     // back to Baby Missile (slot 0), not the next owned weapon.
     if (

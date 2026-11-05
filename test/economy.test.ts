@@ -43,7 +43,8 @@ import {
   SELLBACK_MULT_FREEMARKET,
   FREE_MARKET_PRICE_STEP,
 } from "../src/constants";
-import { NUM_ITEMS, SLOT_AUTO_DEFENSE } from "../src/weapons";
+// Legacy scenarios exercise only the original catalog; laser_sight.test covers extensions.
+import { DOS_NUM_ITEMS as NUM_ITEMS, SLOT_AUTO_DEFENSE } from "../src/weapons";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VECTORS = join(__dirname, "..", "oracle", "vectors", "economy.json");
@@ -210,7 +211,7 @@ describe("economy: refresh_availability across ARMS tiers", () => {
     it(`ARMS=${arms}: 48 item availability flags match`, () => {
       const e = makeEconomy({ ARMS: arms });
       e.refresh_availability();
-      expect(e.available.length).toBe(available.length);
+      expect(e.available.length).toBe(available.length + 1);
       for (let i = 0; i < available.length; i++) {
         expect(e.available[i], `available[${i}] ARMS=${arms}`).toBe(
           available[i],

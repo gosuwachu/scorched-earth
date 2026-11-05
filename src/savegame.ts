@@ -66,7 +66,7 @@ import { clampPower } from "./power";
 import { CONFIG_FIELDS } from "./config";
 import { copyComeback, type ComebackMatch } from "./comeback";
 import { copyOutlastRound, type OutlastRound } from "./outlast";
-import { NUM_ITEMS } from "./weapons";
+import { DOS_NUM_ITEMS, ITEMS, NUM_ITEMS } from "./weapons";
 
 // config.ts does not export its FieldType alias; redeclare the identical literal
 // union locally (the CONFIG_FIELDS element `.type` is exactly this union, so it
@@ -749,6 +749,7 @@ export function applyTank(
   t.cash = d.cash;
   t.cash_ceiling = d.cash_ceiling;
   t.inventory = d.inventory.slice();
+  if (t.inventory.length === DOS_NUM_ITEMS) t.inventory.push(0);
   t.selected_weapon = d.selected_weapon;
   t.fuel_remainder = d.fuel_remainder;
   t.score = d.score;
@@ -799,6 +800,15 @@ function economyToData(econ: SaveEconomy): SaveEconomyData {
 export function applyEconomy(econ: SaveEconomy, d: SaveEconomyData): void {
   const n = econ.n;
   const keys = ["price", "demand_tally", "nobuy", "demand_ema", "ratio_ema", "available"] as const;
+  // Migrate the original table as a unit; mixed/truncated arrays still fail.
+  if (n === NUM_ITEMS && keys.every((key) => d[key]?.length === DOS_NUM_ITEMS)) {
+    d = {
+      price: [...d.price, ITEMS[DOS_NUM_ITEMS].cost],
+      demand_tally: [...d.demand_tally, 0], nobuy: [...d.nobuy, 0],
+      demand_ema: [...d.demand_ema, 0.1], ratio_ema: [...d.ratio_ema, 0.1],
+      available: [...d.available, true],
+    };
+  }
   for (const key of keys) {
     const vals = d[key];
     if (vals == null || vals.length !== n) {

@@ -127,3 +127,17 @@ fidelity reference. Do not run `visual/run_gate.sh` or generate Python-rendered
 baselines for new comparisons; that workflow is [retired](../visual/README.md).
 The full Vitest suite still includes legacy Python-derived fixtures, whose
 passing results establish regression coverage rather than DOS accuracy.
+
+Laser Sight is browser-only equipment: Miscellaneous sells ten charges for a base
+price of $2,500. It automatically shows a straight, 100-pixel fading extension of
+the barrel while a human aims and consumes one charge per launched shot (including
+salvos). Unused charges carry between rounds and saves; original 48-item saves
+load with zero charges. This is a direction aid, not a gravity/wind prediction.
+
+The render driver captures `laser_sight_{black,plain}_{0,45,90,135,180}.png` and
+checks decreasing pixel contrast along the beam, no beam beyond its endpoint,
+and no inventory mutation during rendering. The DOM driver buys the item from
+Miscellaneous, verifies the price/count and painted icon, and saves
+`ui-laser-sight-shop.png`. Unit tests cover depletion, synchronous/simultaneous
+launches, remote controller ownership, and save migration. These are browser
+feature checks, not DOS fidelity evidence.

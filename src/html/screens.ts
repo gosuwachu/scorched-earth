@@ -131,6 +131,7 @@ export class ScreenContent implements Component<boolean> {
         return row;
       }, (row, slot, index) => {
         const item = weapons.ITEMS[slot];
+        row.title = slot === weapons.SLOT_LASER_SIGHT ? "Shows your firing direction while aiming. Uses one charge per shot." : "";
         const cells = row.children;
         cells[0].textContent = index === screen.sel_row ? ">" : "";
         cells[1].textContent = String(screen.tank.inventory[slot]);
@@ -180,8 +181,8 @@ export class ScreenContent implements Component<boolean> {
       };
       makeList("weapon", screen._wcol_x); makeList("guidance", screen._gcol_x);
       const counts = el("div", "", "ui-status");
-      add(counts, screen._gcol_x, Math.max(screen._guidance_bottom, screen._array_y - 110) + 8, listWidth);
-      this.updates.push(() => { const inv = screen.tank.inventory; counts.textContent = `Shields: ${weapons.SHIELD_SLOTS.reduce((n, slot) => n + inv[slot], 0)}\nParachutes: ${inv[weapons.SLOT_PARACHUTE]}\nBatteries: ${inv[weapons.SLOT_BATTERY]}\nTriggers: ${inv[weapons.SLOT_CONTACT_TRIGGER]}\nFuel: ${inv[weapons.SLOT_FUEL]}`; });
+      add(counts, screen._gcol_x, Math.max(screen._guidance_bottom, screen._array_y - 128) + 8, listWidth);
+      this.updates.push(() => { const inv = screen.tank.inventory; counts.textContent = `Shields: ${weapons.SHIELD_SLOTS.reduce((n, slot) => n + inv[slot], 0)}\nParachutes: ${inv[weapons.SLOT_PARACHUTE]}\nBatteries: ${inv[weapons.SLOT_BATTERY]}\nTriggers: ${inv[weapons.SLOT_CONTACT_TRIGGER]}\nFuel: ${inv[weapons.SLOT_FUEL]}\nLaser Sight: ${inv[weapons.SLOT_LASER_SIGHT] ?? 0}`; });
       if (screen.weapon_array) add(el("span", "Weapon array (click to select):"), screen._wcol_x, screen._array_y - 18, listWidth);
     }
     if (screen instanceof S.SaveScreen || screen instanceof S.RestoreScreen) {

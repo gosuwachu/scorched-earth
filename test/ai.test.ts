@@ -640,7 +640,7 @@ describe("ai: buy (shared deterministic ladder)", () => {
       const st = new MockState(cfg, [me]);
       ai.buy(st, me);
       expect(me.cash).toBe(r.cash_out);
-      expect(me.inventory).toEqual(r.inventory);
+      expect(me.inventory).toEqual([...r.inventory, 0]);
       expect(me.parachute_deployed).toBe(r.parachute_deployed);
     });
   }
@@ -656,7 +656,7 @@ describe("ai: buy (moron weighted-random)", () => {
       st.rng.seed(r.seed);
       ai.buy(st, me);
       expect(me.cash).toBe(r.cash_out);
-      expect(me.inventory).toEqual(r.inventory);
+      expect(me.inventory).toEqual([...r.inventory, 0]);
     });
   }
 });

@@ -4,7 +4,7 @@ import { createGameState, SIM_LIVE, ROUND_END } from "../src/game";
 import { RemoteAdapter } from "../src/remote";
 import type { App } from "../src/main";
 import type { Input, Player } from "../shared/online";
-import { SLOT_BATTERY } from "../src/weapons";
+import { SLOT_BATTERY, SLOT_LASER_SIGHT } from "../src/weapons";
 import { HumanController } from "../src/ui";
 
 // Network control regression cases, not DOS fidelity fixtures.
@@ -108,6 +108,17 @@ describe.each(["sequential", "simultaneous"])("precise %s guest aiming", (mode) 
 });
 
 describe("independent simultaneous controllers", () => {
+  it("spends Laser Sight charges only for the controller that fires", () => {
+    const { gs, key } = setup();
+    const [alice, bob] = gs.tanks;
+    alice.inventory[SLOT_LASER_SIGHT] = 10; bob.inventory[SLOT_LASER_SIGHT] = 10;
+    key("Alice", "Space");
+    expect([alice.inventory[SLOT_LASER_SIGHT], bob.inventory[SLOT_LASER_SIGHT]]).toEqual([9, 10]);
+    key("Alice", "Space", false); key("Alice", "Space");
+    expect(alice.inventory[SLOT_LASER_SIGHT]).toBe(9);
+    key("Bob", "Space");
+    expect(bob.inventory[SLOT_LASER_SIGHT]).toBe(9);
+  });
   it("pauses controllers without losing Plasma choices and rejects commands from before or during the pause", () => {
     const { gs, app, states, adapter, key, send, plasma } = setup();
     const alice = plasma(0), bob = gs.tanks[1];

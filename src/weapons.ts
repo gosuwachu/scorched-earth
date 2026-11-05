@@ -1,6 +1,6 @@
 /**
- * The 48-item equipment table (weapons + defense/utility) -- a faithful
- * TypeScript port of scorch-py/scorch/weapons.py (the fidelity oracle, itself
+ * The original 48-item equipment table plus browser-only equipment. A faithful
+ * TypeScript port of scorch-py/scorch/weapons.py (legacy provenance, itself
  * byte-verified against 1.5/SCORCH.EXE).
  *
  * On-disk order and (cost, bundle, arms) are FACT from catalog 08 section 1
@@ -154,14 +154,13 @@ export const ITEMS: Item[] = [
   new Item(45, "Auto Defense",   1500,   1, 3, "utility",   { behavior: "equip" }),
   new Item(46, "Fuel Tank",     10000,  10, 3, "utility",   { behavior: "equip" }),
   new Item(47, "Contact Trigger", 1000, 25, 3, "utility",   { behavior: "equip" }),
+  // Browser extension: automatically assists aiming; one charge per shot.
+  new Item(48, "Laser Sight",     2500,  10, 0, "utility",   { behavior: "equip" }),
 ];
 
-export const NUM_ITEMS = ITEMS.length;   // 48 (DAT_5f38_1bb6)
-/* v8 ignore next 4 -- unreachable load-time invariant: ITEMS is a fixed literal of 48 entries, so NUM_ITEMS === 48 always and the guard never fires. Mirrors weapons.py's `assert NUM_ITEMS == 48`; kept as a tripwire if the table is ever edited. */
-if (NUM_ITEMS !== 48) {
-  // Mirrors `assert NUM_ITEMS == 48` in weapons.py:118.
-  throw new Error(`NUM_ITEMS must be 48, got ${NUM_ITEMS}`);
-}
+/** Original DOS slots remain stable; extensions are appended. */
+export const DOS_NUM_ITEMS = 48;
+export const NUM_ITEMS = ITEMS.length;
 
 // Named slot indices used by AI-buy / shield logic (catalog 14 section 6.1
 // resolves these via DAT_5f38_d554/d556/d55a..d55e at store init).
@@ -177,6 +176,7 @@ export const SLOT_SUPER_MAG = 44;
 export const SLOT_AUTO_DEFENSE = 45;
 export const SLOT_FUEL = 46;
 export const SLOT_CONTACT_TRIGGER = 47;
+export const SLOT_LASER_SIGHT = 48;
 
 export const SHIELD_SLOTS: readonly number[] = [
   SLOT_MAG_DEFLECTOR,

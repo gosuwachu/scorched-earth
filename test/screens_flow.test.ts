@@ -473,7 +473,9 @@ describe("screens_flow: OptionsScreen weapon-list scroll == Python", () => {
     const ow = vec.options_weapons;
     const self = weaponsSeam();
     expect(self._wl_h, "wl_h").toBe(ow.wl_h);
-    expect(self.weapon_items.length, "n_items").toBe(ow.n_items);
+    expect(self.weapon_items.length, "original items plus Laser Sight").toBe(ow.n_items + 1);
+    // Replay the legacy scroll window on its original catalog.
+    self.weapon_items = self.weapon_items.slice(0, ow.n_items);
     for (let i = 0; i < ow.script.length; i++) {
       const d = ow.script[i].d;
       self.handle({ type: pygame.MOUSEBUTTONDOWN, button: d < 0 ? 4 : 5, pos: [0, 0] });

@@ -713,7 +713,7 @@ describe("ui: Shop session (buy/sell delegation + cash/inv + done)", () => {
     }
     expect(econ.calls, "session calls").toEqual(s.calls);
     expect(tank.cash, "final cash").toBe(s.final_cash);
-    expect(tank.inventory, "final inv").toEqual(s.final_inv);
+    expect(tank.inventory, "final inv").toEqual([...s.final_inv, 0]);
   });
 
   it("TAB closes the shop", () => {

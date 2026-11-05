@@ -630,7 +630,7 @@ describe("game_flow: shop/economy cycle (run_ai_buys / proceed / begin_next_roun
     return {
       label, phase: gs.phase, round_index: gs.round_index,
       cash: gs.tanks.map((t) => t.cash),
-      inv: gs.tanks.map((t) => t.inventory.slice()),
+      inv: gs.tanks.map((t) => t.inventory.slice(0, weapons.DOS_NUM_ITEMS)),
     };
   }
   function expectRow(got: ShopRow, want: ShopRow, tag: string): void {
@@ -992,7 +992,7 @@ describe("game_flow: isolated effect helpers + edge paths", () => {
     (cfg as unknown as { mayhem: boolean }).mayhem = true;
     const gs = build(cfg, 1, [["A", C.AI_HUMAN, 0, 0]]);
     gs.new_game();
-    expect(gs.tanks[0].inventory, "mayhem inventory").toEqual(E.mayhem.inv);
+    expect(gs.tanks[0].inventory, "mayhem inventory").toEqual([...E.mayhem.inv, 99]);
   });
 
   it("Unknown-class per-turn re-roll (latched once)", () => {

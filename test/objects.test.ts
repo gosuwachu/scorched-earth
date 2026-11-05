@@ -257,9 +257,9 @@ describe("objects: Tank construction is field-exact", () => {
       expect(rec.guidance_target_pt_is_none, "guidance_target_pt_is_none").toBe(ev.guidance_target_pt_is_none);
       expect(rec.cash, "cash").toBe(ev.cash);
       expect(rec.cash_ceiling, "cash_ceiling").toBe(ev.cash_ceiling);
-      expect(rec.inventory_len, "inventory_len").toBe(ev.inventory_len);
+      expect(rec.inventory_len, "inventory_len").toBe(ev.inventory_len + 1);
       // full inventory vector, element-exact
-      expect(rec.inventory, "inventory").toEqual(ev.inventory);
+      expect(rec.inventory, "inventory").toEqual([...ev.inventory, 0]);
       expect(rec.selected_weapon, "selected_weapon").toBe(ev.selected_weapon);
       expect(rec.fuel_remainder, "fuel_remainder").toBe(ev.fuel_remainder);
       expect(rec.score, "score").toBe(ev.score);

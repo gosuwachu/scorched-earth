@@ -4,9 +4,6 @@
  * which every shipped ITEMS record overrides). Golden defaults come from
  * oracle/dump_more.py constructing the Python dataclass weapons.Item(99,"X",...).
  *
- * The `NUM_ITEMS !== 48` throw (weapons.ts:170-173) is a load-time assert that is
- * unreachable while ITEMS has its fixed 48 records; it mirrors weapons.py:118's
- * `assert NUM_ITEMS == 48` and is left as a documented defensive guard.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

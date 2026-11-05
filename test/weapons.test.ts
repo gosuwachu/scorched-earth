@@ -18,6 +18,7 @@ import { describe, it, expect } from "vitest";
 import {
   Item,
   ITEMS,
+  DOS_NUM_ITEMS,
   NUM_ITEMS,
   SHIELD_SLOTS,
   MORON_WEIGHTS,
@@ -86,10 +87,10 @@ const SLOT_CONSTS: { [k: string]: number } = {
 };
 
 describe("weapons: table size", () => {
-  it("NUM_ITEMS matches Python (48)", () => {
-    expect(NUM_ITEMS).toBe(vec.num_items);
-    expect(ITEMS.length).toBe(vec.num_items);
-    expect(NUM_ITEMS).toBe(48);
+  it("retains the original 48 slots and appends browser equipment", () => {
+    expect(DOS_NUM_ITEMS).toBe(vec.num_items);
+    expect(ITEMS.slice(0, DOS_NUM_ITEMS)).toHaveLength(vec.num_items);
+    expect(NUM_ITEMS).toBe(49);
   });
 });
 

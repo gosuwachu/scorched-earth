@@ -448,7 +448,7 @@ describe("screens: ShopScreen._refresh_items (category + arms + affordability)",
       const tank = new TankMock({ cash: c.cash });
       const self = shopSeam({ econ, tank, category: c.category });
       self._refresh_items();
-      expect(self.items, `${i} items`).toEqual(c.items);
+      expect(self.items.filter((slot) => slot < weapons.DOS_NUM_ITEMS), `${i} original items`).toEqual(c.items);
     });
   }
 });
@@ -535,7 +535,7 @@ describe("screens: ShopScreen._category_click (toggle + cursor reset + relist)",
       expect(self.category, `click #${i} category`).toBe(c.category);
       expect(self.sel_row, `click #${i} sel_row`).toBe(c.sel_row);
       expect(self.scroll, `click #${i} scroll`).toBe(c.scroll);
-      expect(self.items.length, `click #${i} n_items`).toBe(c.n_items);
+      expect(self.items.filter((slot) => slot < weapons.DOS_NUM_ITEMS).length, `click #${i} original n_items`).toBe(c.n_items);
     }
   });
 });

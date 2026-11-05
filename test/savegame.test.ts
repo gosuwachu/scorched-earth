@@ -54,7 +54,7 @@ import {
   type SaveTankData,
 } from "../src/savegame";
 import { CONFIG_FIELDS } from "../src/config";
-import { NUM_ITEMS } from "../src/weapons";
+import { DOS_NUM_ITEMS, NUM_ITEMS } from "../src/weapons";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const VECTORS = join(__dirname, "..", "oracle", "vectors", "savegame.json");
@@ -413,7 +413,7 @@ function expectTankRestored(t: SaveTank, s: TankSnap, label: string): void {
   expect(t.guidance_target_pt, `${label} guidance_target_pt`).toEqual(s.guidance_target_pt);
   expect(t.cash, `${label} cash`).toBe(s.cash);
   expect(t.cash_ceiling, `${label} cash_ceiling`).toBe(s.cash_ceiling);
-  expect(t.inventory, `${label} inventory`).toEqual(s.inventory);
+  expect(t.inventory, `${label} inventory`).toEqual([...s.inventory, 0]);
   expect(t.selected_weapon, `${label} selected_weapon`).toBe(s.selected_weapon);
   expect(t.fuel_remainder, `${label} fuel_remainder`).toBe(s.fuel_remainder);
   expect(t.score, `${label} score`).toBe(s.score);
@@ -454,12 +454,12 @@ function expectStateRestored(st: SaveGameState, s: StateSnap, label: string): vo
   expect(st.cfg.wind, `${label} _wind`).toBe(s._wind);
   expect(st.cfg.live_elastic, `${label} _live_elastic`).toBe(s._live_elastic);
   // economy
-  expect(st.economy.price, `${label} econ.price`).toEqual(s.economy.price);
-  expect(st.economy.demand_tally, `${label} econ.demand_tally`).toEqual(s.economy.demand_tally);
-  expect(st.economy.nobuy, `${label} econ.nobuy`).toEqual(s.economy.nobuy);
-  expect(st.economy.demand_ema, `${label} econ.demand_ema`).toEqual(s.economy.demand_ema);
-  expect(st.economy.ratio_ema, `${label} econ.ratio_ema`).toEqual(s.economy.ratio_ema);
-  expect(st.economy.available, `${label} econ.available`).toEqual(s.economy.available);
+  expect(st.economy.price, `${label} econ.price`).toEqual([...s.economy.price, 2500]);
+  expect(st.economy.demand_tally, `${label} econ.demand_tally`).toEqual([...s.economy.demand_tally, 0]);
+  expect(st.economy.nobuy, `${label} econ.nobuy`).toEqual([...s.economy.nobuy, 0]);
+  expect(st.economy.demand_ema, `${label} econ.demand_ema`).toEqual([...s.economy.demand_ema, 0.1]);
+  expect(st.economy.ratio_ema, `${label} econ.ratio_ema`).toEqual([...s.economy.ratio_ema, 0.1]);
+  expect(st.economy.available, `${label} econ.available`).toEqual([...s.economy.available, true]);
   // terrain bytes (exact)
   expect(st.terrain.grid.w, `${label} terrain.w`).toBe(s.terrain.w);
   expect(st.terrain.grid.h, `${label} terrain.h`).toBe(s.terrain.h);
@@ -492,7 +492,7 @@ describe("savegame: constants agree with the Python module", () => {
     // MAGIC string code points == the byte list (ASCII)
     expect(MAGIC.split("").map((c) => c.charCodeAt(0))).toEqual(vec.consts.MAGIC);
     expect(SAVE_VERSION).toBe(vec.consts.SAVE_VERSION);
-    expect(NUM_ITEMS).toBe(vec.consts.NUM_ITEMS);
+    expect(DOS_NUM_ITEMS).toBe(vec.consts.NUM_ITEMS);
     expect(vec.consts.HEADER_LEN).toBe(8);
   });
 });
@@ -697,7 +697,7 @@ describe("savegame: economy length guard (incompatible item table)", () => {
     const rc = vec.roundtrip[0];
     const data = load(save(mkState(rc.restored)));
     // truncate one economy array to simulate a foreign item table
-    data.economy.price = data.economy.price.slice(0, NUM_ITEMS - 1);
+    data.economy.price = data.economy.price.slice(0, DOS_NUM_ITEMS - 1);
     const host = mkBlankState(rc.restored.tanks.length, rc.restored.w, rc.restored.h);
     expect(() => apply(data, host)).toThrow(SaveError);
   });

@@ -353,7 +353,7 @@ describe("sprites_more: get_sprite out-of-range", () => {
     // IndexError on an out-of-range index (list index); the TS chose graceful null.
     // The src/sprites.ts:234 doc comment ("throws like the Python list index") is
     // therefore stale -- the code returns null.  Asserting the ACTUAL TS behavior.
-    expect(sprites.get_sprite("A", 48)).toBeNull();
+    expect(sprites.get_sprite("A", 49)).toBeNull();
     expect(sprites.get_sprite("A", 999)).toBeNull();
     expect(sprites.get_sprite("B", 12)).toBeNull();
     expect(sprites.get_sprite("B", -1)).toBeNull();

@@ -1,3 +1,4 @@
+import { laserSightStates } from "./laser_sight";
 // Browser render-crash harness (TS PORT side).
 //
 // PURPOSE: drive the REAL Renderer + screens through every visual state IN A REAL
@@ -281,6 +282,7 @@ function sweepSetters(panel: { widgets: unknown[] }): void {
 // renderer for the whole game; a fresh renderer per frame would re-seed the sky LUT
 // every frame and is NOT how the app animates).
 const STATES: { [name: string]: () => StateMeta } = {
+  ...laserSightStates(buildTrailState, freshRenderer, blit),
   ...projectileIndicatorStates(buildTrailState, freshRenderer, blit),
   trail_dark: () => trailDemo("BLACK"),
   trail_bright: () => trailDemo("PLAIN"),

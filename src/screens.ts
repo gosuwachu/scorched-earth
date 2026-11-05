@@ -2239,7 +2239,7 @@ export class InventoryScreen extends Screen {
       }
     }
     // read-only defensive/consumable counts (status-bar fields, s8c)
-    let ry = Math.max(this._guidance_bottom, this._array_y - 110) + 8;
+    let ry = Math.max(this._guidance_bottom, this._array_y - 128) + 8;
     let shields = 0;
     for (const s of weapons.SHIELD_SLOTS) {
       shields += t.inventory[s];
@@ -2247,6 +2247,7 @@ export class InventoryScreen extends Screen {
     const readonly: [string, number][] = [
       ["Shields", shields],
       ["Parachutes", t.inventory[weapons.SLOT_PARACHUTE]],
+      ["Laser Sight", t.inventory[weapons.SLOT_LASER_SIGHT] ?? 0],
       ["Batteries", t.inventory[weapons.SLOT_BATTERY]],
       ["Triggers", t.inventory[weapons.SLOT_CONTACT_TRIGGER]],
       ["Fuel", t.inventory[weapons.SLOT_FUEL]],

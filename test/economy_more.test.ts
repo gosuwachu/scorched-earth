@@ -11,6 +11,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { DOS_NUM_ITEMS } from "../src/weapons";
 import { describe, it, expect } from "vitest";
 import { Economy, type EconomyConfig } from "../src/economy";
 
@@ -35,10 +36,10 @@ describe("economy(more): market_update skips unavailable items", () => {
     }
     e.market_update(vec.num_players);
 
-    expect(e.price).toEqual(vec.price_after);
-    expect(e.nobuy).toEqual(vec.nobuy);
-    expect(e.demand_ema).toEqual(vec.demand_ema);
-    expect(e.ratio_ema).toEqual(vec.ratio_ema);
+    expect(e.price.slice(0, DOS_NUM_ITEMS)).toEqual(vec.price_after);
+    expect(e.nobuy.slice(0, DOS_NUM_ITEMS)).toEqual(vec.nobuy);
+    expect(e.demand_ema.slice(0, DOS_NUM_ITEMS)).toEqual(vec.demand_ema);
+    expect(e.ratio_ema.slice(0, DOS_NUM_ITEMS)).toEqual(vec.ratio_ema);
 
     // The skipped items keep their pre-round price (never repriced).
     for (const k of vec.unavail) {

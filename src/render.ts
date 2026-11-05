@@ -1,3 +1,4 @@
+import { sightLine, sightVisible } from "./laser_sight";
 /**
  * Rendering (Canvas2D, via the pygame shim).  A faithful TypeScript port of
  * scorch-py/scorch/render.py (the fidelity oracle).  The original VGA blit is
@@ -777,6 +778,9 @@ export class Renderer {
       this._draw_beam(surf, b);
     }
     for (const t of state.tanks) {
+      if (sightVisible(state, t)) this._draw_laser_sight(surf, t);
+    }
+    for (const t of state.tanks) {
       if (t.alive) {
         const x0 = Math.max(0, t.x - t.half_width - 2), y0 = Math.max(0, t.y - 12);
         const w = Math.min(this.w - x0, 2 * t.half_width + 5), h = Math.min(this.h - y0, 14);
@@ -896,6 +900,24 @@ export class Renderer {
     const grid = state.terrain.grid as GridLike | number[][] | Uint8Array | Int32Array;
     const rgb = compositeTerrainRgb(grid, this.w, this.h, this._active, this._skyPlaneArg());
     pygame.surfarray.blit_array(surf, { w: this.w, h: this.h, data: rgb });
+  }
+
+  private _draw_laser_sight(surf: pygame.Surface, t: Tank): void {
+    const { x1, y1, x2, y2 } = sightLine(t);
+    const ctx = surf.ctx;
+    ctx.save();
+    const stroke = (color: string, width: number): void => {
+      const fade = ctx.createLinearGradient(x1, y1, x2, y2);
+      fade.addColorStop(0, `rgba(${color},0.95)`);
+      fade.addColorStop(0.45, `rgba(${color},0.5)`);
+      fade.addColorStop(1, `rgba(${color},0)`);
+      ctx.strokeStyle = fade;
+      ctx.lineWidth = width;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    };
+    stroke("12,35,20", 3); // Understroke keeps the thin beam legible on bright skies.
+    stroke("197,255,206", 1);
+    ctx.restore();
   }
 
   // ------------------------------------------------------------------ tanks
@@ -1723,6 +1745,9 @@ export class Renderer {
       ["trig", `${trig} [trig]`],
       ["fuel", `${fuel} [fuel]`],
     ];
+    if (t.inventory[weapons.SLOT_LASER_SIGHT] > 0) {
+      cells.push([null, `${t.inventory[weapons.SLOT_LASER_SIGHT]} [sight]`]);
+    }
     const sepW = this.font.size("   ")[0];
     let x = 6;
     const ty = y + 2;

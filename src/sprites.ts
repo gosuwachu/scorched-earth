@@ -1,3 +1,4 @@
+import { SLOT_LASER_SIGHT } from "./weapons";
 /**
  * Original Scorched Earth v1.5 sprites -- REAL artwork extracted from the binary.
  *
@@ -239,6 +240,21 @@ export function get_sprite(
   index: number,
   opts: { color?: number; pal?: unknown; scale?: number } = {},
 ): pygame.Surface | null {
+  // Browser extension, deliberately separate from the extracted DOS table.
+  if (table === "A" && index === SLOT_LASER_SIGHT) {
+    const scale = opts.scale ?? 1;
+    const surf = new pygame.Surface([16 * scale, 16 * scale], pygame.SRCALPHA);
+    const rows = ["..............x.", ".............x..", "................",
+      "...........m....", "..........m.....", "................", "........b.......",
+      ".......b........", "......b.........", ".....b..........", "....b...........",
+      "...gg...........", "..gggg..........", ".gggggg.........", "................", "................"];
+    const colors: Record<string, RGB> = { g: [132, 188, 145], b: [213, 251, 217],
+      m: [165, 237, 181], x: [100, 150, 117] };
+    rows.forEach((row, y) => [...row].forEach((pixel, x) => {
+      if (colors[pixel]) surf.fill(colors[pixel], new pygame.Rect(x * scale, y * scale, scale, scale));
+    }));
+    return surf;
+  }
   const rec = rawRecord(table, index);
   if (rec === undefined) return null;
   return surfaceFromBuffer(

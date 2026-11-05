@@ -197,6 +197,13 @@ try {
   await page.getByRole("button", { name: /^Baby Nuke, owned/ }).click(); await click("Update");
   assert.ok(await page.evaluate(() => window.onlineApp.top.tank.cash) < cash);
   await click("Miscellaneous");
+  const sightRow = page.getByRole("button", { name: /^Laser Sight, owned/ });
+  await sightRow.click();
+  const sightCash = await page.evaluate(() => window.onlineApp.top.tank.cash);
+  await click("Update");
+  assert.deepEqual(await page.evaluate(() => [window.onlineApp.top.tank.cash, window.onlineApp.top.tank.inventory[48]]), [sightCash - 2500, 10]);
+  assert.ok(await sightRow.locator("canvas").evaluate((c) => [...c.getContext("2d").getImageData(0, 0, c.width, c.height).data].some((v, i) => i % 4 === 3 && v > 0)));
+  await shot("laser-sight-shop");
   await page.getByRole("button", { name: /^Battery, owned/ }).click(); await click("Update");
   await shot("shop");
   await click("Inventory"); await shot("inventory"); await click("Done");

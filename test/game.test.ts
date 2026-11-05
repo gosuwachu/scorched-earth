@@ -530,7 +530,7 @@ describe("game: run_ai_buys (AI economy purchases)", () => {
         expect(
           gs.tanks[i].inventory,
           `ai_buys#${ci} tank${i} inventory`,
-        ).toEqual(c.rows[i].inventory);
+        ).toEqual([...c.rows[i].inventory, 0]);
       }
     });
   }
