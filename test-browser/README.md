@@ -44,6 +44,13 @@ captures are `test-browser/out/online-colours-{lobby,shop,battle,round-two}-{hos
 The sprite assertions compare phone pixels with the host tank's palette colour;
 these are browser consistency checks, not DOS visual comparisons.
 
+Online shopping checks also purchase from two controllers before either presses
+Done, exercise one player's inventory while another buys, switch the host's
+Shopper selector, and reconnect to the independent shop. Both sequential and
+simultaneous battle modes are covered, including subsequent rounds. Captures are
+`test-browser/out/online-concurrent-shop-{sequential,simultaneous}-{host,alice,bob}.png`.
+These check browser interaction and state ownership, not DOS fidelity.
+
 Comeback economy checks run through `ui.mjs` and `online.mjs`. The local driver
 selects the mode, checks the Greedy restriction, completes a controlled duel,
 and verifies the shop income breakdown and responsive layout. The online driver

@@ -147,15 +147,19 @@ aiming and firing buttons, inventory, equipment, and purchasing controls. Choose
 aim and fire together. Each phone controls only its own tank with the same buttons;
 no key rebinding is needed. Plasma battery choices appear only on the owner's phone
 while the battle continues. Other online modes use sequential turns, where only
-the active player can act. Purchasing always takes turns; each player presses
-**Done**, and the host advances the shared round results
-with **Continue to purchasing**. The existing round and match-ending rules apply.
+the active player can act. In every online mode, players shop at the same time,
+with independent categories and inventory screens. Press **Done** to finish buying;
+the round starts when every human is ready. The host can use the **Shopper** selector
+to view or assist a player. The host advances shared round results with
+**Continue to purchasing**. The existing round and match-ending rules apply.
 
 Reopen the original join link in the **same browser, with its storage intact**, to
 resume your tank, including during a round or shopping. Refreshing a controller is
 safe. A second tab for the same player replaces the first. Disconnected players
 keep their tank. Sequential turns wait for them; simultaneous battles continue,
-with the disconnected tank's controls released. New players cannot join after Start.
+with the disconnected tank's controls released. During shopping, everyone else can
+keep buying, and the next round waits for unfinished shoppers to reconnect. Purchases
+and ready status are retained. New players cannot join after Start.
 
 Keep the host game page **open and visible**. It runs the game; the Node server
 relays controls and serves the pages. A temporary network interruption reconnects

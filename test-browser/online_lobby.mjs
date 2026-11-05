@@ -145,7 +145,7 @@ export async function checkGameColours(host, phones, until, out, stage) {
     assert.match(await preview.getAttribute("aria-label"), new RegExp(tanks[i].name));
   }
   if (stage === "shop") {
-    const name = host.getByText("Alice", { exact: true });
+    const name = host.getByLabel("Shopper", { exact: true });
     assert.equal(await name.evaluate((node) => getComputedStyle(node).color), `rgb(${palette[1].join(", ")})`);
   }
   await host.screenshot({ path: `${out}/online-colours-${stage}-host.png` });

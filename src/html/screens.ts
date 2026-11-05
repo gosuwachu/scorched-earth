@@ -1,3 +1,4 @@
+import type { App } from "../main";
 import { IncomeBreakdown } from "./economy";
 import { shopIncome } from "../comeback";
 /** Screen-specific content composed from the shared HTML controls. */
@@ -22,7 +23,7 @@ export class ScreenContent implements Component<boolean> {
   readonly element = el("div");
   private updates: Array<(active: boolean) => void> = [];
   private owned: HTMLElement[] = [];
-  constructor(screen: object, view: PanelView, actions: WidgetActions) {
+  constructor(screen: object, view: PanelView, actions: WidgetActions, app?: App) {
     const p = view.model;
     const add = (node: HTMLElement, x: number, y: number, width: number, height?: number) => {
       position(node, p, x, y, width, height); view.body.append(node); this.owned.push(node); return node;
@@ -100,6 +101,26 @@ export class ScreenContent implements Component<boolean> {
       const cash = el("strong"); const rounds = el("span");
       const bar = el("div"); bar.style.display = "flex"; bar.style.justifyContent = "space-between"; bar.append(name, cash, rounds);
       add(bar, p.rect.x + 12, p.rect.y + 26, screen._list_right - p.rect.x - 12);
+      if (app?.onlineShopping) {
+        const shopping = app.onlineShopping;
+        const select = el("select"); select.setAttribute("aria-label", "Shopper");
+        for (const [i, session] of shopping.sessions.entries()) {
+          const option = el("option", session.tank.name); option.value = String(i); select.append(option);
+        }
+        select.style.color = name.style.color;
+        select.style.background = "var(--ui-panel)";
+        name.replaceWith(select);
+        select.addEventListener("change", () => actions.change(() => shopping.select(Number(select.value))));
+        this.updates.push((active) => {
+          select.disabled = !active;
+          select.value = String(shopping.selected);
+          for (const [i, option] of [...select.options].entries()) {
+            const session = shopping.sessions[i];
+            option.textContent = `${session.tank.name} — ${session.done ? "Ready" : "Shopping"}`;
+            option.disabled = session.done;
+          }
+        });
+      }
       const income = new IncomeBreakdown();
       add(income.element, screen._ctrl_x, p.rect.y + 242, 138);
       this.updates.push(() => income.update(shopIncome(screen.state.comeback, screen.tank.player_index)));

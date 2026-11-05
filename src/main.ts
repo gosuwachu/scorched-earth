@@ -54,6 +54,8 @@
  *   every screen .draw() need a DOM / a real engine and defer to the Phase-3 visual
  *   gate + a live boot (pixelsDeferredToPhase3 = true).
  */
+import { OnlineShopping } from "./online_shop";
+import type { GameState } from "./game";
 import { UiHost, uiOwnsInput, type HtmlScreen } from "./html/host";
 import { UI_ACTION } from "./screen";
 import { handleCharge, type ChargeState } from "./energy_controls";
@@ -578,6 +580,7 @@ const SUBMENUS = new Set([
 
 export class App {
   online: HostSession | null = null;
+  onlineShopping: OnlineShopping | null = null;
   ui: UiHost | null = null;
 
   mountUi(canvas: HTMLCanvasElement): void {
@@ -844,7 +847,20 @@ export class App {
     const gs = this.gs as GameStateLike;
     this._shop_humans = (gs.tanks as Array<{ ai_class: number }>).filter((t) => t.ai_class === C.AI_HUMAN);
     this._shop_i = 0;
-    this._advance_shop();
+    if (this.online) {
+      const base = [...this.stack];
+      const sync = () => {
+        const session = this.onlineShopping!.current;
+        this.stack = [...base, session.shop, ...(session.inventory ? [session.inventory] : [])] as unknown as StackScreen[];
+      };
+      this.onlineShopping = new OnlineShopping(gs as unknown as GameState, sync, () => {
+        this.onlineShopping = null;
+        this.stack = base;
+        this._shop_i = this._shop_humans.length;
+        this._advance_shop();
+      });
+      sync();
+    } else this._advance_shop();
   }
 
   private _advance_shop(): void {
@@ -878,6 +894,11 @@ export class App {
       return;
     }
     const gs = this.gs;
+    const shopper = this.onlineShopping?.current;
+    if (shopper && this.top === (shopper.top as unknown as StackScreen) && ["pop", "shop_inventory"].includes(action)) {
+      shopper.act(action);
+      return;
+    }
     if (action === "start_game") {
       if (this.chooseMode) this.chooseMode();
       else this._start_setup();
@@ -996,11 +1017,13 @@ export class App {
     } else if (action === "to_menu" || action === "quit_game") {
       this.online?.dispose();
       this.online = null;
+      this.onlineShopping = null;
       this.gs = null;
       this.stack = [new MainMenuScreen(this.cfg as unknown as never, this.w, this.h) as unknown as StackScreen];
     } else if (action === "new_game") {
       this.online?.dispose();
       this.online = null;
+      this.onlineShopping = null;
       this.stack = [new MainMenuScreen(this.cfg as unknown as never, this.w, this.h) as unknown as StackScreen];
       this.gs = null;
     } else if (action === "reassign_teams" && gs) {
@@ -1183,7 +1206,7 @@ class GameScreen extends Screen {
 
   override handle(event: ScreenEvent): string | null {
     const gs = this.gs;
-    if ((gs as unknown as import("./game").GameState).pendingTarget) {
+    if ((gs as unknown as GameState).pendingTarget) {
       ingame.handle_game_event(gs as never, event as never);
       return null;
     }
@@ -1222,7 +1245,7 @@ class GameScreen extends Screen {
       );
     } else if (this._is_human_turn()) {
       if (this.app.online) this.app.online.updateAim();
-      else if (!(gs as unknown as import("./game").GameState).pendingTarget) {
+      else if (!(gs as unknown as GameState).pendingTarget) {
         ingame.update_game_input(gs as never, dt, _keyGetPressed() as never);
       }
     }

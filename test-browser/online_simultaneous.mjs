@@ -1,3 +1,4 @@
+import { checkConcurrentShopping } from "./online_shop.mjs";
 import assert from "node:assert/strict";
 import { openHostMenu, closeHostMenu } from "./dialogs.mjs";
 import { massKillRound } from "./online_mass_kill.mjs";
@@ -18,10 +19,10 @@ export async function checkSimultaneous({ host, a, b, base, root, click, enabled
   await click(host, "Add computer");
   await until(() => enabled(host, "Start online game"), "simultaneous lobby");
   await click(host, "Start online game");
-  // Purchasing stays turn-based and never asks either player to bind keys.
+  // Both players can buy before either finishes, independently of battle mode.
   await until(() => enabled(a, "Done"), "Alice simultaneous shopping");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.cfg.PLAY_MODE), "SIMULTANEOUS");
-  assert.equal(await enabled(b, "Done"), false);
+  await checkConcurrentShopping({ host, a, b, click, enabled, until, root });
   await click(a, "Done");
   await until(() => enabled(b, "Done"), "Bob simultaneous shopping");
   await click(b, "Done");

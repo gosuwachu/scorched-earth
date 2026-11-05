@@ -9,7 +9,7 @@ import { checkTargetArrows } from "./online_targeting.mjs";
 import { checkSimultaneous } from "./online_simultaneous.mjs";
 import { checkMassKillDisabled, massKillRound } from "./online_mass_kill.mjs";
 import { assertCompactTargetHud } from "./guidance_ui.mjs";
-import { purchaseButton, checkHostShopping, checkShopRows, checkShopLayout, checkShopEdges, checkNoGuestActions, checkGuestReconnect } from "./online_shop.mjs";
+import { purchaseButton, checkConcurrentShopping, checkHostShopping, checkShopRows, checkShopLayout, checkShopEdges, checkNoGuestActions, checkGuestReconnect } from "./online_shop.mjs";
 import { checkNoOnlineBar, settledDialogs, openHostMenu, closeHostMenu } from "./dialogs.mjs";
 import { abandonedPlayer, checkJoinWithoutStorage, checkInitialJoin, checkLobbyRemoval, checkGameColours } from "./online_lobby.mjs";
 
@@ -166,8 +166,7 @@ try {
   await closeHostMenu(host);
   await until(() => enabled(a, "Done"), "shopping resumes");
   assert.equal(await enabled(b, "Fire"), false);
-  assert.equal(await b.locator(".lan-shop-row:enabled").count(), 0, "Waiting guests cannot purchase");
-  await checkNoGuestActions(b);
+  await checkConcurrentShopping({ host, a, b, click, enabled, until, root });
   assert.equal(await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE), "SEQUENTIAL");
   assert.equal(await host.evaluate(() => window.onlineApp.gs.cfg.MAXROUNDS), 2);
   await checkHostShopping({ host, guest: a, click, enabled, until });

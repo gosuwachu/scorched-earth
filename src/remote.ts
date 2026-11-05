@@ -2,6 +2,7 @@ import { shopIncome } from "./comeback";
 /** Host-side controller adapter. Reuses the real screens and widget operations. */
 import { clampPower } from "./power";
 import type { App } from "./main";
+import type { OnlineShopSession } from "./online_shop";
 import type { GameState } from "./game";
 import type { Tank } from "./objects";
 import type { Player, ControllerView, Control, Input } from "../shared/online";
@@ -55,6 +56,9 @@ export class RemoteHold {
   }
 }
 
+type RemoteApp = Pick<App, "gs" | "top" | "onlineScreen" | "onlineMenuOpen" | "transitioning" |
+  "dispatchAction" | "handleRemote" | "_act"> & Partial<Pick<App, "onlineShopping">>;
+
 interface SimController {
   gs: GameState;
   tank: Tank;
@@ -82,15 +86,21 @@ export class RemoteAdapter {
   private menuPaused = false;
   private movementTank?: Tank;
 
-  constructor(private app: App, private roster: Player[]) {}
+  private shoppers = new Map<OnlineShopSession, RemoteAdapter>();
+
+  constructor(private app: RemoteApp, private roster: Player[], private epochs = { value: 0 }) {}
 
   release(player?: string, preserveCharge = this.app.onlineMenuOpen): void {
-    if (!player || player === this.owner) { this.hold.clear(); this.names.clear(); }
+    for (const adapter of this.shoppers.values()) adapter.release(player, preserveCharge);
+    if (!player || player === this.owner) {
+      this.hold.clear(); this.names.clear();
+      this.context = ++this.epochs.value;
+    }
     if (player) this.lastSeq.delete(player);
     for (const [id, controller] of this.simultaneous) {
       if (player && id !== player) continue;
       controller.hold.clear(); controller.names.clear(); controller.lastSeq = -1;
-      controller.context = ++this.context;
+      controller.context = ++this.epochs.value;
       if (!preserveCharge) controller.gs.sim_release(controller.tank);
     }
   }
@@ -138,7 +148,7 @@ export class RemoteAdapter {
       const identity = [gs, this.app.top, gs.round_index, c.enabled, gs.sim_charges.get(tank)];
       if (identity.some((v, j) => v !== c.identity[j])) {
         c.identity = identity;
-        c.context = ++this.context;
+        c.context = ++this.epochs.value;
         c.hold.clear(); c.names.clear();
       }
     });
@@ -228,6 +238,11 @@ export class RemoteAdapter {
     this.keys(now);
     this.refresh();
     if (this.menuPaused) return;
+    if (this.app.onlineShopping) {
+      const session = this.app.onlineShopping.sessions.find((s) => this.roster[this.app.gs!.tanks.indexOf(s.tank as never)]?.id === player);
+      if (session && !session.done) this.shoppers.get(session)?.receive(player, context, seq, input, now);
+      return;
+    }
     const controller = this.simultaneous.get(player);
     if (controller) {
       this.receiveSimultaneous(controller, context, seq, input, now);
@@ -295,7 +310,7 @@ export class RemoteAdapter {
     const menuPaused = !!this.app.onlineMenuOpen;
     if (menuPaused !== this.menuPaused) {
       this.menuPaused = menuPaused;
-      this.context++;
+      this.context = ++this.epochs.value;
       this.release(undefined, true);
       this.identity = [];
       for (const c of this.simultaneous.values()) c.identity = [];
@@ -305,6 +320,32 @@ export class RemoteAdapter {
       for (const c of this.simultaneous.values()) c.enabled = false;
       return;
     }
+    const shopping = this.app.onlineShopping;
+    if (shopping) {
+      this.enabled = false;
+      this.hold.clear(); this.names.clear();
+      for (const session of this.shoppers.keys()) {
+        if (!shopping.sessions.includes(session)) this.shoppers.delete(session);
+      }
+      for (const session of shopping.sessions) {
+        if (this.shoppers.has(session)) continue;
+        const app = this.app;
+        // Reuse the real screen adapter with a player-scoped view of the app.
+        const adapter = new RemoteAdapter({
+          get gs() { return app.gs; },
+          get top() { return session.top as unknown as App["top"]; },
+          get onlineScreen() { return "player" as const; },
+          get onlineMenuOpen() { return app.onlineMenuOpen; },
+          get transitioning() { return session.done; },
+          dispatchAction: (action) => session.dispatch(action),
+          handleRemote: (event) => session.handle(event),
+          _act: (action) => session.act(action),
+        }, this.roster, this.epochs);
+        this.shoppers.set(session, adapter);
+      }
+      return;
+    }
+    if (this.shoppers.size) { this.shoppers.clear(); this.identity = []; }
     const gs = this.app.gs as unknown as GameState | null;
     const top = this.app.top;
     const kind = this.app.onlineScreen;
@@ -333,7 +374,6 @@ export class RemoteAdapter {
     const identity = [gs?.move_mode, top, panel, gs?.pendingTarget, gs?.plasma_charge, gs?.phase, gs?.current_shooter, this.owner, this.enabled];
     if (identity.some((v, i) => v !== this.identity[i])) {
       this.identity = identity;
-      this.context++;
       this.release();
     }
     this.controls = [];
@@ -405,6 +445,21 @@ export class RemoteAdapter {
   states(roster: Player[]): Record<string, ControllerView> {
     this.roster = roster;
     this.refresh();
+    const shopping = this.app.onlineShopping;
+    if (shopping) {
+      const result: Record<string, ControllerView> = {};
+      for (const session of shopping.sessions) {
+        const player = roster[this.app.gs!.tanks.indexOf(session.tank as never)];
+        const view = this.shoppers.get(session)?.states(roster)[player.id];
+        if (!view) continue;
+        if (!this.menuPaused) view.message = session.done ?
+          `Waiting for other players — ${shopping.ready}/${shopping.sessions.length} ready.` :
+          `Buy equipment — ${shopping.ready}/${shopping.sessions.length} ready.`;
+        view.keys = [];
+        result[player.id] = view;
+      }
+      return result;
+    }
     const gs = this.app.gs as unknown as GameState | null;
     const screen = this.app.onlineScreen;
     const top = this.app.top;

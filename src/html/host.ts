@@ -207,7 +207,7 @@ export class UiHost {
       view.widgets = new PanelView(d.panel, actions, d.screen instanceof S.OptionsScreen); view.widgets.update(this.permitted(d.screen));
       view.element.append(view.widgets.element);
       view.element.setAttribute("aria-labelledby", view.widgets.heading.id);
-      view.content = d.nested ? undefined : new ScreenContent(d.screen, view.widgets, actions);
+      view.content = d.nested ? undefined : new ScreenContent(d.screen, view.widgets, actions, this.app);
       if (focused) {
         const control = [...view.element.querySelectorAll<HTMLElement>("button, input")].find((node) => (node.getAttribute("aria-label") || node.textContent) === focused);
         (control ?? view.element.querySelector<HTMLElement>("[data-default]"))?.focus({ preventScroll: true });

@@ -151,6 +151,8 @@ export async function checkShopEdges(page, host, until) {
   await list.focus();
   await page.keyboard.press("PageDown");
   await until(async () => await list.evaluate((node) => node.scrollTop) > 0, "native keyboard list scrolling");
+  // Let Chromium finish its native PageDown animation before changing categories.
+  await page.waitForTimeout(350);
   await page.getByRole("button", { name: "Miscellaneous", exact: true }).click();
   await purchaseButton(page, "Battery").waitFor();
   assert.equal(await list.evaluate((node) => node.scrollTop), 0, "category changes reset list scroll");
@@ -166,4 +168,35 @@ export async function checkGuestReconnect(page, until) {
   await checkNoGuestActions(page);
   await page.context().setOffline(false);
   await until(async () => !(await page.locator(".lan-status").innerText()).match(/Connection lost|Host unavailable|Waiting for the host…/), "guest reconnected");
+}
+
+/** Real concurrent controllers, independent screens, and host assistance. */
+export async function checkConcurrentShopping({ host, a, b, click, enabled, until, root }) {
+  await until(() => enabled(b, "Done"), "both players shopping");
+  const before = await host.evaluate(() => window.onlineApp.gs.tanks.slice(0, 2).map((t) => ({ cash: t.cash, ammo: t.inventory[1] })));
+  await Promise.all([purchaseButton(a, "Missile").click(), purchaseButton(b, "Missile").click()]);
+  await until(async () => await host.evaluate((before) => window.onlineApp.gs.tanks.slice(0, 2).every((t, i) =>
+    t.cash === before[i].cash - window.onlineApp.gs.economy.price[1] && t.inventory[1] === before[i].ammo + 5), before), "both purchases committed");
+  await click(a, "Inventory");
+  await until(async () => await a.getByRole("heading", { name: /Inventory/ }).isVisible(), "Alice inventory");
+  assert.ok(await enabled(b, "Done"));
+  await click(b, "Miscellaneous");
+  await purchaseButton(b, "Battery").click();
+  await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[1].inventory[39]) > 0, "Bob buys while Alice uses inventory");
+  await click(a, "Done");
+  await until(() => enabled(a, "Weapons"), "Alice returns to her shop");
+  assert.equal(await a.getByRole("button", { name: "Weapons", exact: true }).getAttribute("aria-pressed"), "true");
+  await host.getByLabel("Shopper", { exact: true }).selectOption("1");
+  await until(async () => await host.evaluate(() => window.onlineApp.top.tank.name) === "Bob", "host selects Bob");
+  await checkShopRows(b, host);
+  await host.getByLabel("Shopper", { exact: true }).selectOption("0");
+  await until(async () => await host.evaluate(() => window.onlineApp.top.tank.name) === "Alice", "host returns to Alice");
+  await checkShopRows(a, host);
+  await click(b, "Weapons");
+  await b.reload();
+  await until(() => enabled(b, "Done"), "Bob reconnects to his shop");
+  const mode = await host.evaluate(() => window.onlineApp.cfg.PLAY_MODE.toLowerCase());
+  await host.screenshot({ path: `${root}/test-browser/out/online-concurrent-shop-${mode}-host.png` });
+  await a.screenshot({ path: `${root}/test-browser/out/online-concurrent-shop-${mode}-alice.png`, fullPage: true });
+  await b.screenshot({ path: `${root}/test-browser/out/online-concurrent-shop-${mode}-bob.png`, fullPage: true });
 }
