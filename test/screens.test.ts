@@ -241,7 +241,10 @@ describe("screens: oracle invariants", () => {
 describe("screens: module data tables (verbatim, index-for-index)", () => {
   it("ENUM_LABELS == the oracle (tokens + display per key)", () => {
     const keys = Object.keys(vec.data.enum_labels);
-    expect(Object.keys(screens.ENUM_LABELS).sort()).toEqual(keys.sort());
+    expect(screens.ENUM_LABELS.TERRAIN_STYLE).toEqual([["CLASSIC", "MODERN"], ["Classic", "Modern"]]);
+    expect(screens.ENUM_LABELS.TERRAIN_BIOME[0]).toEqual(["RANDOM", "GRASS", "SNOW", "DESERT", "SWAMP"]);
+    expect(screens.ENUM_LABELS.TERRAIN_LAYOUT[0]).toEqual(["RANDOM", "MOUNTAINS", "CAVE", "CITY"]);
+    expect(Object.keys(screens.ENUM_LABELS).filter(k => !k.startsWith("TERRAIN_")).sort()).toEqual(keys.sort());
     for (const k of keys) {
       const [toks, disp] = screens.ENUM_LABELS[k];
       expect(toks, `${k} tokens`).toEqual(vec.data.enum_labels[k][0]);
@@ -257,7 +260,7 @@ describe("screens: module data tables (verbatim, index-for-index)", () => {
       const [title, allFields] = screens.SUBMENUS[spec];
       // Outlast is a browser extension; retain the legacy comparison for the
       // original rows without changing the reference fixture.
-      const fields = allFields.filter((row) => row[1] !== "OUTLAST_BONUS");
+      const fields = allFields.filter((row) => row[1] !== "OUTLAST_BONUS" && !String(row[1]).startsWith("TERRAIN_"));
       if (spec === "economics") {
         expect(allFields[allFields.length - 1]).toEqual(["toggle", "OUTLAST_BONUS", "~Outlast bonus"]);
       }

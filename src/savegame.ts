@@ -1,3 +1,4 @@
+import { ModernWorld, type ModernData } from "./modern";
 /**
  * Save / Restore game (System Menu -> Save Game / Restore Game) -- a faithful
  * TypeScript port of scorch-py/scorch/savegame.py (the fidelity oracle, itself
@@ -408,6 +409,7 @@ export type SaveConfig = {
 } & { [k: string]: number | string };
 
 export interface SaveTerrain {
+  modern?: ModernWorld | null;
   grid: TerrainGrid;
 }
 
@@ -441,6 +443,7 @@ export interface SaveGameState {
 
 // The plain serialized dict shape (what load() returns / serialize() builds).
 export interface SaveData {
+  modernTerrain?: ModernData;
   comeback?: ComebackMatch;
   outlast?: OutlastRound;
   round_index: number;
@@ -556,6 +559,9 @@ export function cfgFromDict(
   d: { [k: string]: number | string },
 ): SaveConfig {
   // An old save must not inherit this optional rule from the current game.
+  cfg.TERRAIN_STYLE = "CLASSIC";
+  cfg.TERRAIN_BIOME = "RANDOM";
+  cfg.TERRAIN_LAYOUT = "RANDOM";
   cfg.OUTLAST_BONUS = "OFF";
   cfg.ECONOMY_MODE = "CLASSIC";
   for (const k of Object.keys(d)) {
@@ -827,6 +833,13 @@ export function applyEconomy(econ: SaveEconomy, d: SaveEconomyData): void {
 }
 
 // ---- terrain grid (numpy uint8 W x H) -- _grid_to_dict / _grid_from_dict -----
+function modernValueTree(data: ModernData): JsonValue {
+  return {
+    ...data,
+    props: data.props.map(p => ({ ...p, x: f(p.x), y: f(p.y), w: f(p.w), h: f(p.h), variant: f(p.variant) })),
+  } as unknown as JsonValue;
+}
+
 function gridToValueTree(grid: TerrainGrid): { [k: string]: JsonValue } {
   return {
     w: Math.trunc(grid.w),
@@ -892,6 +905,7 @@ function serializeValueTree(state: SaveGameState): { [k: string]: JsonValue } {
     tanks: state.tanks.map((t) => tankToValueTree(t)) as JsonValue,
     economy: economyToValueTree(state.economy),
     terrain: gridToValueTree(state.terrain.grid),
+    ...(state.terrain.modern ? { modernTerrain: modernValueTree(state.terrain.modern.serialize()) } : {}),
   };
 }
 
@@ -925,6 +939,7 @@ export function serialize(state: SaveGameState): SaveData {
     tanks: state.tanks.map((t) => tankToData(t)),
     economy: economyToData(state.economy),
     terrain: gridToData(state.terrain.grid),
+    ...(state.terrain.modern ? { modernTerrain: state.terrain.modern.serialize() } : {}),
   };
 }
 
@@ -1007,6 +1022,11 @@ export function apply(data: SaveData, state: SaveGameState): SaveGameState {
   const w = Math.trunc(data.w);
   const h = Math.trunc(data.h);
   const tankDicts = data.tanks;
+  let modern: ModernWorld | null = null;
+  if (data.modernTerrain) {
+    try { modern = ModernWorld.restore(data.modernTerrain, w, h); }
+    catch (error) { throw new SaveError(String(error)); }
+  } else if (data.cfg?.TERRAIN_STYLE === "MODERN") throw new SaveError("Missing Modern terrain mask");
 
   if (state.tanks.length !== tankDicts.length) {
     // The Python rebuilds a fresh GameState here (state===None or roster differs)
@@ -1039,6 +1059,8 @@ export function apply(data: SaveData, state: SaveGameState): SaveGameState {
 
   applyEconomy(state.economy, data.economy);
   state.terrain.grid = gridFromDict(data.terrain);
+  state.terrain.modern = modern;
+  if (modern) state.terrain.grid.data = modern.grid;
   state.reset_terrain_settle?.();
 
   state.round_index = data.round_index;

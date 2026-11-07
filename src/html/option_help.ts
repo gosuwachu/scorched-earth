@@ -26,6 +26,9 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
   },
   FIRE_DELAY: { text: "The original game's firing delay. Browser flight speed is fixed. Positive values preserve magnetic shield strength; 0 uses the original alternate magnetic timing." },
   calibrate: { text: "Measures a connected gamepad's center and range for the joystick pointer. Calibration lasts until the page is reloaded." },
+  TERRAIN_STYLE: { text: "Modern adds detailed destructible terrain, painted backgrounds and scenery. Classic retains the original presentation. Applies next round." },
+  TERRAIN_BIOME: { text: "Modern terrain climate: grass, snowy peaks, desert or swamp. Random chooses a new biome each round." },
+  TERRAIN_LAYOUT: { text: "Modern maps can be mountains, supported caverns or destructible cities. Random favors mountain landscapes." },
   ECONOMY_MODE: {
     text: "Fixed for the match. Combat rewards stay at 100%.",
     values: {

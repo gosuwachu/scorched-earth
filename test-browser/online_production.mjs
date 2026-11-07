@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { WebSocket } from "ws";
 import { checkDialogLayout, checkNoOnlineBar, settledDialogs, openHostMenu, closeHostMenu } from "./dialogs.mjs";
+import { checkMenuLayout } from "./menu_ui.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const externalBase = process.env.ONLINE_BASE_URL;
@@ -60,16 +61,36 @@ try {
   host.on("pageerror", (e) => errors.push(String(e)));
   await host.goto(base);
   await host.locator("#loading.done").waitFor({ state: "attached" });
+  mkdirSync(`${root}/test-browser/out`, { recursive: true });
+  // Exercise the minified build: constructor names must not determine layout.
+  for (const [width, height] of [[1200, 900], [1920, 1080], [2560, 1440], [390, 844], [800, 480]]) {
+    await host.setViewportSize({ width, height });
+    await host.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await checkMenuLayout(host);
+    await host.screenshot({ path: `${root}/test-browser/out/production-menu-${width}x${height}.png` });
+  }
+  await host.setViewportSize({ width: 1920, height: 1080 });
+  await host.keyboard.press("F11");
+  await host.waitForFunction(() => document.fullscreenElement === document.documentElement);
+  await checkMenuLayout(host);
+  await host.screenshot({ path: `${root}/test-browser/out/production-menu-fullscreen.png` });
+  await host.keyboard.press("F11");
+  await host.waitForFunction(() => !document.fullscreenElement);
+  await host.setViewportSize({ width: 1200, height: 900 });
   await host.keyboard.press("Enter");
   const mode = host.getByRole("dialog", { name: "New game", exact: true });
   await checkDialogLayout(host, "New game");
   const dimensions = await mode.boundingBox();
-  assert.ok(dimensions.height < 320, "Mode chooser retains compact control spacing");
-  assert.equal(await mode.evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(170, 170, 170)");
-  assert.equal(await mode.locator(".ui-title").evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(0, 0, 160)");
+  assert.ok(dimensions.height < 480, "Mode chooser retains compact control spacing");
+  assert.match(await mode.evaluate((d) => getComputedStyle(d).backgroundImage), /linear-gradient/);
+  assert.equal(await mode.locator(".ui-title").evaluate((d) => getComputedStyle(d).backgroundColor), "rgb(16, 31, 50)");
   assert.equal(await host.evaluate(() => document.activeElement.textContent), "Local");
   await host.keyboard.press("Shift+Tab");
+  assert.ok(await mode.getByRole("combobox", { name: "Terrain style", exact: true }).evaluate((node) => node === document.activeElement));
+  await host.keyboard.press("Shift+Tab");
   assert.ok(await mode.getByRole("spinbutton", { name: "Rounds", exact: true }).evaluate((node) => node === document.activeElement));
+  await host.keyboard.press("Shift+Tab");
+  assert.ok(await mode.getByRole("combobox", { name: "Economy", exact: true }).evaluate((node) => node === document.activeElement));
   await host.keyboard.press("Shift+Tab");
   assert.equal(await host.evaluate(() => document.activeElement.textContent), "Back");
   await host.keyboard.press("Escape");

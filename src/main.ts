@@ -557,10 +557,10 @@ export class IndexedDbSaveStore implements SaveStoreProvider {
  *  Without this, savegame.save reads `.data` on a bare Uint8Array (undefined) and
  *  throws in b64encode -- the in-game Save Game was dead before this. */
 function _toSaveView(gs: GameStateLike): unknown {
-  const terr = gs.terrain as { w: number; h: number; grid: Uint8Array };
+  const terr = gs.terrain as { w: number; h: number; grid: Uint8Array; modern?: unknown };
   return {
     ...(gs as GameStateLike),
-    terrain: { grid: { w: terr.w, h: terr.h, data: terr.grid } },
+    terrain: { grid: { w: terr.w, h: terr.h, data: terr.grid }, modern: terr.modern },
   };
 }
 
@@ -1128,7 +1128,7 @@ export class App {
       }
       this.ui?.sync();
       this._draw();
-      _present(this.screen);
+      _present(this.screen, this.top instanceof GameScreen && !this._wipe ? this.renderer.modernFrame : null);
       this.online?.afterFrame(nowMs);
     } catch (e) {
       diag.log_exception(e, this.gs); // boundary: log + RE-RAISE
@@ -1391,7 +1391,7 @@ function _newSeed(): number {
  *  .flip analog).  The App renders to its own 1024x768 Surface; the visible canvas
  *  is letterboxed/scaled by CSS, so present is a 1:1 blit of the backbuffer pixels
  *  onto the page canvas. */
-function _present(backbuffer: pygame.Surface): void {
+function _present(backbuffer: pygame.Surface, modern: HTMLCanvasElement | null = null): void {
   const page = document.getElementById("game") as HTMLCanvasElement | null;
   if (page === null) {
     return;
@@ -1400,8 +1400,14 @@ function _present(backbuffer: pygame.Surface): void {
   if (ctx === null) {
     return;
   }
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(backbuffer.canvas, 0, 0);
+  const source = modern ?? backbuffer.canvas;
+  page.style.imageRendering = modern ? "auto" : "pixelated";
+  page.dataset.worldWidth = String(backbuffer.get_width());
+  page.dataset.worldHeight = String(backbuffer.get_height());
+  if (page.width !== source.width) page.width = source.width;
+  if (page.height !== source.height) page.height = source.height;
+  ctx.imageSmoothingEnabled = !!modern;
+  ctx.drawImage(source, 0, 0);
 }
 
 /** Set the page favicon to the decoded SCORCH.ICO surface (set_icon analog). */
@@ -1477,8 +1483,8 @@ const _eventQueue: ScreenEvent[] = [];
  *  rect to logical pixels. */
 function _logicalPos(canvas: HTMLCanvasElement, clientX: number, clientY: number): [number, number] {
   const r = canvas.getBoundingClientRect();
-  const sx = r.width > 0 ? canvas.width / r.width : 1;
-  const sy = r.height > 0 ? canvas.height / r.height : 1;
+  const sx = r.width > 0 ? Number(canvas.dataset.worldWidth || canvas.width) / r.width : 1;
+  const sy = r.height > 0 ? Number(canvas.dataset.worldHeight || canvas.height) / r.height : 1;
   return [Math.trunc((clientX - r.left) * sx), Math.trunc((clientY - r.top) * sy)];
 }
 

@@ -14,16 +14,16 @@ export async function checkBattleControls({ host, a, b, root, until }) {
       for (const angle of [0, 45, 90, 135, 180]) {
         const expected = await host.evaluate(async ({ index, design, angle }) => {
           const { Surface, SRCALPHA } = await import("/src/pygame.ts");
-          const { draw_tank } = await import("/src/sprites.ts");
+          const { drawModernTank } = await import("/src/modern_art.ts");
           const { TEAM_RGB, TANK_COLOR_BASE } = await import("/src/palette.ts");
           const t = window.onlineApp.gs.tanks[index];
           t.tank_icon = design; t.angle = angle;
-          const surface = new Surface([48, 36], SRCALPHA);
-          draw_tank(surface, 24, 32, design, TEAM_RGB[t.color - TANK_COLOR_BASE], angle, { scale: 2 });
+          const surface = new Surface([192, 144], SRCALPHA);
+          drawModernTank(surface.ctx, 87, 125, 115, TEAM_RGB[t.color - TANK_COLOR_BASE], angle, design);
           return surface.canvas.toDataURL();
         }, { index, design, angle });
         await until(async () => await canvas(page).evaluate((node) => node.toDataURL()) === expected,
-          `player ${index} design ${design}, angle ${angle} matches the game sprite`);
+          `player ${index} design ${design}, angle ${angle} matches the modern tank artwork`);
         assert.equal(await page.getByRole("meter", { name: "Angle", exact: true, includeHidden: true }).getAttribute("aria-valuenow"), String(angle));
       }
     }

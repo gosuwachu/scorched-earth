@@ -1,3 +1,5 @@
+import { ModernRenderer } from "./modern_render";
+import type { ModernWorld } from "./modern";
 import { sightLine, sightVisible } from "./laser_sight";
 /**
  * Rendering (Canvas2D, via the pygame shim).  A faithful TypeScript port of
@@ -165,7 +167,7 @@ export interface Tank {
 export interface GameState extends ShieldVisualState {
   cfg: Cfg;
   lut?: LiveLUT | null;
-  terrain: { grid: Int32Array | Uint8Array | number[][] | GridLike };
+  terrain: { grid: Int32Array | Uint8Array | number[][] | GridLike; modern?: ModernWorld | null };
   tanks: Tank[];
   projectiles: ProjectileLike[];
   explosions: ExplosionLike[];
@@ -644,6 +646,8 @@ export class Renderer {
   private _dirt_hi: number;
   private _projectileTrails: ProjectileTrails;
   private _indicatorFont: pygame.Font;
+  private modernRenderer: ModernRenderer | null = null;
+  modernFrame: HTMLCanvasElement | null = null;
   private _trailState: GameState | null = null;
   private _trailTerrain: GameState["terrain"] | null = null;
   private _trailRound: unknown;
@@ -754,9 +758,18 @@ export class Renderer {
     this._lut = state.lut != null ? state.lut : null;
     this._active = this._lut !== null ? this._lut : this.pal;
     this.sync_sky(state);
-    this._composite_terrain(surf, state);
+    this.modernFrame = null;
+    if (state.terrain.modern) {
+      this.modernRenderer ??= new ModernRenderer();
+      this.modernRenderer.prepare(state.terrain.modern, surf);
+      const grid = state.terrain.modern.grid;
+      for (let x = 0; x < this.w; x++) for (let y = 0; y < this.h; y++) {
+        const ink = grid[x * this.h + y];
+        if (ink && !C.is_dirt(ink)) surf.set_at([x, y], lutGet(this._active, ink));
+      }
+    } else this._composite_terrain(surf, state);
     const disruption = state.projectiles.map((p) => p.weaponEffect).find((e) => e?.kind === "soil" && e.mode === "disrupt");
-    if (disruption?.kind === "soil") {
+    if (disruption?.kind === "soil" && !state.terrain.modern) {
       const frame = surf.ctx.getImageData(0, 0, this.w, this.h), brightness = disruption.flash ?? 0;
       for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) {
         if (!C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x, y))) continue;
@@ -838,6 +851,10 @@ export class Renderer {
       if (t !== null && t.ai_class === C.AI_HUMAN) {
         widgets.draw_cursor(surf);
       }
+    }
+    if (state.terrain.modern && this.modernRenderer) {
+      this.modernRenderer.finish(surf, disruption?.kind === "soil" ? disruption.flash ?? 0 : 0, state, !this._target_hud(state));
+      this.modernFrame = this.modernRenderer.frame;
     }
   }
 
@@ -931,17 +948,17 @@ export class Renderer {
       const pth = cd.path;
       const i = Math.max(0, Math.min(pth.length - 1, Math.trunc(cd.i)));
       [x, y] = pth[i];
-      this._spritesDrawTank(surf, x, y, t, col);
+      if (!state.terrain.modern) this._spritesDrawTank(surf, x, y, t, col);
       this._draw_parachute(surf, x, y - hw, col);
       return;
     }
-    this._spritesDrawTank(surf, x, y, t, col);
+    if (!state.terrain.modern) this._spritesDrawTank(surf, x, y, t, col);
     if (t.shield_hp > 0) {
       this._draw_shield_ring(surf, t, x, y, state);
     }
-    this._health_bar(surf, t, t.shield_hp > 0 || !!state.shield_fades?.[t.player_index]);
+    if (!state.terrain.modern) this._health_bar(surf, t, t.shield_hp > 0 || !!state.shield_fades?.[t.player_index]);
     if (
-      state.current_shooter === t &&
+      !state.terrain.modern && state.current_shooter === t &&
       (state.phase === "aim" || state.phase === "turn_start")
     ) {
       pygame.draw.polygon(surf, [255, 255, 0], [
@@ -1296,6 +1313,7 @@ export class Renderer {
         for (const point of c.pixels) surf.set_at(point, [240, 40, 40]);
       }
     } else if (effect.kind === "blast") {
+      if (state.terrain.modern) return; // HD fire/smoke is drawn with the final scene.
       const e = effect;
       const left = Math.max(0, e.x - e.radius), top = Math.max(0, e.y - e.radius);
       const w = Math.min(this.w, e.x + e.radius + 1) - left;
@@ -1307,6 +1325,7 @@ export class Renderer {
         if (!color) continue;
         const i = (y * w + x) * 4;
         frame.data[i] = color[0]; frame.data[i + 1] = color[1]; frame.data[i + 2] = color[2];
+        frame.data[i + 3] = 255; // Modern effects draw onto a transparent overlay.
       }
       surf.ctx.putImageData(frame, left, top);
     } else if (effect.kind === "death") {
@@ -1595,6 +1614,16 @@ export class Renderer {
     const t = state.current_shooter;
     const targetHud = this._target_hud(state);
     const barHeight = targetHud?.height ?? Renderer.BAR_H;
+    if (state.terrain.modern && !targetHud) {
+      state._hud_hitboxes = state.cfg.is_on("ICON_BAR") ? {
+        power: new pygame.Rect(0, 0, this.w * .19, 34),
+        angle: new pygame.Rect(this.w * .19, 0, this.w * .19, 34),
+        name: new pygame.Rect(this.w * .38, 0, this.w * .23, 34),
+        weapon: new pygame.Rect(this.w * .61, 0, this.w * .28, 34),
+      } : {};
+      if (state.cfg.is_on("STATUS_BAR") && t !== null) this._draw_status_bar(surf, state, t);
+      return;
+    }
     const dy = (barHeight - Renderer.BAR_H) / 2;
     const hitboxes: { [k: string]: pygame.Rect } = {};
     (state as { _hud_hitboxes?: { [k: string]: pygame.Rect } })._hud_hitboxes = hitboxes;
@@ -1669,7 +1698,7 @@ export class Renderer {
   }
 
   private _hud_bottom(state: GameState): number {
-    const barHeight = this._target_hud(state)?.height ?? Renderer.BAR_H;
+    const barHeight = this._target_hud(state)?.height ?? (state.terrain.modern ? 34 : Renderer.BAR_H);
     let bottom = state.cfg.is_on("ICON_BAR") || this._target_hud(state) ? barHeight : 0;
     if (state.cfg.is_on("STATUS_BAR") && state.current_shooter !== null) {
       bottom = Math.max(bottom, barHeight + 18);
@@ -1678,6 +1707,7 @@ export class Renderer {
   }
 
   private _draw_wind(surf: pygame.Surface, state: GameState): void {
+    if (state.terrain.modern && !this._target_hud(state) && state.cfg.is_on("ICON_BAR")) return;
     const wind = Math.trunc(state.cfg.wind);
     const margin = 8;
     const top = this._hud_bottom(state) + 6;
@@ -1719,7 +1749,7 @@ export class Renderer {
   }
 
   private _draw_status_bar(surf: pygame.Surface, state: GameState, t: Tank): void {
-    const y = this._target_hud(state)?.height ?? Renderer.BAR_H;
+    const y = this._target_hud(state)?.height ?? (state.terrain.modern ? 34 : Renderer.BAR_H);
     const bar = new pygame.Surface([this.w, 18]);
     bar.set_alpha(190);
     bar.fill([0, 0, 0]);

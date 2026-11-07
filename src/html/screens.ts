@@ -203,8 +203,9 @@ export function menuArt(screen: S.MainMenuScreen): HTMLElement {
   const art = el("section", "", "ui-art");
   const r = screen.art_rect;
   Object.assign(art.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
-  const copy = new pg.Surface(screen._backdrop.get_size()); copy.blit(screen._backdrop, [0, 0]); copy.canvas.setAttribute("aria-hidden", "true");
-  const title = el("h1"); title.append("SCORCHED", el("br"), "EARTH");
-  art.append(copy.canvas, title, el("p", "The Mother of All Games"), el("p", "Shareware Version"), el("small", "Version 1.50 · Copyright (c) 1991–1995 Wendell Hicken"));
+  const title = el("h1"); title.append("SCORCHED", el("br"), el("span", "EARTH"));
+  art.append(el("p", "Artillery • Reimagined", "ui-art-eyebrow"), title,
+    el("p", "Pick your angle. Make your mark."),
+    el("small", "Based on Scorched Earth by Wendell Hicken"));
   return art;
 }

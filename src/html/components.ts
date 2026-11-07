@@ -1,7 +1,7 @@
 /** Shared, framework-free HTML controls. No game-state dependencies. */
-import { C_BG, C_PANEL, C_PANEL_HI, C_PANEL_LO, C_TEXT, C_TEXT_LT, C_ACCEL, C_SEL, C_FIELD } from "./theme";
 import { animateDialog } from "./transitions";
 import "./theme.css";
+import "./modern.css";
 
 export interface Component<T = void> {
   element: HTMLElement;
@@ -16,10 +16,10 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, text = "", cla
   return node;
 }
 
-/** Share the canvas widget palette instead of maintaining a second UI theme. */
+/** Shared modern chrome for local screens and remote controllers. */
 export function installTheme(): void {
-  const colors = { bg: C_BG, panel: C_PANEL, hi: C_PANEL_HI, lo: C_PANEL_LO,
-    text: C_TEXT, title: C_TEXT_LT, accel: C_ACCEL, selection: C_SEL, field: C_FIELD };
+  const colors = { bg: [8,18,31], panel: [16,31,49], hi: [33,56,77], lo: [42,65,84],
+    text: [223,234,244], title: [244,249,252], accel: [98,227,245], selection: [74,211,232], field: [9,24,39] };
   for (const [name, rgb] of Object.entries(colors)) {
     document.documentElement.style.setProperty(`--ui-${name}`, `rgb(${rgb.join(", ")})`);
   }

@@ -28,6 +28,7 @@
  * too -- see test/terrain.test.ts for the libm-vs-V8 note.
  */
 import * as C from "./constants";
+import { ModernWorld, type ModernOptions } from "./modern";
 import { surfaceProfile } from "./mtn";
 
 /**
@@ -36,7 +37,8 @@ import { surfaceProfile } from "./mtn";
  * so we depend on this minimal shape rather than the whole class. `is_on(key)`
  * mirrors Config.is_on: str(getattr(self,key)).upper() == "ON".
  */
-export interface TerrainCfg {
+export interface TerrainCfg extends ModernOptions {
+  TERRAIN_STYLE?: string;
   MTN_PERCENT: number;
   LAND1: number;
   LAND2: number;
@@ -146,6 +148,7 @@ function interp(x: Float64Array, xp: number[] | Float64Array, fp: number[] | Flo
 }
 
 export class Terrain {
+  modern: ModernWorld | null = null;
   readonly w: number;
   readonly h: number;
   /** grid[x*h + y] = palette index. Column-major; column x = [x*h .. x*h+h). */
@@ -166,6 +169,7 @@ export class Terrain {
   }
 
   write(x: number, y: number, color: number): void {
+    if (this.modern) { this.modern.write(x, y, color); return; }
     if (0 <= x && x < this.w && 0 <= y && y < this.h) {
       this.grid[x * this.h + y] = color;
     }
@@ -260,6 +264,12 @@ export class Terrain {
 
   // ---- generation ----
   generate(cfg: TerrainCfg, rng: TerrainRng, mtnFiles?: MtnFile[] | null): void {
+    this.modern = null;
+    if (cfg.TERRAIN_STYLE === "MODERN") {
+      this.modern = ModernWorld.generate(this.w, this.h, rng.pick(0x7fffffff), cfg);
+      this.grid = this.modern.grid;
+      return;
+    }
     this.grid.fill(C.COL_SKY);
     // Use the real scanned .MTN mountains when available (the user-chosen terrain
     // source); MTN_PERCENT gates the blend with procedural land, but default to
@@ -463,6 +473,7 @@ export class Terrain {
   }
 
   carve_circle(cx: number, cy: number, r: number): void {
+    if (this.modern) { this.modern.circle(cx, cy, r); return; }
     /* Crater: clear dirt pixels in the circle (set to sky). */
     const ri = trunc(r);
     const rect = this._circleRect(cx, cy, ri);
@@ -489,6 +500,7 @@ export class Terrain {
   }
 
   deposit_circle(cx: number, cy: number, r: number): void {
+    if (this.modern) { this.modern.circle(cx, cy, r, true); return; }
     /* Dirt weapon: stamp a sphere of dirt (same circle, dirt color). */
     const ri = trunc(r);
     const rect = this._circleRect(cx, cy, ri);
@@ -514,6 +526,7 @@ export class Terrain {
   }
 
   level_under_tank(cx: number, seat_y: number, half_width: number): void {
+    if (this.modern) { this.modern.level(cx, seat_y, half_width); return; }
     /* Conform the terrain to the tank: carve a flat seat so the tank body sits
        level even on a slope (the "notch" under each tank). FACT, byte for byte from
        FUN_33a1_08e7 ("conform tank to terrain"), called from the per-round
@@ -573,6 +586,7 @@ export class Terrain {
   }
 
   carve_wedge(cx: number, cy: number, r: number, half_angle_deg = 45, aim_deg = 90): void {
+    if (this.modern) { this.modern.circle(cx, cy, r, false, half_angle_deg, aim_deg); return; }
     /* Riot Charge/Blast: clear a wedge of dirt CENTERED ON THE TURRET AIM.
        Byte-exact geometry (RECOVERED_FP.md T1, FUN_3f76_000d + tables
        5f38:60f8/60fc): angular span [aim-H, aim+H], radial extent r rings.
@@ -620,6 +634,7 @@ export class Terrain {
   /** Snapshot stable destinations once; retain shade order and solid supports.
    * Displaying the descent separately keeps gravity independent of rendering. */
   begin_settle(cfg: TerrainCfg, rng: TerrainRng, force = false, cavern = false): void {
+    if (this.modern) { this.modern.settle(); return; }
     this.fallingSoil = [];
     this.soilTravel = 0;
     const chance = 100 - cfg.SUSPEND_DIRT;
@@ -654,6 +669,7 @@ export class Terrain {
   }
 
   settle(cfg: TerrainCfg, rng: TerrainRng, x_lo = 0, x_hi: number | null = null): void {
+    if (this.modern) { this.modern.settle(); return; }
     /* Per-column gravity: unsupported dirt falls. Gated by SUSPEND_DIRT
        (DAT_5f38_5158 = 100 - SUSPEND_DIRT; settle prob = 5158/100). */
     const s5158 = 100 - cfg.SUSPEND_DIRT;
@@ -672,6 +688,7 @@ export class Terrain {
   }
 
   _settle_column(x: number): void {
+    if (this.modern) { this.modern.settle(); return; }
     /* DOS 2a1e:01e6 scans through dirt below a falling run, merging layers;
        0234..024a calls 0059 again to find the next suspended run. Stopping after
        the first gap leaves Sandhog tunnels floating indefinitely. Compact from

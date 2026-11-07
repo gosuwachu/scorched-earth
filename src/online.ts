@@ -1,3 +1,4 @@
+import { landscapeChoice } from "./html/landscape";
 import QRCode from "qrcode";
 import type { App } from "./main";
 import type { RoomView, ServerMessage } from "../shared/online";
@@ -146,7 +147,7 @@ export class HostSession {
     this.addButton = undefined;
     this.box.body.replaceChildren(el("p", "Players watch this screen and use their own devices as controllers. Keep this host page open and visible."));
     this.box.body.append(this.status);
-    if (!this.room.started) this.box.body.append(economyChoice(this.app.cfg).element);
+    if (!this.room.started) this.box.body.append(economyChoice(this.app.cfg).element, landscapeChoice(this.app.cfg));
     this.box.footer.replaceChildren();
     const layout = el("div", "", "lan-lobby-layout");
     const sharing = el("section");
@@ -275,7 +276,8 @@ export function installOnline(app: App): void {
     const box = dialog("New game", { className: "ui-compact", sound: () => app.cfg.is_on("SOUND"), cancel });
     const rounds = gameNumberInput(app.cfg.MAXROUNDS, 1, 1000, (value) => { app.cfg.MAXROUNDS = value; });
     const economy = economyChoice(app.cfg);
-    box.body.append(economy.element, field("Rounds", rounds), el("p", "Choose how to play."));
+    const landscape = landscapeChoice(app.cfg);
+    box.body.append(economy.element, field("Rounds", rounds), landscape, el("p", "Choose how to play."));
     const local = button("Local", () => {
       if (!rounds.reportValidity()) return;
       box.close(() => showLocalGame(app, returnFocus));
@@ -288,6 +290,7 @@ export function installOnline(app: App): void {
       pending = true;
       rounds.disabled = true;
       economy.select.disabled = true;
+      landscape.disabled = true;
       info.textContent = "Connecting to the LAN service…";
       for (const b of box.footer.querySelectorAll("button")) b.disabled = true;
       void fetch("/api/lan", { signal: AbortSignal.timeout(5000) }).then(async (response) => {
@@ -300,6 +303,7 @@ export function installOnline(app: App): void {
         pending = false;
         rounds.disabled = false;
         economy.select.disabled = false;
+        landscape.disabled = false;
         info.textContent = "Start the LAN service with npm run lan (or npm run dev:lan), then open the host URL printed in the terminal. Local play remains available here.";
         for (const b of box.footer.querySelectorAll("button")) b.disabled = false;
         online.focus();

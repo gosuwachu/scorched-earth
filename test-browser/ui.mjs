@@ -109,6 +109,7 @@ try {
   assert.equal(await rounds.inputValue(), "2");
   assert.equal(await players.count(), 0);
   assert.equal(await page.evaluate(() => document.activeElement.textContent), "Local");
+  await page.keyboard.press("Shift+Tab"); assert.ok(await newGame.getByRole("combobox", { name: "Terrain style" }).evaluate((node) => node === document.activeElement));
   await page.keyboard.press("Shift+Tab"); assert.ok(await rounds.evaluate((node) => node === document.activeElement));
   await page.keyboard.press("Shift+Tab"); assert.ok(await newGame.getByRole("combobox", { name: "Economy" }).evaluate((node) => node === document.activeElement));
   await page.keyboard.press("Shift+Tab"); assert.equal(await page.evaluate(() => document.activeElement.textContent), "Back");

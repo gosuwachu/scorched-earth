@@ -72,6 +72,9 @@ const browserDefaults: Record<string, number | string> = {
   PLAY_ORDER: "LOSERS-FIRST",
   OUTLAST_BONUS: "ON",
   ECONOMY_MODE: "CLASSIC",
+  TERRAIN_STYLE: "CLASSIC",
+  TERRAIN_BIOME: "RANDOM",
+  TERRAIN_LAYOUT: "RANDOM",
   FLY_SOUND: "POS",
   ELASTIC: "RUBBER",
   HOSTILE_ENVIRONMENT: "OFF",
@@ -113,7 +116,7 @@ function expectFieldEq(
   msg: string,
 ): void {
   const ftype = vec.field_types[name];
-  if (ftype === "str" || name === "OUTLAST_BONUS" || name === "ECONOMY_MODE") {
+  if (ftype === "str" || name === "OUTLAST_BONUS" || name === "ECONOMY_MODE" || name.startsWith("TERRAIN_")) {
     expect(actual, msg).toBe(expected as string);
   } else {
     expectNumEq(actual as number, expected as JsonNum, msg);
@@ -144,13 +147,13 @@ describe("config: enum string->index maps", () => {
 // ---------------------------------------------------------------------------
 describe("config: dataclass defaults, field order, post_init", () => {
   it("field declaration order matches (save/iteration order)", () => {
-    expect(CONFIG_FIELDS.map((f) => f.name)).toEqual([...vec.field_order, "OUTLAST_BONUS", "ECONOMY_MODE"]);
+    expect(CONFIG_FIELDS.map((f) => f.name)).toEqual([...vec.field_order, "OUTLAST_BONUS", "ECONOMY_MODE", "TERRAIN_STYLE", "TERRAIN_BIOME", "TERRAIN_LAYOUT"]);
   });
 
   it("field type tags match the Python annotations", () => {
     const tsTypes: { [k: string]: string } = {};
     for (const f of CONFIG_FIELDS) tsTypes[f.name] = f.type;
-    expect(tsTypes).toEqual({ ...vec.field_types, OUTLAST_BONUS: "str", ECONOMY_MODE: "str" });
+    expect(tsTypes).toEqual({ ...vec.field_types, OUTLAST_BONUS: "str", ECONOMY_MODE: "str", TERRAIN_STYLE: "str", TERRAIN_BIOME: "str", TERRAIN_LAYOUT: "str" });
   });
 
   it("default fields match the retained values and browser preferences", () => {
@@ -327,7 +330,7 @@ describe("config: save", () => {
         const realLoad = vec.load_cases.find((l) => l.label === "real_scorch.cfg");
         expect(realLoad, "real_scorch.cfg load fixture present").toBeTruthy();
         const c = Config.load(realLoad!.text);
-        expect(c.save(), "roundtrip_real save body").toBe(sc.body + "OUTLAST_BONUS=ON\nECONOMY_MODE=CLASSIC\n");
+        expect(c.save(), "roundtrip_real save body").toBe(sc.body + "OUTLAST_BONUS=ON\nECONOMY_MODE=CLASSIC\nTERRAIN_STYLE=CLASSIC\nTERRAIN_BIOME=RANDOM\nTERRAIN_LAYOUT=RANDOM\n");
         return;
       }
       const mut = MUTATORS[sc.label];
@@ -336,7 +339,7 @@ describe("config: save", () => {
       mut(c);
       // Preserve the legacy serialization comparison except the intentional
       // default change. Explicit ON/OFF roundtrips live in tunneling.test.ts.
-      expect(c.save(), `save body ${sc.label}`).toBe(sc.body.replace("TUNNELLING=OFF", "TUNNELLING=ON") + "OUTLAST_BONUS=ON\nECONOMY_MODE=CLASSIC\n");
+      expect(c.save(), `save body ${sc.label}`).toBe(sc.body.replace("TUNNELLING=OFF", "TUNNELLING=ON") + "OUTLAST_BONUS=ON\nECONOMY_MODE=CLASSIC\nTERRAIN_STYLE=CLASSIC\nTERRAIN_BIOME=RANDOM\nTERRAIN_LAYOUT=RANDOM\n");
     });
   }
 });

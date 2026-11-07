@@ -64,6 +64,7 @@ const _WALL_Y = 2; // reflected off ceiling/floor (sets ce9a = 2) -> vy *= coef
  * fields/methods, so it depends on this minimal shape.
  */
 export interface PhysicsCfg {
+  TERRAIN_STYLE?: string;
   GRAVITY: number;
   wind: number;
   viscosity_mult: number;
@@ -113,9 +114,12 @@ export function launch(
   const cos_a = Math.cos(rad);
   const sin_a = Math.sin(rad);
   const pivot_x = tank.x;
-  const pivot_y = tank.y - 4;
-  const px = pivot_x + cos_a * TURRET_LEN;
-  const py = pivot_y - sin_a * TURRET_LEN;
+  const modern = cfg.TERRAIN_STYLE === "MODERN";
+  const artScale = tank.half_width * 2 / 26;
+  const pivot_y = tank.y - (modern ? 8.5 * artScale : 4);
+  const length = modern ? (16 + tank.tank_icon % 7 % 3) * artScale : TURRET_LEN;
+  const px = pivot_x + cos_a * length;
+  const py = pivot_y - sin_a * length;
   const v = power * C.POWER_SCALE;
   const vx = v * cos_a; // FUN_2a4a_02f2.c:68 power*cos -> vx (+0x04)
   const vy = v * sin_a; // FUN_2a4a_02f2.c:63 power*sin -> vy (+0x0c)

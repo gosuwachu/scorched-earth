@@ -1,3 +1,4 @@
+import { drawModernTank } from "./modern_art";
 import { maxPower } from "./power";
 import type { ControllerView } from "../shared/online";
 import { hudAngle } from "./angles";
@@ -5,7 +6,6 @@ import { TANK_DEFAULT_HEALTH } from "./constants";
 import { el } from "./html/components";
 import { TEAM_RGB } from "./palette";
 import { Surface, SRCALPHA } from "./pygame";
-import { draw_tank } from "./sprites";
 
 export function meter(label: string, max: number, className: string) {
   const node = el("div", "", `lan-meter ${className}`);
@@ -41,12 +41,13 @@ export class TankOverview {
   private power = el("div", "", "lan-overview-power");
   private shield = el("div", "", "lan-overview-shield");
   private health = meter("Health", TANK_DEFAULT_HEALTH, "lan-health");
-  private surface = new Surface([48, 36], SRCALPHA);
+  private surface = new Surface([192, 144], SRCALPHA);
   private spriteKey = "";
 
   constructor() {
     const preview = el("div", "", "lan-tank-preview");
     this.surface.canvas.setAttribute("role", "img");
+    this.surface.canvas.style.imageRendering = "auto";
     preview.append(this.health.node, this.surface.canvas);
     const info = el("div", "", "lan-battle-info");
     this.power.hidden = true;
@@ -70,7 +71,7 @@ export class TankOverview {
     if (spriteKey !== this.spriteKey) {
       this.spriteKey = spriteKey;
       this.surface.fill([0, 0, 0, 0]);
-      draw_tank(this.surface, 24, 32, tank.icon, color, tank.angle, { scale: 2 });
+      drawModernTank(this.surface.ctx, 87, 125, 115, color, tank.angle, tank.icon);
     }
     const [elevation, side] = hudAngle(tank.angle);
     this.surface.canvas.setAttribute("aria-label", `${tank.name}, tank design ${tank.icon + 1}, aiming ${elevation}${side}`);

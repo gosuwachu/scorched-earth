@@ -220,6 +220,9 @@ export class UiHost {
       if (panel && !panel.no_cancel) this.act(d.screen, panel.cancel_action);
     } }) : el("div", "", "se-ui ui-compact ui-screen");
     element.dataset.uiScreen = d.screen.constructor.name;
+    // CSS hooks must survive class-name minification in production builds.
+    if (d.screen instanceof S.MainMenuScreen) element.classList.add("ui-main-menu");
+    if (d.screen instanceof S.TankInitScreen) element.classList.add("ui-tank-setup");
     if (d.screen instanceof S.OptionsScreen) element.classList.add("ui-options");
     element.dataset.uiOwner = "true";
     const view: View = { screen: d.screen, element, returnFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null };
@@ -356,14 +359,18 @@ export class UiHost {
     view.element.inert = true;
     const dispose = () => {
       view.dialog?.close(); view.content?.dispose(); view.widgets?.dispose(); view.element.remove();
-      if (view.returnFocus?.isConnected && !view.returnFocus.closest("[inert], [hidden]")) view.returnFocus.focus({ preventScroll: true });
-      else {
-        const active = this.order[this.order.length - 1];
-        const owner = active ? this.views.get(active.key) : undefined;
-        const action = view.returnFocus?.dataset.uiAction;
-        const replacement = action && owner ? [...owner.element.querySelectorAll<HTMLElement>("[data-ui-action]")].find((node) => node.dataset.uiAction === action) : undefined;
-        (replacement ?? owner?.element.querySelector<HTMLElement>("[data-default]:not(:disabled)"))?.focus({ preventScroll: true });
-      }
+      // With reduced motion disposal is synchronous; restore focus after sync
+      // has removed inert from the underlying screen.
+      queueMicrotask(() => {
+        if (view.returnFocus?.isConnected && !view.returnFocus.closest("[inert], [hidden]")) view.returnFocus.focus({ preventScroll: true });
+        else {
+          const active = this.order[this.order.length - 1];
+          const owner = active ? this.views.get(active.key) : undefined;
+          const action = view.returnFocus?.dataset.uiAction;
+          const replacement = action && owner ? [...owner.element.querySelectorAll<HTMLElement>("[data-ui-action]")].find((node) => node.dataset.uiAction === action) : undefined;
+          (replacement ?? owner?.element.querySelector<HTMLElement>("[data-default]:not(:disabled)"))?.focus({ preventScroll: true });
+        }
+      });
     };
     if (view.dialog?.open) this.animate(view, false, dispose); else dispose();
   }

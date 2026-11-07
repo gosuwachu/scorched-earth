@@ -1,0 +1,28 @@
+{
+  "generator": "Built-in image_gen",
+  "purpose": "Non-collidable painted background layers for Modern terrain",
+  "scenes": [
+    [
+      "alpine",
+      "Clear blue alpine sky, wispy clouds, distant dramatic snow-capped mountain centered at x=60%, layered blue grey mountain foothills and conifer valleys. Lower half becomes muted atmospheric blue forest foothills. Bright morning. Cool blue background for vibrant green foreground."
+    ],
+    [
+      "desert",
+      "Pale apricot desert sky with delicate clouds, distant red sandstone mesas with warm ochre and pink layers fading in dust haze. Lower half muted dusty terrain without near detail. Late afternoon amber light."
+    ],
+    [
+      "cave",
+      "Vast dark teal cavern interior, distant misty cave walls, silhouetted swamp trees and hanging vines deep in the distance. Shafts of turquoise daylight diagonally through distant openings. No foreground ceiling or floor, the entire image is atmosphere and distant cavern backdrop. Readable medium-dark teal, no black."
+    ],
+    [
+      "city",
+      "Blue hour violet sky with delicate sunset clouds, a distant skyline of varied skyscrapers with warm windows. Buildings only in LOWER HALF, softened by atmospheric haze, flat 2D elevations. Foreground buildings will be drawn separately. Restrained violet blue and dusty rose."
+    ],
+    [
+      "swamp",
+      "Outdoor misty dawn wetland with willow trees, cypress silhouettes, reeds and pale sage sky. Distant background only; no foreground geometry, characters, HUD or text."
+    ]
+  ],
+  "texture": "Flat orthographic illustrated cross section of warm taupe/umber rocky soil, grey slate stones, pebbles, roots, cracks and wavy sediment bands. All-over material; no sky, horizon, objects or text.",
+  "atlas": "Transparent 4-column, 2-row hand-painted side-view game props: pine, willow, cactus, cottage; skyscraper, red car, deer, shack. Isolated objects with consistent upper-left light, no text or ground slabs."
+}

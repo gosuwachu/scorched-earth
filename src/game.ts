@@ -460,9 +460,13 @@ export class GameState {
       this.mtn_ranges as Parameters<Terrain["generate"]>[2],
     );
     this.live_sky = hazard.resolve_round_sky(this.cfg, this.rng); // SKY=RANDOM -> concrete
-    hazard.install_cavern_ceiling(this as unknown as hazard.State); // solid dirt ceiling if CAVERN
+    if (this.terrain.modern) this.live_sky = this.terrain.modern.layout === "CAVE" ? "CAVERN" : "PLAIN";
+    else hazard.install_cavern_ceiling(this as unknown as hazard.State); // solid dirt ceiling if CAVERN
     sfx.field_height = this.h;
+    for (const tank of this.tanks) tank.half_width = this.terrain.modern ? Math.max(7, Math.min(12, Math.floor((this.w - 60) / Math.max(1, this.tanks.length) / 2) - 3)) : 7;
     this._place_tanks();
+    this.terrain.modern?.placeProps(this.tanks);
+    this.terrain.modern?.settle(); // Discard unsupported sprite edge fragments before play.
     this._reset_round_tanks();
     if (this.comeback) beginComebackRound(this.comeback);
     this.outlast = !this.comeback && this.cfg.is_on("OUTLAST_BONUS") ? startOutlastRound(this.tanks) : null;
@@ -570,11 +574,12 @@ export class GameState {
       const jitter = this.rng.pick(20) - 10;
       xs.push(Math.max(margin, Math.min(this.w - margin, base + jitter)));
     }
-    // enforce >= 15px spacing (FUN_4a4c_0ee9)
+    // Classic uses the DOS 15px spacing; Modern reserves its wider hull.
+    const spacing = this.terrain.modern ? this.tanks[0].half_width * 2 + 3 : 15;
     xs.sort((a, b) => a - b);
     for (let i = 1; i < n; i++) {
-      if (xs[i] - xs[i - 1] < 15) {
-        xs[i] = Math.min(this.w - margin, xs[i - 1] + 15);
+      if (xs[i] - xs[i - 1] < spacing) {
+        xs[i] = Math.min(this.w - margin, xs[i - 1] + spacing);
       }
     }
     this._shuffle(xs); // Python's module-level random.shuffle (NOT self.rng)
@@ -1855,13 +1860,17 @@ export class GameState {
     const y1 = proj.sy;
     let penetrated = false;
     try {
-      for (const [x, y] of _bresenham(x0, y0, x1, y1)) {
+      const modern = this.terrain.modern;
+      const path = modern ? modern.sweep(proj.prev_px, proj.prev_py, proj.px, proj.py) : _bresenham(x0, y0, x1, y1);
+      for (const [sampleX, sampleY] of path) {
+        const x = modern ? Math.floor(sampleX) : sampleX, y = modern ? Math.floor(sampleY) : sampleY;
         if (y >= this.h - 1) {
           return { 0: "terrain", 1: null, 2: x, 3: this.h - 2 };
         }
         for (const t of this.tanks) {
           if (!t.alive) continue;
-          if (t === proj.owner && Math.hypot(x - t.x, y - t.y) > 16) proj.state.ownerCleared = true;
+          const clearance = modern ? Math.hypot(t.half_width, 14) + 2 : 16;
+          if (t === proj.owner && Math.hypot(x - t.x, y - t.y) > clearance) proj.state.ownerCleared = true;
           if (t !== proj.owner && t.shield_hp > 0 && !(t as Tank & { chute_descent?: unknown }).chute_descent &&
               shieldContains(t.shield_item, x - t.x, y - t.y) && !this.terrain.is_dirt(x, y)) {
             // 2a4a:1583: the Mag Deflector's painted arcs do not intercept.
@@ -1879,11 +1888,11 @@ export class GameState {
                 !outgoing && !leavingContact)
               return { 0: "shield", 1: t, 2: x, 3: y };
           }
-          if (Math.abs(t.x - x) <= t.half_width && 0 <= t.y - y && t.y - y <= 10 &&
+          if (Math.abs(t.x - x) <= t.half_width && 0 <= t.y - y && t.y - y <= (modern ? 14 : 10) &&
               (t !== proj.owner || (proj.armed && proj.state.ownerCleared)))
             return { 0: "tank", 1: t, 2: x, 3: y };
         }
-        if (0 <= x && x < this.w && 0 <= y && y < this.h && this.terrain.is_dirt(x, y)) {
+        if (0 <= x && x < this.w && 0 <= y && y < this.h && (modern ? modern.solid(sampleX, sampleY) : this.terrain.is_dirt(x, y))) {
           // 2a4a:1657..1714: spatial resistance, once per solid pixel. The
           // saved incoming velocity excludes this step's air forces. Keep
           // walking the original segment; slowdown affects the next step.

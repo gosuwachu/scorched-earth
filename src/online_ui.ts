@@ -1,15 +1,15 @@
+import { drawModernTank } from "./modern_art";
 import { el, button } from "./html/components";
 export { el, button, dialog, installTheme as installOnlineTheme } from "./html/components";
 export type { Dialog as OnlineDialog } from "./html/components";
 import * as pg from "./pygame";
-import { draw_tank_icon_cell } from "./sprites";
 import { TEAM_RGB } from "./palette";
 import type { Player } from "../shared/online";
 
 export function tankIcon(icon: number, index = 0): HTMLCanvasElement {
-  const surface = new pg.Surface([64, 54]);
-  surface.fill([0, 0, 0]);
-  draw_tank_icon_cell(surface, new pg.Rect(0, 0, 64, 54), TEAM_RGB[index % TEAM_RGB.length], { design_index: icon, scale: 2 });
+  const surface = new pg.Surface([192, 162], pg.SRCALPHA);
+  drawModernTank(surface.ctx, 87, 126, 118, TEAM_RGB[index % TEAM_RGB.length], 30, icon);
+  surface.canvas.style.width = "64px"; surface.canvas.style.height = "54px"; surface.canvas.style.imageRendering = "auto";
   surface.canvas.setAttribute("aria-label", `Tank design ${icon + 1}`);
   return surface.canvas;
 }

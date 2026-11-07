@@ -130,6 +130,9 @@ export const CONFIG_FIELDS: FieldSpec[] = [
   // optional browser rules
   { name: "OUTLAST_BONUS", type: "str" },
   { name: "ECONOMY_MODE", type: "str" },
+  { name: "TERRAIN_STYLE", type: "str" },
+  { name: "TERRAIN_BIOME", type: "str" },
+  { name: "TERRAIN_LAYOUT", type: "str" },
 ];
 
 const FIELD_TYPE: { [name: string]: FieldType } = {};
@@ -353,6 +356,10 @@ export class Config {
   FALLING_TANKS: string = "ON";
   EDGES_EXTEND: number = 75; // off-screen tracking px
   DAMAGE_TANKS_ON_IMPACT: string = "ON"; // ON=damage on landing, OFF=while falling
+  // Browser Modern terrain is opt-in; Classic fixtures keep their RNG stream.
+  TERRAIN_STYLE: string = "CLASSIC";
+  TERRAIN_BIOME: string = "RANDOM";
+  TERRAIN_LAYOUT: string = "RANDOM";
   // terrain
   LAND1: number = 20; // Bumpiness
   LAND2: number = 20; // Slope

@@ -1,3 +1,4 @@
+import { drawModernTank } from "../modern_art";
 /** HTML presentation of the existing, differential-tested widget models. */
 import * as W from "../widgets";
 import * as pg from "../pygame";
@@ -103,6 +104,11 @@ export class WidgetView implements Component<boolean> {
         if (labels?.[i] === "Weapons" || labels?.[i] === "Miscellaneous") {
           node.textContent = labels[i] === "Miscellaneous" ? "Misc" : labels[i];
           node.style.fontSize = "12px";
+        } else if (labels?.[i]?.startsWith("Tank design")) {
+          const surface = new pg.Surface([(w.cell - 2) * 3, (w.cell - 2) * 3], pg.SRCALPHA);
+          drawModernTank(surface.ctx, surface.get_width() * .46, surface.get_height() * .8, surface.get_width() * .7, [64, 201, 222], 30, i);
+          surface.canvas.style.width = `${w.cell - 2}px`; surface.canvas.style.height = `${w.cell - 2}px`;
+          surface.canvas.style.imageRendering = "auto"; surface.canvas.setAttribute("aria-hidden", "true"); node.append(surface.canvas);
         } else if (w.draw_cell) {
           const surface = new pg.Surface([w.cell - 2, w.cell - 2]); surface.fill(W.C_PANEL);
           w.draw_cell(surface, new pg.Rect(0, 0, w.cell - 2, w.cell - 2), i, cell);
@@ -132,7 +138,7 @@ export class WidgetView implements Component<boolean> {
       this.element = el("fieldset", "", "ui-group"); const legend = el("legend"); caption(legend, w.title); this.element.append(legend);
     } else {
       this.element = el("span"); this.labelNode = this.element;
-      if (w instanceof W.Label) { if (Array.isArray(w.color)) this.element.style.color = `rgb(${w.color.slice(0, 3).join(",")})`; this.element.style.fontSize = `${w.size}px`; this.element.style.fontWeight = w.bold ? "bold" : "normal"; }
+      if (w instanceof W.Label) { if (Array.isArray(w.color)) this.element.style.color = w.color[0] + w.color[1] + w.color[2] < 180 ? "var(--ui-text)" : `rgb(${w.color.slice(0, 3).join(",")})`; this.element.style.fontSize = `${w.size}px`; this.element.style.fontWeight = w.bold ? "bold" : "normal"; }
     }
     this.element.classList.add("ui-widget");
     if (w.accel) this.element.setAttribute("aria-keyshortcuts", w.accel);

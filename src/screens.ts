@@ -281,6 +281,9 @@ export const ENUM_LABELS: { [key: string]: [string[], string[]] } = {
   ],
   // EXPLOSION_SCALE / Scale (s2f, cfg NORMAL/MEDIUM/LARGE)
   EXPLOSION_SCALE: [["NORMAL", "MEDIUM", "LARGE"], ["Normal", "Medium", "Large"]],
+  TERRAIN_STYLE: [["CLASSIC", "MODERN"], ["Classic", "Modern"]],
+  TERRAIN_BIOME: [["RANDOM", "GRASS", "SNOW", "DESERT", "SWAMP"], ["Random", "Grass", "Snow", "Desert", "Swamp"]],
+  TERRAIN_LAYOUT: [["RANDOM", "MOUNTAINS", "CAVE", "CITY"], ["Random", "Mountains", "Cave", "City"]],
   // SKY (s2d) - cfg token order from config.py; verbatim display per token.
   SKY: [
     ["PLAIN", "STORMY", "STARS", "SHADED", "SUNSET", "CAVERN", "BLACK", "RANDOM"],
@@ -434,6 +437,9 @@ export const SUBMENUS: { [spec: string]: [string, SubmenuRow[]] } = {
   ]],
   // 2d Landscape (weather folded in)
   landscape: ["Landscape", [
+    ["enum", "TERRAIN_STYLE", "Terrain style:"],
+    ["enum", "TERRAIN_BIOME", "Biome:"],
+    ["enum", "TERRAIN_LAYOUT", "Map layout:"],
     ["int", "LAND1", "~Bumpiness:", 0, 100],
     ["int", "LAND2", "S~lope:", 0, 100],
     ["toggle", "FLATLAND", "~Flatten Peaks"],

@@ -12,6 +12,14 @@ available; set `CHROMIUM_PATH` to an existing browser executable if necessary.
 | Weapon effects or terrain interaction | `weapons.mjs` | Effect progression, completion, terrain settling, and screenshots |
 | Canvas rendering | `run.mjs` | Render states, nonblank canvas, page errors, and render coverage |
 | Menus, input or equipment controls | `ui.mjs` | Real DOM interaction, focus, responsive layout, and control behavior |
+| Modern terrain and artwork | `modern.mjs` | Six biomes/layout scenes, visible missile/nuke blasts, destruction, save masks and timings |
+| Modern setup and application integration | `modern_ui.mjs` | Setup, phone layout, actual save/restore, logical input mapping and host handoff |
+
+Both Modern drivers accept the development-server URL as their first argument.
+See [the experiment notes](../oracle/MODERN_TERRAIN.md) for commands and limits.
+Restart the development server after source edits before full browser runs so
+hot-update module URLs cannot create duplicate class identities in dynamically
+imported harness modules.
 
 The canvas harness initializes controlled game states and advances the real
 simulation/rendering code. Shield scenarios include both injected projectiles

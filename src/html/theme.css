@@ -186,3 +186,5 @@ canvas.is-targeting { cursor: crosshair; }
 .ui-income { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .ui-income > strong { display: block; }
 .ui-income > strong:last-child { margin-top: 5px; }
+
+.ui-landscape-choice { border: 0; padding: 0; margin: 0; min-width: 0; }
