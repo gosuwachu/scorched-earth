@@ -10,8 +10,14 @@ cave and city layouts; painted backgrounds and textured material layers;
 destructible sprite scenery; connected support and rubble; local/host setup;
 versioned saved masks. Classic remains the default.
 
-Experiment limits: animals are static destructible scenery; structural collapse
-resolves into loose rubble without rigid-body animation. Tanks, the main battle
+Current direction: tall mountain ridges and deep valleys with softened small
+surface features, plus distinct city centres and suburbs on rolling ground.
+Tall towers contrast with houses, parks, landmarks and bridges. Ground and roof
+starts are both used. Cars and animals have been removed from new map generation.
+Buildings and vegetation share a painted style and preserve their original
+proportions at every size; their alpha silhouettes also define destruction.
+
+Experiment limits: structural collapse resolves into loose rubble without rigid-body animation. Tanks, the main battle
 HUD and standard blasts now render at the higher resolution. Other effects retain
 the logical-resolution overlay. All HTML screens share the modern theme. Some older weapon
 raster operations modify one world pixel (a 2×2 group of terrain cells), while
@@ -130,11 +136,8 @@ which parts of an object still exist.
 - First trees and small houses: blast damage, visible breakage, and removal or
   bounded debris when destroyed or undermined. Share building rules with city
   structures; buildings must not merely disappear when the dirt beneath changes.
-- Then parked cars: damaged/destroyed states. Secondary explosions are a later
-  gameplay choice, not an implicit property of decorative cars.
-- Then animals: optional ambient movement with simple non-graphic hit/flee
-  behavior. Keep cosmetic animation independent of simulation RNG; synchronize
-  any movement or hit response that affects gameplay.
+- Cars and animals were tried and removed after visual review; keep scenery
+  focused on vegetation and buildings.
 - Define interactions for direct shots, blast radius, laser, burning effects,
   dirt deposition and terrain collapse. Debris starts cosmetic and cannot cause
   invisible obstruction. Add new collidable rubble only with explicit rules.
@@ -169,7 +172,7 @@ Each milestone should be independently reviewable on this branch:
 2. Four mountain biomes, deterministic seed gallery and readable combat effects.
 3. Trees/houses plus shared support and destruction primitives.
 4. Playable cave and skyscraper city layouts using those primitives.
-5. Cars/animals, setup controls, save compatibility and online integration.
+5. Setup controls, save compatibility and online integration.
 
 For each code milestone, add focused tests for actual new behavior: coordinate
 conversion/contact, generation determinism, spawn validity, support/destruction,

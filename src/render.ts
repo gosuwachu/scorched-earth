@@ -791,7 +791,7 @@ export class Renderer {
       this._draw_beam(surf, b);
     }
     for (const t of state.tanks) {
-      if (sightVisible(state, t)) this._draw_laser_sight(surf, t);
+      if (sightVisible(state, t)) this._draw_laser_sight(surf, t, !!state.terrain.modern);
     }
     for (const t of state.tanks) {
       if (t.alive) {
@@ -919,8 +919,8 @@ export class Renderer {
     pygame.surfarray.blit_array(surf, { w: this.w, h: this.h, data: rgb });
   }
 
-  private _draw_laser_sight(surf: pygame.Surface, t: Tank): void {
-    const { x1, y1, x2, y2 } = sightLine(t);
+  private _draw_laser_sight(surf: pygame.Surface, t: Tank, modern: boolean): void {
+    const { x1, y1, x2, y2 } = sightLine(t, modern ? t.half_width * 2 : undefined);
     const ctx = surf.ctx;
     ctx.save();
     const stroke = (color: string, width: number): void => {

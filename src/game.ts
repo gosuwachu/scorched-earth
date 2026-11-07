@@ -464,8 +464,13 @@ export class GameState {
     else hazard.install_cavern_ceiling(this as unknown as hazard.State); // solid dirt ceiling if CAVERN
     sfx.field_height = this.h;
     for (const tank of this.tanks) tank.half_width = this.terrain.modern ? Math.max(7, Math.min(12, Math.floor((this.w - 60) / Math.max(1, this.tanks.length) / 2) - 3)) : 7;
+    const city = this.terrain.modern?.layout === "CITY";
+    if (city) {
+      this.terrain.modern!.placeProps([]);
+      this.terrain.modern!.settle();
+    }
     this._place_tanks();
-    this.terrain.modern?.placeProps(this.tanks);
+    if (!city) this.terrain.modern?.placeProps(this.tanks);
     this.terrain.modern?.settle(); // Discard unsupported sprite edge fragments before play.
     this._reset_round_tanks();
     if (this.comeback) beginComebackRound(this.comeback);
@@ -580,6 +585,14 @@ export class GameState {
     for (let i = 1; i < n; i++) {
       if (xs[i] - xs[i - 1] < spacing) {
         xs[i] = Math.min(this.w - margin, xs[i - 1] + spacing);
+      }
+    }
+    if (this.terrain.modern?.layout === "CITY") {
+      const original = xs.slice();
+      for (let i = 0; i < n; i++) {
+        const lo = i === 0 ? margin : xs[i - 1] + spacing;
+        const hi = Math.min(this.w - margin - (n - i - 1) * spacing, original[i] + usable / n * .95);
+        xs[i] = this.terrain.modern.citySeatNear(original[i], this.tanks[i].half_width, lo, hi, i % 3 !== 0);
       }
     }
     this._shuffle(xs); // Python's module-level random.shuffle (NOT self.rng)

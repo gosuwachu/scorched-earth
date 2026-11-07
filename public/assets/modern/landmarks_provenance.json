@@ -1,0 +1,15 @@
+{
+  "tool": "built-in image_gen",
+  "date": "2026-11-07",
+  "references": "User-provided architectural photographs; generated standalone transparent building sprites.",
+  "assets": [
+    {
+      "file": "bloomberg.png",
+      "prompt": "Use case: stylized-concept. Asset type: high-resolution transparent standalone building sprite for a modern 2D artillery game. The attached image is an architectural reference, not an edit target. Draw a complete Bloomberg London office building inspired closely by this reference: broad warm bronze folded vertical fins, deeply recessed blue-black reflective glass, substantial pale limestone rectangular framing, a recessed glazed ground-floor arcade, and a slightly set-back glazed top floor. Six or seven storeys, broad low-rise massing rather than a skyscraper. Mostly front elevation with only shallow side depth; verticals parallel, flat horizontal base, whole building fully visible. Rich softly painted realistic architectural detail matching premium illustrated game scenery; beautiful natural stone and metal shading, sharp readable structural edges at small sprite scale. Isolated on genuine transparent alpha, centred with a small transparent margin. Building only: no sky, ground plane, pavement, landscape, trees, people, vehicles, signs, logos, lettering, watermark or cast shadow outside the building. Dark glass must stay opaque; transparency only outside the actual structure."
+    },
+    {
+      "file": "st_pauls.png",
+      "prompt": "Use case: stylized-concept. Asset type: high-resolution transparent standalone landmark sprite for a modern 2D artillery game. The attached image is an architectural reference, not an edit target. Draw a complete, recognisable St Paul's Cathedral inspired closely by the reference: large pale silver ribbed dome with subtle weathered lead panels, ornate lantern and gold finial, elaborate circular columned drum, warm cream limestone masonry, layered cornices and balustrades, carved pediments, a deep columned entrance portico and smaller flanking bell towers. Mostly front elevation with a shallow hint of side depth, near-orthographic, flat horizontal foundation, whole cathedral including finial and base entirely visible. Rich softly painted realistic architectural detail matching premium illustrated game scenery, convincing stone depth, readable lights and shadows at small sprite scale. The cathedral should feel sculptural and ornate, not a simple dome over a box. Isolated on genuine transparent alpha with a small clear margin. Cathedral only: no sky, ground plane, pavement, trees, people, buses or other vehicles, signs, text, watermark or detached shadows. Dark doors/windows remain opaque; transparency only outside the actual structure."
+    }
+  ]
+}

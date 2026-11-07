@@ -3,6 +3,10 @@ export type ArtColor = readonly number[];
 function shade(color: ArtColor, amount: number): string {
   return `rgb(${color.slice(0, 3).map(v => Math.max(0, Math.min(255, v + amount))).join(",")})`;
 }
+/** Barrel geometry in the artwork's unscaled 26-pixel coordinate system. */
+export function modernBarrel(design = 0) {
+  return { pivotY: -8.5, length: 16.2 + (design % 7) % 3 };
+}
 export function drawModernTank(ctx: CanvasRenderingContext2D, x: number, y: number,
   width: number, color: ArtColor, angle: number, design = 0): void {
   ctx.save(); ctx.translate(x, y); ctx.scale(width / 26, width / 26);
@@ -30,13 +34,13 @@ export function drawModernTank(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.strokeStyle = shade(color, 65); ctx.lineWidth = .6;
   ctx.beginPath(); ctx.moveTo(-8, -8.3); ctx.lineTo(7, -8.3); ctx.stroke();
   for (let px = -8; px <= 8; px += 4) { ctx.fillStyle = "#c6dae0"; ctx.beginPath(); ctx.arc(px, -6.2, .35, 0, Math.PI * 2); ctx.fill(); }
-  // The barrel rotates around the same pivot used by the engine.
-  ctx.save(); ctx.translate(0, -8.5); ctx.rotate(-angle * Math.PI / 180);
+  const geometry = modernBarrel(design);
+  ctx.save(); ctx.translate(0, geometry.pivotY); ctx.rotate(-angle * Math.PI / 180);
   const barrel = ctx.createLinearGradient(0, -1.3, 0, 1.3); barrel.addColorStop(0, shade(color, 95)); barrel.addColorStop(.4, shade(color, 15)); barrel.addColorStop(1, shade(color, -65));
   ctx.fillStyle = barrel; ctx.strokeStyle = shade(color, -75); ctx.lineWidth = .55;
-  ctx.beginPath(); ctx.roundRect(1, -1.2, 15 + variant % 3, 2.4, .5); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#15313b"; ctx.fillRect(14 + variant % 3, -1.35, 2.2, 2.7);
-  ctx.fillStyle = shade(color, 55); ctx.fillRect(14 + variant % 3, -1.35, 2.2, .6);
+  ctx.beginPath(); ctx.roundRect(1, -1.2, geometry.length - 1.2, 2.4, .5); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#15313b"; ctx.fillRect(geometry.length - 2.2, -1.35, 2.2, 2.7);
+  ctx.fillStyle = shade(color, 55); ctx.fillRect(geometry.length - 2.2, -1.35, 2.2, .6);
   ctx.restore();
   ctx.fillStyle = paint; ctx.strokeStyle = shade(color, -70);
   ctx.beginPath(); ctx.roundRect(-5.8, -13 - variant % 2, 12, 6, [3, 3, 1, 1]); ctx.fill(); ctx.stroke();
@@ -49,38 +53,54 @@ export function drawModernTank(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.restore();
 }
 
+/** Procedural particles in logical pixels: larger blasts emit more particles,
+ * rather than magnifying a fixed illustration. Simulation age owns all motion. */
 export function drawModernBlast(ctx: CanvasRenderingContext2D, x: number, y: number,
-  radius: number, age: number, progress: number, plasma = false, fading = false): void {
-  const r = Math.max(2, radius * Math.max(.15, progress));
-  const alpha = fading ? Math.max(0, 1 - age / (plasma ? 42 : 25)) : 1;
-  if (alpha <= 0) return;
-  ctx.save(); ctx.translate(x, y); ctx.globalAlpha = alpha;
-  // Smoke and thrown fragments are cosmetic, deterministic functions of effect age.
-  const motion = fading ? 1 + age / 14 : Math.min(1, progress);
-  for (let n = 0; n < 8; n++) {
-    const a = n * 2.39996, spread = r * (.5 + n % 3 * .12);
-    const sx = Math.cos(a) * spread, sy = Math.sin(a) * spread - motion * r * .25;
-    const smoke = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * .55);
-    smoke.addColorStop(0, `rgba(53,45,42,${.5 * motion})`); smoke.addColorStop(1, "rgba(45,39,36,0)");
-    ctx.fillStyle = smoke; ctx.beginPath(); ctx.arc(sx, sy, r * .55, 0, Math.PI * 2); ctx.fill();
-  }
-  const halo = ctx.createRadialGradient(0, 0, r * .25, 0, 0, r * 1.65);
-  halo.addColorStop(0, plasma ? "rgba(129,191,255,.75)" : "rgba(255,199,70,.7)");
-  halo.addColorStop(.5, plasma ? "rgba(81,137,255,.22)" : "rgba(255,116,23,.2)"); halo.addColorStop(1, "rgba(255,95,20,0)");
-  ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, r * 1.65, 0, Math.PI * 2); ctx.fill();
-  for (let n = 0; n < 10; n++) {
-    const a = n * 2.39996 + age * .025, rr = r * (.3 + (n % 4) * .12);
-    const px = Math.cos(a) * r * .43, py = Math.sin(a) * r * .38;
-    const fire = ctx.createRadialGradient(px, py, 0, px, py, rr);
-    fire.addColorStop(0, "#ffffe8"); fire.addColorStop(.22, plasma ? "#d3f6ff" : "#fff3a0");
-    fire.addColorStop(.55, plasma ? "#79cfff" : "#ffc132"); fire.addColorStop(.8, plasma ? "#4d7dee" : "#f97518"); fire.addColorStop(1, plasma ? "rgba(65,89,210,0)" : "rgba(199,53,13,0)");
-    ctx.fillStyle = fire; ctx.beginPath(); ctx.arc(px, py, rr, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.strokeStyle = plasma ? "#d2f9ff" : "#ffd28a"; ctx.lineWidth = .65;
-  for (let n = 0; n < 15; n++) {
-    const a = n * 2.39996, distance = r * (.8 + n % 5 * .17) * motion;
-    const px = Math.cos(a) * distance, py = Math.sin(a) * distance - r * .3;
-    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(a) * 2.5, py + Math.sin(a) * 2.5); ctx.stroke();
+  radius: number, age: number, progress: number, plasma = false, fading = false, fadeAge = 0, fadeDuration = plasma ? 42 : 25): void {
+  const r = radius * Math.max(0, Math.min(1, progress));
+  const alpha = fading ? Math.max(0, 1 - fadeAge / fadeDuration) : 1;
+  if (r <= 0 || alpha <= 0) return;
+  const random = (n: number) => { const v = Math.sin(n * 127.1 + x * 12.7 + y * 3.1) * 43758.5453; return v - Math.floor(v); };
+  ctx.save(); ctx.translate(x, y);
+  // A thin pressure front keeps the true growing circle readable through smoke.
+  ctx.globalAlpha = alpha * .35;
+  ctx.strokeStyle = plasma ? "#a6eaff" : "#ffe7a3";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+  const count = Math.min(1000, Math.ceil(radius * radius / 28) + 24);
+  for (let i = 0; i < count; i++) {
+    const angle = random(i * 7 + 1) * Math.PI * 2;
+    const distance = Math.sqrt(random(i * 7 + 2)) * radius;
+    const birth = distance / (radius < 40 ? 1 : 2);
+    const elapsed = age - birth;
+    if (distance > r || elapsed < 0) continue;
+    // Each point ignites once as the front passes. Never restart particles
+    // during the simulation's long hold/cleanup phases.
+    const t = elapsed;
+    if (t >= 18) continue;
+    const life = 1 - t / 18;
+    const speed = 1.2 + random(i * 7 + 3) * 1.8;
+    const px = Math.cos(angle) * (distance + t * speed);
+    const py = Math.sin(angle) * (distance + t * speed) + .04 * t * t;
+    const size = 1.5 + random(i * 7 + 4) * 4;
+    ctx.globalAlpha = alpha * life * .7;
+    ctx.fillStyle = plasma ? "#416d9a" : "#504a43";
+    ctx.beginPath(); ctx.arc(px, py - t * .25, size + t * .12, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = alpha * life;
+    const flameSize = size * life * 1.5;
+    if (flameSize > 0) {
+      const fire = ctx.createRadialGradient(px, py, 0, px, py, flameSize);
+      fire.addColorStop(0, plasma ? "#dcfaff" : t < 13 ? "#fff5ba" : "#ffbd48");
+      fire.addColorStop(.35, plasma ? "#70bdff" : "#ffad32");
+      fire.addColorStop(.65, plasma ? "rgba(65,125,255,.7)" : "rgba(240,85,15,.7)");
+      fire.addColorStop(1, "rgba(180,45,10,0)");
+      ctx.fillStyle = fire;
+      ctx.beginPath(); ctx.arc(px, py, flameSize, 0, Math.PI * 2); ctx.fill();
+    }
+    if (i % 4 === 0) {
+      ctx.strokeStyle = plasma ? "#b9f2ff" : "#ffd68a"; ctx.lineWidth = .8;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(angle) * 4, py + Math.sin(angle) * 4); ctx.stroke();
+    }
   }
   ctx.restore();
 }

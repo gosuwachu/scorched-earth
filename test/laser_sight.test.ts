@@ -73,11 +73,11 @@ describe("Laser Sight browser equipment", () => {
     t.alive = true; t.ai_class = 1; expect(sightVisible(gs, t)).toBe(false);
   });
 
-  it.each([0, 45, 90, 135, 180])("extends the barrel 100 pixels at %s degrees", (angle) => {
+  it.each([0, 17, 45, 90, 135, 163, 180])("extends the barrel 100 pixels at %s degrees", (angle) => {
     const line = sightLine({ x: 50, y: 80, tank_icon: 3, angle });
     const dx = Math.cos(angle * Math.PI / 180), dy = -Math.sin(angle * Math.PI / 180);
-    expect(line.x1).toBeCloseTo(48 + dx * 8);
-    expect(line.y1).toBeCloseTo(75 + dy * 8);
+    expect(line.x1).toBeCloseTo(48.5 + Math.round(dx * 8));
+    expect(line.y1).toBeCloseTo(75.5 - Math.round(-dy * 8));
     expect(line.x2 - line.x1).toBeCloseTo(dx * 100);
     expect(line.y2 - line.y1).toBeCloseTo(dy * 100);
   });

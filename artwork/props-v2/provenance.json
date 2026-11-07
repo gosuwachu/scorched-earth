@@ -1,0 +1,31 @@
+{
+  "tool": "image_gen.imagegen",
+  "date": "2026-11-07",
+  "styleReferences": [
+    "artwork/buildings-v2/house.png",
+    "artwork/buildings-v2/office.png"
+  ],
+  "assets": [
+    {
+      "kind": "pine",
+      "prompt": "Use case: stylized-concept. One transparent scenery sprite for the same hand-painted 2D artillery game as the attached cottage and office building. These two images are STYLE REFERENCES only. Match their soft painted modelling, subtle brush texture, chunky readable shapes, muted natural palette, upper-left daylight and restrained highlights. Clearly illustrated game scenery, no photographic detail or flat vector outlines. Straight side/front orthographic view, no isometric perspective. Whole object fully visible, small clear margin, a flat rooted base. True transparent alpha background, no glow, aura, fog, cast shadow, ground slab, scenery, sky, text, people, cars or animals. All branches and foliage masses physically connected to the trunk; no floating leaves. Readable at 50–100 screen pixels. Preserve natural proportions.\nSubject: A tall alpine evergreen pine tree. Layered asymmetric boughs, grouped deep moss-green needles with muted sage sunlit edges, weathered brown trunk visible between branches, stout roots. Distinct tapering crown and substantial silhouette, softly painted rather than individually drawn needles. No snow.",
+      "generatedSource": "/home/piotr/.codex/generated_images/01a1b686-3701-73b3-bb97-962eba6f5d16/exec-e60d4bdc-d374-4afb-b3ac-1e48f0715ead.png",
+      "source": "artwork/props-v2/pine.png",
+      "runtime": "public/assets/modern/props-v2/pine.webp"
+    },
+    {
+      "kind": "tree",
+      "prompt": "Use case: stylized-concept. One transparent scenery sprite for the same hand-painted 2D artillery game as the attached cottage and office building. These two images are STYLE REFERENCES only. Match their soft painted modelling, subtle brush texture, chunky readable shapes, muted natural palette, upper-left daylight and restrained highlights. Clearly illustrated game scenery, no photographic detail or flat vector outlines. Straight side/front orthographic view, no isometric perspective. Whole object fully visible, small clear margin, a flat rooted base. True transparent alpha background, no glow, aura, fog, cast shadow, ground slab, scenery, sky, text, people, cars or animals. All branches and foliage masses physically connected to the trunk; no floating leaves. Readable at 50–100 screen pixels. Preserve natural proportions.\nSubject: A leafy willow tree for grass parks and swamps. Broad irregular rounded crown of drooping muted olive-green foliage, sturdy warm grey-brown branching trunk and visible roots. Soft connected hanging leaf clusters with a few readable gaps, restrained leaf detail matching the cottage texture. Full tree, no scenery.",
+      "generatedSource": "/home/piotr/.codex/generated_images/01a1b686-3701-73b3-bb97-962eba6f5d16/exec-4b4d5041-03dd-40b5-b400-26ba84421165.png",
+      "source": "artwork/props-v2/tree.png",
+      "runtime": "public/assets/modern/props-v2/tree.webp"
+    },
+    {
+      "kind": "cactus",
+      "prompt": "Use case: stylized-concept. One transparent scenery sprite for the same hand-painted 2D artillery game as the attached cottage and office building. These two images are STYLE REFERENCES only. Match their soft painted modelling, subtle brush texture, chunky readable shapes, muted natural palette, upper-left daylight and restrained highlights. Clearly illustrated game scenery, no photographic detail or flat vector outlines. Straight side/front orthographic view, no isometric perspective. Whole object fully visible, small clear margin, a flat rooted base. True transparent alpha background, no glow, aura, fog, cast shadow, ground slab, scenery, sky, text, people, cars or animals. All branches and foliage masses physically connected to the trunk; no floating leaves. Readable at 50–100 screen pixels. Preserve natural proportions.\nSubject: A desert saguaro cactus with one tall central column and two asymmetrical raised arms. Muted sage and olive-green ribs, softly sunlit ochre edges, rounded tops, sparse tiny painted spines, stout rooted base. Slight natural bends and variation, substantial connected arms, no flowers or surrounding rocks.",
+      "generatedSource": "/home/piotr/.codex/generated_images/01a1b686-3701-73b3-bb97-962eba6f5d16/exec-f908a9e8-3b10-417b-a965-35af1e9f0d41.png",
+      "source": "artwork/props-v2/cactus.png",
+      "runtime": "public/assets/modern/props-v2/cactus.webp"
+    }
+  ]
+}

@@ -3,14 +3,16 @@ import { createGameState, AIM } from "../src/game";
 import { Renderer } from "../src/render";
 import { Surface } from "../src/pygame";
 import { warmModernAssets } from "../src/modern_render";
+import { isCityBuilding } from "../src/modern";
 import { save, load, apply, type SaveGameState } from "../src/savegame";
 
-export async function scene(biome: string, layout: string, seed = 71) {
-  await warmModernAssets();
+export async function scene(biome: string, layout: string, seed = 71, players = 2) {
+  await warmModernAssets(true);
   const cfg = Object.assign(new Config(), { TERRAIN_STYLE: "MODERN", TERRAIN_BIOME: biome, TERRAIN_LAYOUT: layout, INITIAL_CASH: 0, SOUND: "OFF", MAX_WIND: 0, SKY: "PLAIN", ELASTIC: "NONE" });
   const start = performance.now();
   const gs = createGameState(cfg, 1024, 768, seed);
-  gs.add_player("Player 1", 0, 0, 0); gs.add_player("Player 2", 0, 0, 1); gs.new_game();
+  for (let i = 0; i < players; i++) gs.add_player(`Player ${i + 1}`, 0, 0, i);
+  gs.new_game();
   for (let i = 0; i < 10 && gs.phase !== AIM; i++) gs.update(1 / 60);
   const generationMs = performance.now() - start;
   const renderer = new Renderer(cfg, gs.w, gs.h), surf = new Surface([gs.w, gs.h]);
@@ -61,5 +63,18 @@ export async function scene(biome: string, layout: string, seed = 71) {
     return world.cells.every((v, i) => v === view.terrain.modern!.cells[i]);
   };
   Object.assign(window, { modernTest: {gs, renderer, render, fire, crater, roundtrip} });
-  return { biome, layout, seed, generationMs, firstRenderMs, cachedRenderMs: frames.reduce((a,b)=>a+b,0)/frames.length, props: world.props.length, cells: world.cells.length };
+  let caveAir = 0;
+  if (layout === "MOUNTAINS") for (let x = 0; x < world.fw; x++) {
+    for (let y = Math.ceil(world.surface[x] * 2) + 12; y < world.fh; y++) {
+      if (!world.cells[x * world.fh + y]) caveAir++;
+    }
+  }
+  const buildings = world.props.filter(p => isCityBuilding(p.kind) && p.kind !== "bridge" && p.kind !== "golden_gate");
+  const rooftops = gs.tanks.filter(t => world.cells[t.x * 2 * world.fh + (t.y + 1) * 2] >= 16).length;
+  return { biome, layout, seed, caveAir, generationMs, firstRenderMs, cachedRenderMs: frames.reduce((a,b)=>a+b,0)/frames.length,
+    props: world.props.length, propKinds: world.props.map(p => p.kind), cells: world.cells.length,
+    rooftopTanks: rooftops, groundTanks: gs.tanks.length - rooftops,
+    buildingCoverage: buildings.reduce((sum, p) => sum + p.w, 0) / world.w,
+    heightContrast: buildings.length ? Math.max(...buildings.map(p => p.h)) / Math.min(...buildings.map(p => p.h)) : 0,
+    relief: Math.max(...world.surface) - Math.min(...world.surface) };
 }

@@ -14,6 +14,11 @@ try {
   for(const [biome,layout] of [["GRASS","MOUNTAINS"],["SNOW","MOUNTAINS"],["DESERT","MOUNTAINS"],["SWAMP","MOUNTAINS"],["SWAMP","CAVE"],["GRASS","CITY"]]) {
     const meta = await page.evaluate(async ([b,l])=>(await import("/test-browser/modern.ts")).scene(b,l),[biome,layout]);
     const name = `${biome.toLowerCase()}-${layout.toLowerCase()}`;
+    assert.ok(meta.propKinds.every(kind => kind !== "car" && kind !== "animal"), `${name}: no cars or animals`);
+    if (biome === "DESERT" && layout === "MOUNTAINS") assert.ok(meta.propKinds.includes("rock"), `${name}: visible ground rocks`);
+    if (layout === "MOUNTAINS") assert.ok(meta.relief > 768 * .7, `${name}: tall peaks and deep valleys`);
+    if (layout === "MOUNTAINS" && ["GRASS", "SNOW"].includes(biome)) assert.ok(meta.caveAir > 1024 * 768 * .005, `${name}: underground cave space`);
+    if (layout === "CITY") assert.ok(meta.buildingCoverage < .76 && meta.heightContrast > 3.5 && meta.relief > 40 && meta.groundTanks > 0, `${name}: open districts, contrasting heights and ground starts`);
     await page.locator("#game").screenshot({path:`${out}/${name}.png`});
     const flight = await page.evaluate(()=>window.modernTest.fire());
     for (const [phase, png] of Object.entries(flight.captures)) writeFileSync(`${out}/${name}-blast-${phase}.png`, Buffer.from(png.split(",")[1], "base64"));
@@ -33,6 +38,26 @@ try {
     for (const [phase, png] of Object.entries(flight.captures)) writeFileSync(`${out}/weapon-${slot}-${phase}.png`, Buffer.from(png.split(",")[1], "base64"));
     delete flight.captures;
     results.push({slot, flight});
+  }
+  for (const seed of [1, 19, 313]) {
+    const meta = await page.evaluate(async seed => (await import("/test-browser/modern.ts")).scene("DESERT", "MOUNTAINS", seed, 10), seed);
+    assert.ok(meta.relief > 768 * .7, `desert ${seed}: mesa and canyon relief`);
+    assert.ok(await page.evaluate(() => window.modernTest.gs.tanks.every(t =>
+      t.alive && t.health === 100 && window.modernTest.gs.terrain.is_supported(t.x, t.y, t.half_width))), `desert ${seed}: supported starts`);
+    await page.locator("#game").screenshot({path:`${out}/desert-mountains-seed-${seed}.png`});
+    results.push(meta);
+  }
+  for (const seed of [1, 19, 313]) {
+    const meta = await page.evaluate(async seed => (await import("/test-browser/modern.ts")).scene("GRASS", "MOUNTAINS", seed), seed);
+    assert.ok(meta.relief > 768 * .7 && meta.propKinds.every(kind => kind !== "car" && kind !== "animal"));
+    await page.locator("#game").screenshot({path:`${out}/grass-mountains-seed-${seed}.png`});
+    results.push(meta);
+  }
+  for (const seed of [1, 19, 313]) {
+    const meta = await page.evaluate(async seed => (await import("/test-browser/modern.ts")).scene("GRASS", "CITY", seed, 10), seed);
+    assert.ok(meta.buildingCoverage < .76 && meta.heightContrast > 3.5 && meta.relief > 40 && meta.rooftopTanks > 0 && meta.groundTanks >= 3, `city ${seed}: districts and mixed ten-player starts`);
+    await page.locator("#game").screenshot({path:`${out}/city-seed-${seed}.png`});
+    results.push(meta);
   }
   assert.deepEqual(errors,[]);
   writeFileSync(`${out}/summary.json`,JSON.stringify(results,null,2));

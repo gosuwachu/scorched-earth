@@ -12,10 +12,13 @@ available; set `CHROMIUM_PATH` to an existing browser executable if necessary.
 | Weapon effects or terrain interaction | `weapons.mjs` | Effect progression, completion, terrain settling, and screenshots |
 | Canvas rendering | `run.mjs` | Render states, nonblank canvas, page errors, and render coverage |
 | Menus, input or equipment controls | `ui.mjs` | Real DOM interaction, focus, responsive layout, and control behavior |
-| Modern terrain and artwork | `modern.mjs` | Six biomes/layout scenes, visible missile/nuke blasts, destruction, save masks and timings |
+| Modern terrain and artwork | `modern.mjs` | Six biome/layout scenes, extra mountain/city seeds, dense blocks and rooftop starts, visible missile/nuke blasts, destruction, save masks and timings |
+| Painted scenery and city districts | `city_landmarks.mjs` | Twenty building/vegetation specimens, preserved proportions, connected silhouettes, five ten-player district maps, mixed ground/roof starts and height contrast |
+| Alpine caves and overhangs | `alpine.mjs` | Eight grassy/snowy scenes, open cave space, firing, destruction and save roundtrips |
+| Modern particle explosions | `modern_blast.mjs` | Growing crater visibility, moving/repeatable particles, plasma terrain preservation and unchanged collision cells |
 | Modern setup and application integration | `modern_ui.mjs` | Setup, phone layout, actual save/restore, logical input mapping and host handoff |
 
-Both Modern drivers accept the development-server URL as their first argument.
+All Modern drivers accept the development-server URL as their first argument.
 See [the experiment notes](../oracle/MODERN_TERRAIN.md) for commands and limits.
 Restart the development server after source edits before full browser runs so
 hot-update module URLs cannot create duplicate class identities in dynamically
@@ -148,9 +151,11 @@ the barrel while a human aims and consumes one charge per launched shot (includi
 salvos). Unused charges carry between rounds and saves; original 48-item saves
 load with zero charges. This is a direction aid, not a gravity/wind prediction.
 
-The render driver captures `laser_sight_{black,plain}_{0,45,90,135,180}.png` and
+The render driver captures `laser_sight_{black,plain,modern}_{0,17,45,90,135,163,180}.png` and
 checks decreasing pixel contrast along the beam, no beam beyond its endpoint,
-and no inventory mutation during rendering. The DOM driver buys the item from
+and no inventory mutation during rendering. Modern captures also check the sight's
+origin against the scaled artwork muzzle. Classic sights start at the centre of
+the rounded muzzle pixel. The DOM driver buys the item from
 Miscellaneous, verifies the price/count and painted icon, and saves
 `ui-laser-sight-shop.png`. Unit tests cover depletion, synchronous/simultaneous
 launches, remote controller ownership, and save migration. These are browser
