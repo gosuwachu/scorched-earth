@@ -63,3 +63,31 @@ it("invalidates every affected tile when a cut changes lighting far from the cut
     expect(light.sample(x, y)).toBe(rebuilt.sample(x, y));
   }
 });
+
+it("matches full rebuilds through versioned cuts, deposits, props and partial edge tiles", () => {
+  const fw = 517, fh = 269, cells = new Uint8Array(fw * fh).fill(2);
+  const tilesY = Math.ceil(fh / 128), versions = new Uint32Array(Math.ceil(fw / 128) * tilesY);
+  const light = new LandformLight(fw, fh, 17);
+  light.update(cells, versions);
+  for (const [x0, y0, x1, y1, material] of [
+    [124, 124, 133, 134, 0], [380, 0, 389, 269, 0],
+    [0, 260, 517, 269, 0], [510, 263, 517, 269, 3],
+    [124, 124, 133, 134, 16], [380, 0, 389, 269, 1],
+  ]) {
+    const before = Float64Array.from({ length: fw * fh }, (_, i) => light.sample(Math.floor(i / fh), i % fh));
+    rectangle(cells, fh, x0, y0, x1, y1, material);
+    for (let tx = Math.floor(x0 / 128); tx < Math.ceil(x1 / 128); tx++)
+      for (let ty = Math.floor(y0 / 128); ty < Math.ceil(y1 / 128); ty++) versions[tx * tilesY + ty]++;
+    light.update(cells, versions);
+    const full = new LandformLight(fw, fh, 17);
+    full.update(cells);
+    for (let x = 0; x < fw; x++) for (let y = 0; y < fh; y++) {
+      const actual = light.sample(x, y);
+      if (actual !== full.sample(x, y)) throw new Error(`stale light at ${x},${y}`);
+      if (actual !== before[x * fh + y])
+        expect(light.changedTiles[Math.floor(x / 128) * tilesY + Math.floor(y / 128)]).toBe(1);
+    }
+    light.update(cells, versions);
+    expect(light.changedTiles.every(v => v === 0)).toBe(true);
+  }
+});

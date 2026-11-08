@@ -20,11 +20,16 @@ export class LandformLight {
   private readonly field: Float32Array;
   private readonly variation: Float32Array;
   private initialized = false;
+  private versionsValid = false;
+  private readonly versions: Uint32Array;
+  private readonly dirtyRows: Uint8Array;
 
   constructor(private readonly fw: number, private readonly fh: number, seed: number) {
     this.width = Math.ceil(fw / STEP); this.height = Math.ceil(fh / STEP);
     this.tilesX = Math.ceil(fw / TILE); this.tilesY = Math.ceil(fh / TILE);
     this.changedTiles = new Uint8Array(this.tilesX * this.tilesY);
+    this.versions = new Uint32Array(this.changedTiles.length);
+    this.dirtyRows = new Uint8Array(this.height);
     const size = this.width * this.height;
     this.occupied = new Uint8Array(size);
     this.raw = new Float32Array(size);
@@ -40,22 +45,36 @@ export class LandformLight {
     }
   }
 
-  update(cells: Uint8Array): void {
+  /** Versions are optional for callers without terrain mutation tracking. */
+  update(cells: Uint8Array, tileVersions?: Uint32Array): void {
     this.changedTiles.fill(0);
-    this.occupied.fill(0);
-    this.raw.fill(0);
-    // Average the whole block so a single raster sample cannot turn a narrow
-    // crack into a large discontinuity. Props have their own painted lighting.
-    for (let x = 0; x < this.fw; x++) for (let y = 0; y < this.fh; y++) {
-      const material = cells[x * this.fh + y];
-      if (material > 0 && material < 16) this.occupied[Math.floor(y / STEP) * this.width + Math.floor(x / STEP)]++;
+    this.dirtyRows.fill(0);
+    // Resample only changed tiles. Count each 4x4 block exactly, including
+    // partial map edges; painted props do not contribute to cliff lighting.
+    for (let tx = 0; tx < this.tilesX; tx++) for (let ty = 0; ty < this.tilesY; ty++) {
+      const tile = tx * this.tilesY + ty;
+      if (this.versionsValid && tileVersions && this.versions[tile] === tileVersions[tile]) continue;
+      const right = Math.min(this.width, (tx + 1) * TILE / STEP);
+      const bottom = Math.min(this.height, (ty + 1) * TILE / STEP);
+      for (let x = tx * TILE / STEP; x < right; x++) for (let y = ty * TILE / STEP; y < bottom; y++) {
+        const endX = Math.min(this.fw, (x + 1) * STEP), endY = Math.min(this.fh, (y + 1) * STEP);
+        let count = 0;
+        for (let xx = x * STEP; xx < endX; xx++) for (let yy = y * STEP; yy < endY; yy++) {
+          const material = cells[xx * this.fh + yy];
+          if (material > 0 && material < 16) count++;
+        }
+        const area = (endX - x * STEP) * (endY - y * STEP);
+        const i = y * this.width + x, occupied = count >= Math.ceil(area / 4) ? 1 : 0;
+        if (!this.initialized || occupied !== this.occupied[i]) this.dirtyRows[y] = 1;
+        this.occupied[i] = occupied;
+      }
     }
-    for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {
-      const area = Math.min(STEP, this.fw - x * STEP) * Math.min(STEP, this.fh - y * STEP);
-      const i = y * this.width + x;
-      this.occupied[i] = this.occupied[i] >= Math.ceil(area / 4) ? 1 : 0;
-    }
+    if (tileVersions) this.versions.set(tileVersions);
+    this.versionsValid = !!tileVersions;
+    // A cut can change the span across an entire row, but no other raw rows.
     for (let y = 0; y < this.height; y++) {
+      if (!this.dirtyRows[y]) continue;
+      this.raw.fill(0, y * this.width, (y + 1) * this.width);
       const row = y * this.width;
       let x = 0;
       while (x < this.width) {
@@ -76,21 +95,31 @@ export class LandformLight {
     }
     // Smooth the broad field, not the collision mask. World edges clamp rather
     // than admitting false air. Final sampling is bilinear at fine resolution.
-    for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {
-      let sum = 0;
-      for (let k = -3; k <= 3; k++) {
-        sum += this.raw[y * this.width + Math.max(0, Math.min(this.width - 1, x + k))] * KERNEL[k + 3];
+    for (let y = 0; y < this.height; y++) {
+      if (!this.dirtyRows[y]) continue;
+      for (let x = 0; x < this.width; x++) {
+        let sum = 0;
+        for (let k = -3; k <= 3; k++) {
+          sum += this.raw[y * this.width + Math.max(0, Math.min(this.width - 1, x + k))] * KERNEL[k + 3];
+        }
+        this.horizontal[y * this.width + x] = sum / 64;
       }
-      this.horizontal[y * this.width + x] = sum / 64;
     }
-    for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {
-      let sum = 0;
-      for (let k = -3; k <= 3; k++) {
-        sum += this.horizontal[Math.max(0, Math.min(this.height - 1, y + k)) * this.width + x] * KERNEL[k + 3];
+    for (let y = 0; y < this.height; y++) {
+      let dirty = false;
+      for (let yy = Math.max(0, y - 3); yy <= Math.min(this.height - 1, y + 3); yy++) {
+        if (this.dirtyRows[yy]) { dirty = true; break; }
       }
-      const i = y * this.width + x, value = Math.fround(sum / 64);
-      if (value !== this.field[i]) this.markSample(x, y);
-      this.field[i] = value;
+      if (!dirty) continue;
+      for (let x = 0; x < this.width; x++) {
+        let sum = 0;
+        for (let k = -3; k <= 3; k++) {
+          sum += this.horizontal[Math.max(0, Math.min(this.height - 1, y + k)) * this.width + x] * KERNEL[k + 3];
+        }
+        const i = y * this.width + x, value = Math.fround(sum / 64);
+        if (value !== this.field[i]) this.markSample(x, y);
+        this.field[i] = value;
+      }
     }
     if (!this.initialized) this.changedTiles.fill(1);
     this.initialized = true;

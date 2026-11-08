@@ -154,7 +154,7 @@ export class ModernRenderer {
     }
     const refresh = this.assetVersion !== assetsVersion;
     if (world.version !== this.lastVersion || refresh) {
-      this.landform.update(world.cells);
+      this.landform.update(world.cells, world.tileVersions);
       this.updateTiles(world, refresh);
       const ctx = this.base.getContext("2d")!;
       const sky = ctx.createLinearGradient(0, 0, 0, world.fh);

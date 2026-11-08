@@ -4,6 +4,8 @@ import { hash } from "./modern";
 
 export const DEPTH_REACH = 64;
 const FAR = DEPTH_REACH + 1;
+// Distances are bounded integers; retain double precision and operation order.
+const FALLOFF = Float64Array.from({ length: FAR + 1 }, (_, d) => Math.max(0, 1 - d / FAR) ** 2);
 
 /** A low resolution, non-collidable rear-wall shade below natural overhangs.
  * It fades away from the roof and toward open mouths. Buildings do not turn
@@ -97,9 +99,8 @@ export class TerrainDepth {
   }
 
   light(i: number): number {
-    const falloff = (d: number) => Math.max(0, 1 - d / FAR) ** 2;
-    return 25 * falloff(this.top[i]) + 15 * falloff(this.left[i]) -
-      34 * falloff(this.bottom[i]) - 22 * falloff(this.right[i]);
+    return 25 * FALLOFF[this.top[i]] + 15 * FALLOFF[this.left[i]] -
+      34 * FALLOFF[this.bottom[i]] - 22 * FALLOFF[this.right[i]];
   }
 }
 
