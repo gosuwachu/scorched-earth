@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-usage() { echo 'usage: packaging/build-and-test.sh [--skip-tests]'; }
+variant_helper="$(dirname -- "${BASH_SOURCE[0]}")/../deploy/variant.sh"
+# shellcheck source=deploy/variant.sh
+if [[ -f $variant_helper ]]; then source "$variant_helper"; fi
+usage() { echo 'usage: packaging/build-and-test.sh [--variant classic|modern] [--skip-tests]'; }
 skip_tests=false
 for argument in "$@"; do
   case "$argument" in

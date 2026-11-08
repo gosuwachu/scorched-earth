@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Build, verify, and install the game. Caddy is deployed independently.
 set -euo pipefail
-usage() { echo 'usage: deploy.sh [--skip-tests] <ssh-target>'; }
+variant_helper="$(dirname -- "${BASH_SOURCE[0]}")/deploy/variant.sh"
+# shellcheck source=deploy/variant.sh
+if [[ -f $variant_helper ]]; then source "$variant_helper"; fi
+usage() { echo 'usage: deploy.sh [--variant classic|modern] [--skip-tests] <ssh-target>'; }
 target=
 target_set=false
 build_args=()

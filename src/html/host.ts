@@ -122,6 +122,9 @@ export class UiHost {
     if (this.syncing) return;
     this.syncing = true;
     try {
+      // Making an underlying dialog inert can immediately blur its button.
+      // Capture focus before updating any views so nested dialogs can restore it.
+      const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const descriptions = this.describe();
       const keys = new Set(descriptions.map((d) => d.key));
       if (this.chargeKey) keys.add(this.chargeKey);
@@ -138,7 +141,7 @@ export class UiHost {
           // Some operations rebuild widget models while retaining the screen.
           this.replacePanel(view, d);
         }
-        if (!view) { view = this.create(d); this.views.set(d.key, view); }
+        if (!view) { view = this.create(d, returnFocus); this.views.set(d.key, view); }
         view.element.hidden = i < firstVisible;
         const active = d === top && this.permitted(d.screen);
         view.element.inert = d !== top;
@@ -214,7 +217,7 @@ export class UiHost {
       }
     }
   }
-  private create(d: Description): View {
+  private create(d: Description, returnFocus: HTMLElement | null): View {
     const element = d.modal ? modalShell({ className: "ui-compact ui-local-dialog", cancel: () => {
       const panel = this.views.get(d.key)?.panel ?? d.panel;
       if (panel && !panel.no_cancel) this.act(d.screen, panel.cancel_action);
@@ -225,7 +228,7 @@ export class UiHost {
     if (d.screen instanceof S.TankInitScreen) element.classList.add("ui-tank-setup");
     if (d.screen instanceof S.OptionsScreen) element.classList.add("ui-options");
     element.dataset.uiOwner = "true";
-    const view: View = { screen: d.screen, element, returnFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null };
+    const view: View = { screen: d.screen, element, returnFocus };
     if (element instanceof HTMLDialogElement) {
       view.dialog = element;
       element.addEventListener("click", (e) => {

@@ -1,7 +1,10 @@
 #!/bin/bash
 # Deploy only this application's site to an already provisioned shared proxy.
 set -euo pipefail
-usage() { echo 'usage: deploy-caddy.sh <ssh-target> <domain>'; }
+variant_helper="$(dirname -- "${BASH_SOURCE[0]}")/deploy/variant.sh"
+# shellcheck source=deploy/variant.sh
+if [[ -f $variant_helper ]]; then source "$variant_helper"; fi
+usage() { echo 'usage: deploy-caddy.sh [--variant classic|modern] <ssh-target> <domain>'; }
 if [[ $# -eq 1 && $1 == --help ]]; then usage; exit 0; fi
 [[ $# -eq 2 ]] || { usage >&2; exit 1; }
 target=$1

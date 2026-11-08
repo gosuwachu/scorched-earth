@@ -4,7 +4,10 @@ A browser reimplementation of **Scorched Earth v1.5** (1995, DOS) by **Wendell H
 "The Mother of All Games" - running natively on TypeScript + Canvas2D + Web Audio.
 No plugins, no WASM, no Python or DOS runtime: open it and play.
 
-### Play it now: https://scorched.gosuwachu.fyi/
+### Play it now
+
+- [Classic](https://scorched.gosuwachu.fyi/)
+- [Modern](https://scorched-modern.gosuwachu.fyi/) — choose Quick Game for modern terrain.
 
 Nothing to install - it is a static HTML5 page that runs in the browser.
 
@@ -403,3 +406,51 @@ from a specific implementation, are generally understood not to be protected by
 copyright in the US; this port reimplements only the mechanics. Scorched Earth, its
 name, and all of its assets remain the property of Wendell Hicken. Please treat this
 as a personal, non-commercial tribute for play and study.
+
+### Deploy modern alongside classic
+
+From the modern branch, use the explicit variant **before other arguments**:
+
+```bash
+./deploy.sh --variant modern shopping
+./deploy-caddy.sh --variant modern shopping scorched-modern.gosuwachu.fyi
+```
+
+`--variant classic` is optional; omitting it preserves the original deployment
+behavior. Modern uses package/service/account `scorchedearth-modern`, application
+path `/opt/scorchedearth-modern`, settings `/etc/default/scorchedearth-modern`,
+loopback port `4002`, and a separate Caddy site named `scorchedearth-modern`.
+Create the hostname's DNS A record pointing to the VPS before deploying Caddy.
+These commands never restart the classic service or replace its proxy site.
+
+The variant dispatcher creates a disposable source snapshot and renders the shared
+packaging/deployment templates with modern's identity and port. Application source
+is unchanged. Release versions include a UTC timestamp and source commit; the exact
+source snapshot (including local edits), package, and checksum are retained in
+`artifacts/modern/`. Builds and deployment tests use the rendered templates.
+Build without deploying with `bash packaging/build-and-test.sh --variant modern`.
+
+Check both `/api/lan` endpoints and the public sites after deployment. To roll back
+an upgrade, reinstall a retained modern `.deb` using `apt install --allow-downgrades`
+and verify `scorchedearth-modern.service`. Settings survive upgrades/downgrades.
+To withdraw the first modern release, run on the VPS:
+
+```bash
+sudo caddy-config remove scorchedearth-modern
+sudo systemctl stop scorchedearth-modern
+sudo apt remove scorchedearth-modern
+```
+
+Classic remains installed and running. Modern updates interrupt only modern matches.
+
+A container check can install both packages, upgrade/purge modern, and assert that
+classic's files and running process survive. After building modern, supply a
+retained classic package and the modern package (absolute paths):
+
+```bash
+docker run --rm --network none --cpus 4 --memory 4g \
+  --mount "type=bind,source=$CLASSIC_DEB,target=/releases/classic.deb,readonly" \
+  --mount "type=bind,source=$MODERN_DEB,target=/releases/modern.deb,readonly" \
+  --mount "type=bind,source=$PWD/packaging/coexistence-smoke.sh,target=/tests/coexistence-smoke.sh,readonly" \
+  scorchedearth-package-test:24.04 bash /tests/coexistence-smoke.sh
+```
