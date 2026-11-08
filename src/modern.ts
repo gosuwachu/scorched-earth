@@ -356,8 +356,7 @@ export class ModernWorld {
       if (y - h < (this.layout === "CAVE" ? this.h * .32 : 40)) continue;
       const prop: Prop = { id: this.props.length + 16, kind, x: px, y, w, h, variant: rnd };
       if (paintedMasks[kind]) prop.art = PAINTED_ART;
-      this.props.push(prop);
-      this.stampSupportedProp(prop);
+      if (this.stampSupportedProp(prop, 17)) this.props.push(prop);
     }
     if (this.biome === "DESERT" && this.layout === "MOUNTAINS") this.placeRocks(tanks);
     if ((this.biome === "GRASS" || this.biome === "SNOW") && this.layout === "MOUNTAINS") placeAlpineRocks(this, tanks);
@@ -502,7 +501,7 @@ export class ModernWorld {
   /** Seat the actual lower silhouette, including uneven painted base stones.
    * Plants get a continuous flat soil patch; structures get rock down to the
    * existing terrain. Elevated bridge spans must remain open. */
-  private stampSupportedProp(p: Prop): void {
+  private stampSupportedProp(p: Prop, maxFoundation = Infinity): boolean {
     const plant = p.kind === "tree" || p.kind === "pine" || p.kind === "cactus";
     const x0 = Math.max(0, Math.floor((p.x - p.w / 2) * 2));
     const x1 = Math.min(this.fw, Math.ceil((p.x + p.w / 2) * 2));
@@ -517,6 +516,22 @@ export class ModernWorld {
       if (foot >= (p.y - Math.max(.5, p.h * .05)) * 2) feet.push([x, foot]);
     }
     let left = x0, right = x1;
+    if (plant && feet.length) {
+      left = Math.max(0, feet[0][0] - 2);
+      right = Math.min(this.fw, feet[feet.length - 1][0] + 3);
+    }
+    // The ridge profile predates caves and settling, and endpoint slope checks
+    // miss gullies. Validate every foundation against the live mask before
+    // writing anything, so rejected countryside sites leave no dirt pillars.
+    const rootTop = Math.min(...feet.map(([, foot]) => foot + 1));
+    const supports: Array<[number, number]> = plant && feet.length
+      ? Array.from({ length: right - left }, (_, i) => [left + i, rootTop])
+      : feet.map(([x, foot]) => [x, foot + 1]);
+    if (Number.isFinite(maxFoundation)) for (const [x, top] of supports) {
+      let y = top;
+      while (y < this.fh && !this.cells[x * this.fh + y] && y - top <= maxFoundation * 2) y++;
+      if (y === this.fh || y - top > maxFoundation * 2) return false;
+    }
     if (plant && feet.length) {
       // Level just the root footprint, not the full canopy. A little soil at
       // either edge keeps the painted roots visibly embedded in the ground.
@@ -538,6 +553,7 @@ export class ModernWorld {
       }
     }
     this.publish(Math.min(left, x0), y0, Math.max(right, x1), this.fh);
+    return true;
   }
 
   /** Mix ground and roof preferences, without pulling every tank out of
