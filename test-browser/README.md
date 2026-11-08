@@ -14,7 +14,7 @@ available; set `CHROMIUM_PATH` to an existing browser executable if necessary.
 | Canvas rendering | `run.mjs` | Render states, nonblank canvas, page errors, and render coverage |
 | Menus, input or equipment controls | `ui.mjs` | Real DOM interaction, focus, responsive layout, and control behavior |
 | Modern terrain and artwork | `modern.mjs` | Six biome/layout scenes, extra mountain/city seeds, dense blocks and rooftop starts, visible missile/nuke blasts, destruction, save masks and timings |
-| Terrain depth and lighting | `terrain_depth.mjs` | Six scenes; identical cached/full redraws after tile-boundary excavation and settling, identical restored-save rendering, unchanged collision masks during rendering, captures and timings |
+| Terrain depth and lighting | `terrain_depth.mjs` | Cave-shadow contact after Canvas smoothing at 36 roof-edge positions; six scenes with identical cached/full redraws after excavation and settling, identical restored-save rendering, unchanged collision masks during rendering, captures and timings |
 | Painted scenery and city districts | `city_landmarks.mjs` | Twenty building/vegetation specimens, preserved proportions, connected silhouettes, six ten-player district maps, planted playgrounds and a sports park, mixed ground/roof starts and height contrast |
 | Alpine caves and overhangs | `alpine.mjs` | Eight grassy/snowy scenes, open cave space, firing, destruction and save roundtrips |
 | Modern particle explosions | `modern_blast.mjs` | Growing crater visibility, moving/repeatable particles, plasma terrain preservation and unchanged collision cells |

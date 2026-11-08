@@ -1,6 +1,8 @@
 import { drawModernTank, drawModernBlast } from "./modern_art";
 import { sandstoneColor } from "./desert";
 import { TerrainDepth, RockReliefCache, caveShade } from "./terrain_depth";
+import { paintedMaterial } from "./terrain_material";
+import { LandformLight } from "./landform_light";
 import type { BlastEffect } from "./combat_effects";
 import type { GameState } from "./render";
 import { ITEMS } from "./weapons";
@@ -20,6 +22,7 @@ let texture: ImageData | null = null;
 let spritePixels: ImageData | null = null;
 const landmarkPixels = new Map<string, ImageData>();
 const paintedSpritePixels = new Map<string, ImageData>();
+const terrainPixels = new Map<string, ImageData>();
 let assetsVersion = 0;
 function asset(name: string): HTMLImageElement {
   let img = images.get(name);
@@ -31,6 +34,9 @@ function asset(name: string): HTMLImageElement {
     } else if (name === "props") {
       const c = canvas(img!.naturalWidth, img!.naturalHeight); c.getContext("2d")!.drawImage(img!, 0, 0);
       spritePixels = c.getContext("2d")!.getImageData(0, 0, c.width, c.height);
+    } else if (name.startsWith("terrain-v3/")) {
+      const c = canvas(img!.naturalWidth, img!.naturalHeight); c.getContext("2d")!.drawImage(img!, 0, 0);
+      terrainPixels.set(name, c.getContext("2d")!.getImageData(0, 0, c.width, c.height));
     } else if (name.startsWith("buildings-v2/") || name.startsWith("props-v2/")) {
       const c = canvas(img!.naturalWidth, img!.naturalHeight); c.getContext("2d")!.drawImage(img!, 0, 0);
       paintedSpritePixels.set(name.split("/")[1], c.getContext("2d")!.getImageData(0, 0, c.width, c.height));
@@ -38,13 +44,13 @@ function asset(name: string): HTMLImageElement {
       const c = canvas(img!.naturalWidth, img!.naturalHeight); c.getContext("2d")!.drawImage(img!, 0, 0);
       landmarkPixels.set(name, c.getContext("2d")!.getImageData(0, 0, c.width, c.height));
     } };
-    img.src = `/assets/modern/${name}.${name.includes("-v2/") ? "webp" : "png"}`;
+    img.src = `/assets/modern/${name}.${name.includes("-v2/") || name.includes("-v3/") ? "webp" : "png"}`;
   }
   return img;
 }
 export async function warmModernAssets(includeScenery = false): Promise<void> {
   const scenery = includeScenery ? Object.keys(paintedMasks).map(paintedTexture) : [];
-  await Promise.all(["alpine", "desert", "swamp", "cave", "city", "earth", "props", ...scenery].map(name => asset(name).decode().catch(() => {})));
+  await Promise.all(["alpine", "desert", "swamp", "cave", "city", "earth", "props", "terrain-v3/sandstone", "terrain-v3/granite", "terrain-v3/soil", ...scenery].map(name => asset(name).decode().catch(() => {})));
 }
 function canvas(w: number, h: number): HTMLCanvasElement {
   const c = document.createElement("canvas"); c.width = w; c.height = h; return c;
@@ -126,10 +132,12 @@ export class ModernRenderer {
   private pixelTile: ImageData | null = null;
   private depth = new TerrainDepth();
   private relief!: RockReliefCache;
+  private landform!: LandformLight;
   prepare(world: ModernWorld, surf: Surface): void {
     if (world !== this.world) {
       this.world = world;
       this.relief = new RockReliefCache(world.w, world.h, world.seed);
+      this.landform = new LandformLight(world.fw, world.fh, world.seed);
       this.cutTerrain = canvas(world.fw, world.fh);
       this.cave = canvas(Math.ceil(world.fw / 4), Math.ceil(world.fh / 4));
       this.debris = new WeakMap();
@@ -138,12 +146,15 @@ export class ModernRenderer {
     }
     const bg = asset(world.layout === "CITY" ? "city" : world.layout === "CAVE" ? "cave" : world.biome === "SWAMP" ? "swamp" : world.biome === "DESERT" ? "desert" : "alpine");
     asset("earth"); asset("props");
+    asset(world.biome === "DESERT" ? "terrain-v3/sandstone" : "terrain-v3/granite");
+    asset("terrain-v3/soil");
     for (const p of world.props) {
       if (p.art === PAINTED_ART) asset(paintedTexture(p.kind));
       else if (p.art === "illustrated-v1") asset(p.kind);
     }
     const refresh = this.assetVersion !== assetsVersion;
     if (world.version !== this.lastVersion || refresh) {
+      this.landform.update(world.cells);
       this.updateTiles(world, refresh);
       const ctx = this.base.getContext("2d")!;
       const sky = ctx.createLinearGradient(0, 0, 0, world.fh);
@@ -154,8 +165,8 @@ export class ModernRenderer {
       const haze = ctx.createLinearGradient(0, 0, 0, world.fh);
       const tint = world.biome === "DESERT" ? "239,204,173" : world.layout === "CAVE" ? "80,115,119" : "183,207,221";
       haze.addColorStop(0, `rgba(${tint},0)`);
-      haze.addColorStop(.45, `rgba(${tint},.12)`);
-      haze.addColorStop(1, `rgba(${tint},.32)`);
+      haze.addColorStop(.45, `rgba(${tint},.22)`);
+      haze.addColorStop(1, `rgba(${tint},.48)`);
       ctx.fillStyle = haze; ctx.fillRect(0, 0, world.fw, world.fh);
       const rear = this.cave.getContext("2d")!;
       const shade = caveShade(world.cells, world.fw, world.fh);
@@ -303,13 +314,15 @@ export class ModernRenderer {
     this.pixelTile ??= ctx.createImageData(128, 128);
     const tile = this.pixelTile, pixels = tile.data;
     const lawns = m.props.filter(p => p.kind === "lawn");
+    const painting = terrainPixels.get(m.biome === "DESERT" ? "terrain-v3/sandstone" : "terrain-v3/granite");
+    const soil = terrainPixels.get("terrain-v3/soil");
     for (let tx = 0; tx < m.tilesX; tx++) for (let ty = 0; ty < m.tilesY; ty++) {
       const t = tx * m.tilesY + ty;
       // Include neighbors because a crater can expose an unchanged tile edge.
       let version = m.tileVersions[t];
       for (let nx = Math.max(0, tx - 1); nx <= Math.min(m.tilesX - 1, tx + 1); nx++)
         for (let ny = Math.max(0, ty - 1); ny <= Math.min(m.tilesY - 1, ty + 1); ny++) version = Math.max(version, m.tileVersions[nx * m.tilesY + ny]);
-      if (!all && this.tileVersions[t] === version) continue;
+      if (!all && this.tileVersions[t] === version && !this.landform.changedTiles[t]) continue;
       this.tileVersions[t] = version; pixels.fill(0);
       this.depth.update(m.cells, m.fw, m.fh, tx * 128, ty * 128);
       for (let xx = 0; xx < 128 && tx * 128 + xx < m.fw; xx++) {
@@ -326,11 +339,24 @@ export class ModernRenderer {
             const band = Math.sin(y * 0.045 + Math.sin(x * 0.007) * 2 + Math.sin(x * 0.023) * 0.35) * 11;
             let tex = 0;
             if (texture) { const i = ((y % texture.height) * texture.width + x % texture.width) * 4; tex = (texture.data[i] * 0.3 + texture.data[i + 1] * 0.6 + texture.data[i + 2] * 0.1 - 100) * 0.85; }
-            const relief = material === 2 && m.biome !== "DESERT" ? this.relief.sample(x / 2, y / 2).light : 0;
+            const relief = !painting && material === 2 && m.biome !== "DESERT" ? this.relief.sample(x / 2, y / 2).light : 0;
             const detail = tex * .65 + band * .5 + relief + (n - 0.5) * 7;
-            color = m.biome === "DESERT" ? sandstoneColor(x / 2, y / 2, m.seed, n, tex, this.relief.sample(x / 2, y / 2)) :
+            color = painting && (m.biome === "DESERT" || material === 2) ? paintedMaterial(painting, x, y, m.seed) :
+              m.biome === "DESERT" ? sandstoneColor(x / 2, y / 2, m.seed, n, tex, this.relief.sample(x / 2, y / 2)) :
               material === 2 ? [100 + detail * 0.8, 110 + detail * 0.8, 116 + detail * 0.85] :
               m.biome === "SWAMP" ? [83 + detail, 70 + detail * 0.85, 45 + detail * 0.7] : [127 + detail, 92 + detail * 0.85, 57 + detail * 0.7];
+            if (soil && m.biome !== "DESERT" && material !== 2) {
+              color = paintedMaterial(soil, x * 1.5, y * 1.5, m.seed);
+              if (m.biome === "SWAMP") color = [color[0] * .68, color[1] * .83, color[2] * .78];
+            }
+            // Embedded stone chips soften the internal soil/bedrock junction.
+            // This is colour only: both sides retain their original material.
+            if (painting && soil && m.biome !== "DESERT" && material === 1 &&
+              y + 12 < m.fh && m.cells[index + 12] === 2) {
+              const mix = hash(Math.floor(x / 5), Math.floor(y / 4), m.seed + 917) * .65;
+              const stone = paintedMaterial(painting, x, y, m.seed);
+              color = color.map((c, k) => c * (1 - mix) + stone[k] * mix) as RGB;
+            }
             // Only natural soil carries turf; fresh deposited soil remains bare.
             const above = (d: number) => y >= d && m.cells[index - d] === 0;
             // Sand collects on shelves, not as a yellow outline down every wall.
@@ -345,17 +371,38 @@ export class ModernRenderer {
               color = parkColor("lawn", 0.5, 1, n);
             }
             const top = this.depth.top[sample];
-            const cap = 7 + Math.sin(x * .065) * 2 + Math.sin(x * .019) * 2;
+            const cap = 24 + Math.sin(x * .065) * 5 + Math.sin(x * .019) * 6;
             // A thicker sandy cap and shaded lip, entirely inside the mask.
             // Freshly exposed rock also gets a bevel; deposited rubble stays bare.
             if (m.biome === "DESERT" && material !== 3 &&
-              top < cap + 5 && top < this.depth.left[sample] && top < this.depth.right[sample]) {
+              top < cap + 8 && top < this.depth.left[sample] && top < this.depth.right[sample]) {
               if (top < cap) {
-                const mix = .72 * (1 - top / (cap * 1.8));
-                color = color.map((c, k) => c * (1 - mix) + [241, 183, 101][k] * mix) as RGB;
-              } else color = color.map(c => c * .84) as RGB;
+                const mix = .80 * (1 - top / (cap * 1.8));
+                color = color.map((c, k) => c * (1 - mix) + [237 + tex * .3, 179 + tex * .3, 96 + tex * .2][k] * mix) as RGB;
+              } else color = color.map(c => c * (.76 + .24 * (top - cap) / 8)) as RGB;
             }
-            const light = this.depth.light(sample);
+            if (m.biome !== "DESERT" && material === 1 && !lawn &&
+              top < cap && top < this.depth.left[sample] && top < this.depth.right[sample]) {
+              const tuft = 9 + hash(Math.floor(x / 3), 911, m.seed) * 9 + Math.sin(x * .09) * 3;
+              if (top < tuft) color = m.biome === "SNOW" ? [216 + n * 22, 230 + n * 19, 237 + n * 16] :
+                [76 + n * 37 + tex * .12, 111 + n * 40 + tex * .15, 31 + n * 18];
+              else color = color.map(c => c * (.62 + .32 * Math.min(1, (top - tuft) / 10))) as RGB;
+            }
+            // Small embedded grains break up the cap without drawing false
+            // collision geometry above it. Material IDs remain untouched.
+            if (top < cap && top > 4 && material !== 3) {
+              const stone = hash(Math.floor(x / 11), Math.floor(y / 7), m.seed + 915);
+              if (stone > .90 && (x % 11 - 5) ** 2 / 15 + (y % 7 - 3) ** 2 / 5 < 1)
+                color = color.map(c => c * .67 + (y % 7 < 3 ? 42 : 9)) as RGB;
+            }
+            if (material === 1 && m.biome !== "DESERT" && top >= cap) {
+              const bed = Math.sin(y * .11 + Math.sin(x * .012) * 3);
+              color = color.map((c, k) => c + bed * [9, 6, 3][k]) as RGB;
+            }
+            let light = this.depth.light(sample) + this.landform.sample(x, y);
+            if (material === 1) for (const d of [2, 6, 12]) {
+              if (y >= d && m.cells[index - d] >= 16) { light -= 18 * (1 - d / 16); break; }
+            }
             color = [color[0] + light, color[1] + light * .92, color[2] + light * .78];
           }
           const i = (yy * 128 + xx) * 4;

@@ -7,18 +7,26 @@ in both modes.
 
 ## Implementation
 
-- Terrain depth uses world-anchored, irregular rock slabs and sediment bands,
-  with fine mineral texture over broad lit faces. Upper/left cut edges receive
-  light; lower/right edges shade inward over at most sixteen world units.
-  Desert shelves have thicker sand caps and shaded lips. All solid shading
-  stays inside the live material mask. Relief is cached at one world pixel,
-  while collision edges and texture retain the half-unit raster resolution.
-  Dirty tiles include their neighbors so excavation cannot leave stale lighting
-  across tile boundaries. New desert maps also have higher lower shoulders
-  and small terraces while retaining the full height range and asymmetric walls.
+- Terrain depth combines painted sandstone, granite and soil materials with
+  broad lighting inferred from the live ground mask. The paintings supply fine
+  cracks, mineral grain, roots, stones and geological shelves; overlapping edge
+  sampling avoids hard repeat seams. Materials stay anchored through excavation
+  and save restoration. Generated originals and exact prompts are retained in
+  `artwork/terrain-v3/`; runtime WebP materials live in `assets/modern/terrain-v3/`.
+  Upper/left cut edges receive light and lower/right edges shade inward over at
+  most thirty-two world units. A separate broad field shades whole cliff faces.
+  Surface bands have irregular sand/turf caps, embedded grains and shaded lips;
+  natural soil receives contact shadows underneath props. All solid shading
+  stays inside the live material mask at half-unit resolution. Dirty tiles
+  include their neighbors and every tile affected by changes to broad lighting,
+  including changes far from a new cut. New desert maps have broader aprons,
+  irregular upper benches and lower talus terraces, retaining their full height
+  range, safe starts and asymmetric walls.
 - Distant paintings receive a subtle biome-coloured haze. Natural cavities with
   both a roof and floor receive a soft, non-collidable rear shade, rebuilt from
   live cells after damage. Open overhangs and buildings do not create rear walls.
+  Shadow opacity extends underneath solid terrain before filtering so smoothing
+  cannot leave a bright gap along the cave contact edge.
   This is a procedural interpretation of the depth concept, not a reproduction
   of the generated painting. Existing painted backgrounds remain single images;
   there is no camera parallax or new independent middle-distance artwork.
@@ -37,8 +45,8 @@ in both modes.
   above sandy canyon floors. Heights are stratified from low terraces to tall
   mesas so every map has a visibly varied skyline. Each side has its own slope,
   cap width and ledge proportions, with small eroded shelves along the walls.
-  The desert material uses warm sedimentary beds, vertical fluting, interrupted
-  fissures and directional facet shading inspired by `assets/modern/desert.png`.
+  The desert material uses painted warm sedimentary beds, shelves, interrupted
+  fissures and directional face shading inspired by the terrain concepts.
   Sand highlights collect on shelves rather than outlining the cliff walls.
   Material details use stable world coordinates and remain aligned after damage
   and save restoration; the painted background remains non-collidable scenery.
@@ -90,6 +98,26 @@ in both modes.
   LAN uses its existing authoritative host simulation.
 
 ## Verification
+
+The cave-contact correction checks flat and sloping roofs at all four fine-grid
+alignments. Browser checks sample 36 first-air pixels after the same Canvas
+upsampling used by the renderer; each retains shadow opacity above 180/255.
+The six depth scenes also retain exact dirty/full-redraw and save-reload pixel
+comparisons. Captures and verification logs are in `test-browser/out/cave-contact/`.
+All 16,323 tests, the production build and eighty general render states passed
+for this correction in a frozen source snapshot.
+
+The painted-terrain update (2026-11-08) passed all 16,322 tests and the production
+build in a frozen checkout snapshot, plus all eighty general browser render
+states without crashes, blank frames or page errors. Its eighteen Modern integration scenarios
+passed, and six depth scenarios passed exact cached/full-redraw comparisons
+after excavation and settling, save-restored pixel equality, and render-only
+collision-mask preservation. New unit checks cover continuous painted repeats,
+broad-light invalidation far from a cut, and mesa shoulders at three map sizes.
+The browser driver also decodes all three production WebP materials explicitly.
+Inspected captures, integration logs and verified source hashes are retained in
+`test-browser/out/painted-depth/`. First terrain renders and damage updates do
+more work than cached frames; these checks are not a mobile performance claim.
 
 The terrain-depth update (2026-11-08) was checked in a frozen source snapshot
 while other work continued in the shared checkout. All 16,317 tests and the

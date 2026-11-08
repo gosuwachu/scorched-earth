@@ -6,6 +6,15 @@ skill/tool. These are game assets, not DOS captures or fidelity references.
 - `alpine.png`, `desert.png`, `swamp.png`, `cave.png`, `city.png`: distant,
   non-collidable environment paintings. Foreground geometry is generated separately.
 - `earth.png`: mineral/soil texture; the renderer tints it by material and biome.
+- `terrain-v3/{sandstone,granite,soil}.webp`: detailed painted material sections,
+  generated with the built-in imagegen tool. Originals and exact prompts are in
+  `artwork/terrain-v3/` (`provenance.json` and `soil-prompt.txt`). Runtime files
+  use WebP quality 93. `terrain_material.ts` blends overlapping image edges for
+  continuous repeats, with world-anchored sampling and seed offsets. Fine
+  fractures and mineral detail come from these paintings; live-mask lighting,
+  surface caps, contact shadows and destruction are rendered separately.
+  They never supply collision geometry. Original procedural colours remain the
+  fallback while artwork loads or if an asset is unavailable.
 - `buildings-v2/*.webp`: seventeen matching painted building sprites, including
   the cottage, skyscrapers, city landmarks, bridges and suburban houses. All use
   the same muted stone/slate palette, soft brush texture and upper-left light.

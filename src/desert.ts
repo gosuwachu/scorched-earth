@@ -13,14 +13,14 @@ export function desertMesas(seed: number) {
   const rotation = Math.floor(hash(0, 208, seed) * count);
   return Array.from({ length: count }, (_, i) => ({
     center: (i + .38 + hash(i, 202, seed) * .24) / count,
-    radius: (.35 + hash(i, 203, seed) * .12) / count,
+    radius: (.43 + hash(i, 203, seed) * .08) / count,
     // Stratified heights ensure a visible contrast even when random draws agree.
     rise: .40 + ((i + rotation) % count) / (count - 1) * .53 + hash(i, 204, seed) * .07,
     lean: (hash(i, 205, seed) - .5) * .38,
-    cap: .30 + hash(i, 209, seed) * .18,
-    leftWall: .09 + hash(i, 210, seed) * .10,
-    rightWall: .18 + hash(i, 211, seed) * .16,
-    ledge: .40 + hash(i, 212, seed) * .16,
+    cap: .26 + hash(i, 209, seed) * .12,
+    leftWall: .12 + hash(i, 210, seed) * .09,
+    rightWall: .25 + hash(i, 211, seed) * .10,
+    ledge: .42 + hash(i, 212, seed) * .15,
   }));
 }
 
@@ -34,27 +34,37 @@ export function desertProfile(width: number, seed: number): Float64Array {
       const side = u < mesa.center ? -1 : 1;
       const distance = Math.abs(u - mesa.center) / (mesa.radius * (1 + side * mesa.lean));
       const wall = side < 0 ? mesa.leftWall : mesa.rightWall;
-      // Small rock shelves break the walls; caps remain broad enough for tanks.
-      const erosion = (noise(u * 95, seed + i + 220) - .5) * .018;
-      const d = distance + erosion * Math.min(1, distance / mesa.cap);
       const shoulder = mesa.cap + wall;
+      // Erosion cuts small, uneven notches into cliff faces without disturbing
+      // the broad caps. Each side has independent weathering and terrace widths.
+      const erosion = (noise(u * 125, seed + i * 13 + (side < 0 ? 220 : 241)) - .5) * .022;
+      const d = distance + erosion * Math.min(1, distance / mesa.cap);
       let shape: number;
       if (d < mesa.cap) shape = 1;
       else if (d < shoulder) {
         const t = (d - mesa.cap) / wall;
-        shape = 1 - (1 - mesa.ledge) * (t * .80 + Math.floor(t * 4) / 4 * .20);
-      } else if (d < shoulder + .07) shape = mesa.ledge - (d - shoulder) * .35;
+        const tiers = side < 0 ? 3 : 4;
+        const tier = Math.min(tiers - 1, Math.floor(t * tiers));
+        const local = t * tiers - tier;
+        const shelf = .17 + hash(i * 11 + tier, side + 230, seed) * .16;
+        const descent = Math.max(0, (local - shelf) / (1 - shelf));
+        // Nearly level sandstone ledges alternate with steep eroded risers.
+        const stepped = (tier + descent) / tiers;
+        shape = 1 - (1 - mesa.ledge) * (t * .12 + stepped * .88);
+      } else if (d < shoulder + .10) shape = mesa.ledge - (d - shoulder) * .15;
       else {
-        const t = Math.max(0, (1 - d) / (1 - shoulder - .07));
-        // Eroded terraces give the lower face broad shoulders and intermediate
-        // firing shelves while preserving the original full height range.
+        const t = Math.max(0, (1 - d) / (1 - shoulder - .10));
         const terrace = Math.floor(t * 3) / 3;
-        shape = (mesa.ledge - .0245) * (t * .90 + terrace * .10);
+        const within = t * 3 - Math.floor(t * 3);
+        const rise = Math.min(1, within / .64) / 3;
+        // Wide talus aprons and secondary benches give the cliff a substantial
+        // base rather than extending a straight wall almost to the valley floor.
+        shape = (mesa.ledge - .015) * (t * .65 + (terrace + rise) * .35);
       }
       uplift = Math.max(uplift, shape * mesa.rise);
     }
-    const value = 1 - uplift + (noise(u * 17, seed + 206) - .5) * .025 +
-      (noise(u * 63, seed + 207) - .5) * .005;
+    const value = 1 - uplift + (noise(u * 17, seed + 206) - .5) * .018 +
+      (noise(u * 63, seed + 207) - .5) * .004;
     heights[x] = value; lo = Math.min(lo, value); hi = Math.max(hi, value);
   }
   const range = Math.max(1e-9, hi - lo);

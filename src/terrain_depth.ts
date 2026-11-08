@@ -2,7 +2,7 @@
  * random draws or original surface profile are needed, including after reload. */
 import { hash } from "./modern";
 
-export const DEPTH_REACH = 32;
+export const DEPTH_REACH = 64;
 const FAR = DEPTH_REACH + 1;
 
 /** A low resolution, non-collidable rear-wall shade below natural overhangs.
@@ -11,6 +11,7 @@ const FAR = DEPTH_REACH + 1;
 export function caveShade(cells: Uint8Array, fw: number, fh: number): Uint8ClampedArray {
   const w = Math.ceil(fw / 4), h = Math.ceil(fh / 4);
   const alpha = new Uint8ClampedArray(w * h);
+  const ground = new Uint8Array(w * h);
   const floors = new Int32Array(h);
   for (let x = 0; x < w; x++) {
     let floor = h + 1000;
@@ -22,17 +23,35 @@ export function caveShade(cells: Uint8Array, fw: number, fh: number): Uint8Clamp
     let roof = -1000;
     for (let y = 0; y < h; y++) {
       const material = cells[Math.min(fw - 1, x * 4) * fh + Math.min(fh - 1, y * 4)];
-      if (material > 0 && material < 16) roof = y;
+      if (material > 0 && material < 16) { roof = y; ground[y * w + x] = 1; }
       else if (!material && floors[y] - roof < 80) {
         alpha[y * w + x] = Math.max(0, 1 - (y - roof) / 48) * 205;
       }
     }
   }
+  // The terrain is composited over this backdrop. Extend the shadow underneath
+  // solid ground before filtering: otherwise transparent roof samples dilute
+  // the first air pixels, leaving a bright seam after the 4x upsample. Cover
+  // the mouth filter's four neighbors plus one interpolation sample sideways,
+  // and two samples vertically for roofs between coarse sampling positions.
+  const horizontal = new Uint8ClampedArray(alpha.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let value = 0;
+    for (let dx = -5; dx <= 5; dx++) value = Math.max(value, alpha[y * w + Math.max(0, Math.min(w - 1, x + dx))]);
+    horizontal[y * w + x] = value;
+  }
+  const padded = alpha.slice();
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!ground[y * w + x]) continue;
+    let value = 0;
+    for (let dy = -2; dy <= 2; dy++) value = Math.max(value, horizontal[Math.max(0, Math.min(h - 1, y + dy)) * w + x]);
+    padded[y * w + x] = value;
+  }
   // Feather the edge at cave mouths; no hard vertical curtain below a lip.
   const result = new Uint8ClampedArray(alpha.length);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     let sum = 0;
-    for (let dx = -4; dx <= 4; dx++) sum += alpha[y * w + Math.max(0, Math.min(w - 1, x + dx))];
+    for (let dx = -4; dx <= 4; dx++) sum += padded[y * w + Math.max(0, Math.min(w - 1, x + dx))];
     result[y * w + x] = sum / 9;
   }
   return result;
