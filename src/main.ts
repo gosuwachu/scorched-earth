@@ -830,7 +830,7 @@ export class App {
       // A starter loadout, granted once: normal shopping resumes after round one.
       for (const tank of gs.tanks as GameState["tanks"]) {
         for (const item of ITEMS) {
-          if (item.offensive && item.idx !== SLOT_BABY_MISSILE) tank.inventory[item.idx] = 1;
+          if (item.offensive && item.idx !== SLOT_BABY_MISSILE) tank.inventory[item.idx] = 10;
         }
       }
       if (gs.phase === SHOP) gs.begin_next_round();
@@ -915,10 +915,13 @@ export class App {
     } else if (action === "quick_game") {
       Object.assign(this.cfg, {
         TERRAIN_STYLE: "MODERN", ECONOMY_MODE: "COMEBACK", MAXROUNDS: 10,
-        MAXPLAYERS: 2, TEAM_MODE: "NONE", PLAY_MODE: "SEQUENTIAL",
+        MAXPLAYERS: 7, TEAM_MODE: "NONE", PLAY_MODE: "SEQUENTIAL",
         PLAY_ORDER: "ROUND-ROBIN", SCORING: "STANDARD",
       });
-      this._setup = [["Player 1", C.AI_HUMAN, 0, 0], ["Computer", C.AI_SHOOTER, 0, 1]];
+      this._setup = [["Player 1", C.AI_HUMAN, 0, 0]];
+      for (let i = 1; i <= 6; i++) {
+        this._setup.push([`Computer ${i}`, C.AI_SHOOTER, 0, i]);
+      }
       this._build_game(undefined, true);
     } else if (action === "save_changes") {
       // browser: persist the cfg body to localStorage (main.py writes scorch.cfg).

@@ -4,6 +4,7 @@ import * as C from "./constants";
 import masks from "./modern_masks.json";
 import { desertScenery } from "./desert_scenery";
 import { DesertLayers } from "./desert_layers";
+import { CaveLayers } from "./cave_layers";
 import { landmarkMasks } from "./landmark_masks";
 import { PAINTED_ART, buildingMasks, buildingAspect, paintedMasks, paintedAspect, paintedContains } from "./painted_sprites";
 import { PARK_PROPS, isParkProp, parkContains, type ParkProp } from "./city_parks";
@@ -134,6 +135,7 @@ export class ModernWorld {
     const layout = LAYOUTS.includes(options.TERRAIN_LAYOUT as Layout) ? options.TERRAIN_LAYOUT as Layout : layouts[Math.floor(hash(seed, 2) * layouts.length)];
     const m = new ModernWorld(w, h, seed, biome, layout);
     const desert = biome === "DESERT" && layout === "MOUNTAINS";
+    const caveLayers = biome === "SWAMP" && layout === "CAVE" ? new CaveLayers(w, h, seed) : null;
     const desertLayers = desert ? new DesertLayers(w, h, seed) : null;
     const ridges = layout === "CITY" || desert ? null : mountainProfile(m.fw, seed);
     const cliffs = layout === "CAVE" || (layout === "MOUNTAINS" && !desert);
@@ -144,20 +146,21 @@ export class ModernWorld {
       if (layout === "CITY") height = 0.68 + noise(u * 5, seed) * 0.17 + (noise(u * 13, seed + 1) - .5) * .035;
       // Taller cave ridges trade some headroom for deep gullies and cliffs.
       else if (layout === "CAVE") height = 0.38 + ridges![x] * 0.53;
-      const top = Math.floor(desertLayers ? desertLayers.surface(x / 2) * 2 : height * m.fh);
+      const top = Math.floor(caveLayers ? caveLayers.column(x / 2).surface * 2 : desertLayers ? desertLayers.surface(x / 2) * 2 : height * m.fh);
       m.surface[x] = top / 2;
       for (let y = top; y < m.fh; y++) m.cells[x * m.fh + y] = desertLayers
         ? desertLayers.sandContains(x / 2, y / 2) ? 1 : 2
+        : caveLayers ? y < caveLayers.column(x / 2).stoneTop * 2 ? 1 : 2
         : y - top > h * .16 ? 2 : 1;
       if (layout === "CAVE") {
-        const roof = Math.floor((0.12 + noise(u * 13, seed + 4) * 0.065 + Math.pow(noise(u * 39, seed + 5), 9) * 0.12) * m.fh);
+        const roof = caveLayers ? Math.floor(caveLayers.column(x / 2).roof * 2) : Math.floor((0.12 + noise(u * 13, seed + 4) * 0.065 + Math.pow(noise(u * 39, seed + 5), 9) * 0.12) * m.fh);
         m.cells.fill(2, x * m.fh, x * m.fh + roof);
       }
     }
     if (layout === "MOUNTAINS" && (biome === "GRASS" || biome === "SNOW")) {
       m.carveAlpineCaves();
     }
-    if (cliffs) {
+    if (cliffs && !caveLayers) {
       m.addCliffOverhangs();
       // Eroded lips can release small fragments; settle these before play.
       m.settle();
@@ -343,6 +346,9 @@ export class ModernWorld {
       const px = Math.round(x + rnd * 15);
       let kind: PropKind = this.biome === "DESERT" ? "cactus" : this.biome === "SWAMP" ? "tree" : "pine";
       if (n % 7 === 3 && !(this.biome === "DESERT" && this.layout === "MOUNTAINS")) kind = "house";
+      // The swamp cavern foreground is reeds and earth banks; distant trees
+      // belong to its painted backdrop, leaving the central chamber open.
+      if (this.biome === "SWAMP" && this.layout === "CAVE" && kind === "tree") continue;
       const aspect = paintedAspect(kind);
       const h = kind === "house" ? 45 / (aspect ?? (45 / 38)) : 40 + rnd * 40;
       const w = aspect ? h * aspect : kind === "house" ? 45 : 26 + rnd * 14;

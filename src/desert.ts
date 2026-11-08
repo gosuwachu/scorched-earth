@@ -85,4 +85,4 @@ export function sandstoneColor(x: number, y: number, seed: number, grain: number
     49 + bed * 18 + pale * 18 + light * .59];
 }
 
-export const DESERT_MATERIALS = ["desert-sand", "desert-cliff", "desert-beds", "desert-deep-v2"] as const;
+export const DESERT_MATERIALS = ["desert-sand-v3", "desert-cliff-v3", "desert-beds-v3", "desert-deep-v3"] as const;

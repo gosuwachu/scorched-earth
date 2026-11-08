@@ -569,8 +569,9 @@ export class GameState {
   }
 
   _place_tanks(): void {
-    // Drop tanks onto the terrain, min 15px spacing (FUN_33a1_0a43).
+    // Classic retains the 15px spacing from FUN_33a1_0a43.
     const n = this.tanks.length;
+    if (n === 0) return;
     const margin = 30;
     const usable = this.w - 2 * margin;
     const xs: number[] = [];
@@ -579,13 +580,22 @@ export class GameState {
       const jitter = this.rng.pick(20) - 10;
       xs.push(Math.max(margin, Math.min(this.w - margin, base + jitter)));
     }
-    // Classic uses the DOS 15px spacing; Modern reserves its wider hull.
-    const spacing = this.terrain.modern ? this.tanks[0].half_width * 2 + 3 : 15;
+    // Modern seat searches may move tanks toward the same cave or roof.
+    // Keep at least 65% of an evenly divided slot between centres, plus
+    // breathing room around the hull when the map has enough space.
+    const spacing = this.terrain.modern
+      ? Math.min(Math.floor(usable / Math.max(1, n - 1)),
+        Math.max(this.tanks[0].half_width * 2 + 18, Math.floor(usable / n * .65)))
+      : 15;
     xs.sort((a, b) => a - b);
     for (let i = 1; i < n; i++) {
       if (xs[i] - xs[i - 1] < spacing) {
         xs[i] = Math.min(this.w - margin, xs[i - 1] + spacing);
       }
+    }
+    if (this.terrain.modern) {
+      // If the forward pass reaches the right margin, make room to its left.
+      for (let i = n - 2; i >= 0; i--) xs[i] = Math.min(xs[i], xs[i + 1] - spacing);
     }
     if (this.terrain.modern?.layout === "CITY") {
       const original = xs.slice();

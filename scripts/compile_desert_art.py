@@ -17,3 +17,12 @@ for name,box in [('shrub',(0,0,768,512)),('rock',(768,0,1536,512)),('adobe',(0,5
 # The bottom layer now uses one full-frame painting rather than an atlas strip.
 Image.open("artwork/desert-v2/bedrock.png").save(
     "public/assets/modern/terrain-v3/desert-deep-v2.webp", quality=93)
+
+# Current full-frame materials. Preserve native dimensions; never crop strips
+# or upscale the generated paintings to manufacture additional resolution.
+for name in ("sand", "cliff", "beds", "deep"):
+    source = Image.open(Path("artwork/desert-v3") / (name + ".png"))
+    source.save(
+        Path("public/assets/modern/terrain-v3") / ("desert-" + name + "-v3.webp"),
+        quality=93,
+    )

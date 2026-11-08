@@ -951,7 +951,7 @@ export class Renderer {
       const i = Math.max(0, Math.min(pth.length - 1, Math.trunc(cd.i)));
       [x, y] = pth[i];
       if (!state.terrain.modern) this._spritesDrawTank(surf, x, y, t, col);
-      this._draw_parachute(surf, x, y - hw, state.terrain.modern ? 3 : 2);
+      if (!state.terrain.modern) this._draw_parachute(surf, x, y - hw, 2);
       return;
     }
     if (!state.terrain.modern) this._spritesDrawTank(surf, x, y, t, col);

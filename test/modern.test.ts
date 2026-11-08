@@ -92,6 +92,27 @@ describe("Modern terrain", () => {
       expect(gs.terrain.modern!.props.every(p => p.kind !== "car" && p.kind !== "animal")).toBe(true);
     }
   });
+  for (const layout of LAYOUTS) it(`${layout}: spreads starts apart even after terrain seat searches`, () => {
+    // Explicit minimum centre gaps for sparse, crowded and narrow maps.
+    for (const [w, h, players, gap] of [[1024, 768, 2, 313], [1024, 768, 4, 156],
+      [1024, 768, 10, 62], [640, 480, 10, 42], [320, 240, 10, 28]]) {
+      for (const seed of [1, 19, 313]) {
+        const gs = createGameState(Object.assign(config(), { TERRAIN_LAYOUT: layout }), w, h, seed);
+        for (let i = 0; i < players; i++) gs.add_player(`Tank${i}`, 0, 0, i);
+        gs.new_game();
+        const xs = gs.tanks.map(t => t.x).sort((a, b) => a - b);
+        expect(xs[0]).toBeGreaterThanOrEqual(30);
+        expect(xs.at(-1)).toBeLessThanOrEqual(w - 30);
+        for (let i = 1; i < xs.length; i++) {
+          expect(xs[i] - xs[i - 1], `${w}/${players}/${seed}`).toBeGreaterThanOrEqual(gap);
+        }
+        for (const t of gs.tanks) {
+          expect(gs.terrain.is_supported(t.x, t.y, t.half_width)).toBe(true);
+          expect(gs.terrain.is_dirt(t.x, t.y - 6)).toBe(false);
+        }
+      }
+    }
+  });
   it("builds distinct city districts with tall centres, low suburbs and ground starts", () => {
     for (const seed of [1, 2, 19, 71]) {
       const gs = createGameState(Object.assign(config(), { TERRAIN_LAYOUT: "CITY" }), 1024, 768, seed);

@@ -413,11 +413,11 @@ try {
       economy: app.cfg.ECONOMY_MODE, rounds: app.cfg.MAXROUNDS,
       modern: !!gs.terrain.modern, comeback: !!gs.comeback,
       players: gs.tanks.map(t => t.ai_class), round: gs.round_index,
-      stocked: gs.tanks.every(t => ITEMS.filter(i => i.offensive && i.idx !== SLOT_BABY_MISSILE).every(i => t.inventory[i.idx] === 1)),
+      stocked: gs.tanks.every(t => ITEMS.filter(i => i.offensive && i.idx !== SLOT_BABY_MISSILE).every(i => t.inventory[i.idx] === 10)),
     };
   });
   assert.deepEqual(quick, { screen: "GameScreen", style: "MODERN", economy: "COMEBACK", rounds: 10,
-    modern: true, comeback: true, players: [0, 2], round: 0, stocked: true });
+    modern: true, comeback: true, players: [0, 2, 2, 2, 2, 2, 2], round: 0, stocked: true });
   assert.equal(await page.locator("dialog[open]").count(), 0);
   await shot("quick-game");
   assert.deepEqual(errors, []);

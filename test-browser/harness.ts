@@ -194,6 +194,20 @@ function trailDemo(sky: string, age = 0): StateMeta {
   return { sky, age, baseline, fresh, faded };
 }
 
+function parachuteDemo(modern: boolean): StateMeta {
+  const gs = buildState(71, { TERRAIN_STYLE: modern ? "MODERN" : "CLASSIC", TERRAIN_BIOME: "DESERT", TERRAIN_LAYOUT: "MOUNTAINS" });
+  driveToAim(gs);
+  const tank = gs.tanks[0];
+  const path: Array<[number, number]> = [[400, 180], [401, 182], [402, 184]];
+  gs._start_chute_descent(tank, path);
+  const before = JSON.stringify(tank);
+  const surf = newSurf();
+  freshRenderer(gs).render(surf, gs, 0);
+  checkTrail(JSON.stringify(tank) === before, "Parachute artwork changed tank state");
+  blit(surf);
+  return { modern, descent: path[0] };
+}
+
 function modernRocketDemo(age = 0): StateMeta {
   const gs = buildState(71, { TERRAIN_STYLE: "MODERN", TERRAIN_BIOME: "DESERT", TERRAIN_LAYOUT: "MOUNTAINS", TRACE: "OFF", BOMB_ICON: "SMALL" });
   driveToAim(gs);
@@ -319,6 +333,8 @@ function sweepSetters(panel: { widgets: unknown[] }): void {
 // renderer for the whole game; a fresh renderer per frame would re-seed the sky LUT
 // every frame and is NOT how the app animates).
 const STATES: { [name: string]: () => StateMeta } = {
+  parachute_modern: () => parachuteDemo(true),
+  parachute_classic: () => parachuteDemo(false),
   ...laserSightStates(buildTrailState, freshRenderer, blit),
   ...projectileIndicatorStates(buildTrailState, freshRenderer, blit),
   trail_modern_rocket: () => modernRocketDemo(),

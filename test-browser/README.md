@@ -169,6 +169,11 @@ Modern missiles use a velocity-oriented rocket with warm exhaust and a soft,
 and expiry. The render checks verify visible artwork and unchanged velocity/TRACE
 state. Classic mode retains its 150 ms streak; these are browser artwork checks.
 
+`parachute_modern.png` and `parachute_classic.png` capture a controlled descent
+through each renderer and check that drawing preserves tank state. Modern uses
+a smooth shaded canopy and fine rigging; Classic retains its pixel artwork.
+These are browser artwork checks, not DOS comparisons.
+
 Modern tank artwork checks run with `node test-browser/tanks.mjs http://127.0.0.1:4188`.
 The driver writes `test-browser/out/tank-designs.png` with all seven designs at
 30, 90 and 150 degrees, including small battle-size samples. It also checks the

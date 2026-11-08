@@ -1,5 +1,58 @@
 /** Resolution-independent illustrated artwork shared by battle and HTML previews. */
 export type ArtColor = readonly number[];
+
+/** Smooth fabric and rigging, painted on the modern renderer's full-size frame. */
+export function drawModernParachute(ctx: CanvasRenderingContext2D, x: number, y: number,
+  tankWidth: number): void {
+  ctx.save(); ctx.translate(x, y); ctx.scale(tankWidth / 26, tankWidth / 26);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  // Two load-bearing risers attach to the hull, behind the turret and barrel.
+  const ribs = [-30, -19, -7, 7, 19, 30];
+  for (const edge of ribs) {
+    const rimY = -34 - 3 * (1 - Math.abs(edge) / 30);
+    ctx.beginPath(); ctx.moveTo(edge, rimY); ctx.lineTo(edge < 0 ? -9 : 9, -6);
+    ctx.strokeStyle = "rgba(24,43,52,.65)"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = "#e9e5d2"; ctx.lineWidth = .65; ctx.stroke();
+  }
+  const canopy = () => {
+    ctx.beginPath(); ctx.moveTo(-30, -34);
+    ctx.bezierCurveTo(-29, -66, 29, -66, 30, -34);
+    for (let i = ribs.length - 1; i > 0; i--) {
+      const right = ribs[i], left = ribs[i - 1];
+      const leftY = -34 - 3 * (1 - Math.abs(left) / 30);
+      ctx.quadraticCurveTo((left + right) / 2, -31, left, leftY);
+    }
+    ctx.closePath();
+  };
+  const fabric = ctx.createLinearGradient(-14, -59, 13, -31);
+  fabric.addColorStop(0, "#fff9e6"); fabric.addColorStop(.38, "#e9e7d5");
+  fabric.addColorStop(.75, "#b6c2b8"); fabric.addColorStop(1, "#738f8b");
+  canopy(); ctx.fillStyle = fabric; ctx.fill();
+  ctx.save(); ctx.clip();
+  // Curved gores give the inflated canopy volume without a pixel sprite.
+  for (let i = 0; i < ribs.length - 1; i++) {
+    const left = ribs[i], right = ribs[i + 1];
+    ctx.beginPath(); ctx.moveTo(0, -58);
+    ctx.bezierCurveTo(left * .65, -57, left, -47, left, -34);
+    ctx.lineTo(right, -34);
+    ctx.bezierCurveTo(right, -47, right * .65, -57, 0, -58);
+    ctx.closePath();
+    ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,239,.16)" : "rgba(43,83,83,.15)";
+    ctx.fill();
+  }
+  for (const edge of ribs.slice(1, -1)) {
+    ctx.beginPath(); ctx.moveTo(0, -58);
+    ctx.bezierCurveTo(edge * .65, -57, edge, -47, edge, -35);
+    ctx.strokeStyle = "rgba(59,87,85,.38)"; ctx.lineWidth = .65; ctx.stroke();
+  }
+  ctx.restore();
+  canopy(); ctx.strokeStyle = "#526e70"; ctx.lineWidth = .8; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-25, -45);
+  ctx.bezierCurveTo(-18, -58, 4, -61, 19, -50);
+  ctx.strokeStyle = "rgba(255,255,241,.65)"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+}
+
 function shade(color: ArtColor, amount: number): string {
   return `rgb(${color.slice(0, 3).map(v => Math.max(0, Math.min(255, v + amount))).join(",")})`;
 }
