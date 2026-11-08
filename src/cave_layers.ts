@@ -43,10 +43,17 @@ export class CaveLayers {
     this.columns = Array.from({ length: width * 2 }, (_, x) => {
       const u = x / (width * 2);
       const banks = .135 * (1 - smooth(.15, .24, u)) + .115 * smooth(.78, .87, u);
-      // Rolling hummocks and smaller uneven shoulders break up the banks
-      // without turning the open cavern floor back into mountain peaks.
-      const surface = height * (.707 - banks + (noise(u * 11, 805) - .5) * .065 +
-        (noise(u * 29, 806) - .5) * .018 + (noise(u * 71, 816) - .5) * .004);
+      // Two broad, seeded summits divide the chamber into hills and valleys.
+      // Smaller hummocks roughen their shoulders while leaving firing headroom.
+      let mountains = 0;
+      for (let peak = 0; peak < 2; peak++) {
+        const center = .28 + peak * .38 + (hash(peak, 817, seed) - .5) * .10;
+        const radius = .14 + hash(peak, 818, seed) * .05;
+        mountains += smooth(0, 1, 1 - Math.abs(u - center) / radius) *
+          (.20 + hash(peak, 819, seed) * .045);
+      }
+      const surface = height * (.707 - banks - mountains + (noise(u * 11, 805) - .5) * .09 +
+        (noise(u * 29, 806) - .5) * .03 + (noise(u * 71, 816) - .5) * .007);
       const earthShelf = surface + height * (.09 + noise(u * 12, 807) * .022);
       const stoneTop = height * (.87 + (noise(u * 8, 808) - .5) * .035) - banks * height * .24;
       const stoneBottom = stoneTop + height * (.043 + noise(u * 16, 809) * .015);

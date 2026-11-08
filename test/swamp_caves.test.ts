@@ -20,11 +20,12 @@ it("gives swamp mountains cliff shelves and caverns broad stable earth banks wit
       }
       if (layout === "MOUNTAINS") expect(shelves, `${w}/${layout}/${seed}`).toBeGreaterThan(w * .06);
       else {
-        // The concept calls for broad earth banks beneath an open chamber,
-        // rather than the previous mountain peaks inside a cave ceiling.
+        // Interior mountains must rise above valleys, not just the edge banks.
         const relief = Math.max(...m.surface) - Math.min(...m.surface);
-        expect(relief).toBeGreaterThan(h * .1);
-        expect(relief).toBeLessThan(h * .25);
+        expect(relief).toBeGreaterThan(h * .20);
+        expect(relief).toBeLessThan(h * .36);
+        const interior = m.surface.slice(Math.floor(m.fw * .2), Math.floor(m.fw * .8));
+        expect(Math.max(...interior) - Math.min(...interior)).toBeGreaterThan(h * .18);
         for (const x of [0, Math.floor(m.fw / 2), m.fw - 1]) {
           const top = Math.ceil(m.surface[x] * 2);
           let bottom = top;
