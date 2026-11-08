@@ -10,9 +10,11 @@ available; set `CHROMIUM_PATH` to an existing browser executable if necessary.
 | --- | --- | --- |
 | Shield physics, colors or lifecycle | `shields.mjs` | Flight outcomes, strength/fade pixels, and successive screenshots |
 | Weapon effects or terrain interaction | `weapons.mjs` | Effect progression, completion, terrain settling, and screenshots |
+| Modern tank designs | `tanks.mjs` | Seven distinct same-colour designs at battle/preview sizes and three aiming angles |
 | Canvas rendering | `run.mjs` | Render states, nonblank canvas, page errors, and render coverage |
 | Menus, input or equipment controls | `ui.mjs` | Real DOM interaction, focus, responsive layout, and control behavior |
 | Modern terrain and artwork | `modern.mjs` | Six biome/layout scenes, extra mountain/city seeds, dense blocks and rooftop starts, visible missile/nuke blasts, destruction, save masks and timings |
+| Terrain depth and lighting | `terrain_depth.mjs` | Six scenes; identical cached/full redraws after tile-boundary excavation and settling, identical restored-save rendering, unchanged collision masks during rendering, captures and timings |
 | Painted scenery and city districts | `city_landmarks.mjs` | Twenty building/vegetation specimens, preserved proportions, connected silhouettes, six ten-player district maps, planted playgrounds and a sports park, mixed ground/roof starts and height contrast |
 | Alpine caves and overhangs | `alpine.mjs` | Eight grassy/snowy scenes, open cave space, firing, destruction and save roundtrips |
 | Modern particle explosions | `modern_blast.mjs` | Growing crater visibility, moving/repeatable particles, plasma terrain preservation and unchanged collision cells |
@@ -166,3 +168,10 @@ Modern missiles use a velocity-oriented rocket with warm exhaust and a soft,
 `trail_modern_expired.png` cover both flight directions, residue after removal,
 and expiry. The render checks verify visible artwork and unchanged velocity/TRACE
 state. Classic mode retains its 150 ms streak; these are browser artwork checks.
+
+Modern tank artwork checks run with `node test-browser/tanks.mjs http://127.0.0.1:4188`.
+The driver writes `test-browser/out/tank-designs.png` with all seven designs at
+30, 90 and 150 degrees, including small battle-size samples. It also checks the
+seven picker previews and clicks each human-selectable design, capturing
+`test-browser/out/tank-picker.png`. These are browser
+artwork checks, not DOS comparisons; appearance IDs and gameplay rules are unchanged.

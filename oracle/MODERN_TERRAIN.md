@@ -7,6 +7,22 @@ in both modes.
 
 ## Implementation
 
+- Terrain depth uses world-anchored, irregular rock slabs and sediment bands,
+  with fine mineral texture over broad lit faces. Upper/left cut edges receive
+  light; lower/right edges shade inward over at most sixteen world units.
+  Desert shelves have thicker sand caps and shaded lips. All solid shading
+  stays inside the live material mask. Relief is cached at one world pixel,
+  while collision edges and texture retain the half-unit raster resolution.
+  Dirty tiles include their neighbors so excavation cannot leave stale lighting
+  across tile boundaries. New desert maps also have higher lower shoulders
+  and small terraces while retaining the full height range and asymmetric walls.
+- Distant paintings receive a subtle biome-coloured haze. Natural cavities with
+  both a roof and floor receive a soft, non-collidable rear shade, rebuilt from
+  live cells after damage. Open overhangs and buildings do not create rear walls.
+  This is a procedural interpretation of the depth concept, not a reproduction
+  of the generated painting. Existing painted backgrounds remain single images;
+  there is no camera parallax or new independent middle-distance artwork.
+
 - Terrain and its presentation use two samples per world unit on each axis:
   a 1024×768 game has a 2048×1536 material mask. Generation, circular craters,
   collision sampling and saved damage use this mask. A conservative world-pixel
@@ -74,6 +90,19 @@ in both modes.
   LAN uses its existing authoritative host simulation.
 
 ## Verification
+
+The terrain-depth update (2026-11-08) was checked in a frozen source snapshot
+while other work continued in the shared checkout. All 16,317 tests and the
+production build passed, along with all eighty general browser render states.
+The eighteen Modern biome/weapon/seed scenarios passed,
+including normal firing, destruction and save-mask checks. The additional depth
+driver checks six scenes (desert seeds 19/71, grass 19, snow 71, swamp cave 71,
+city 19): cached frames match repeated frames, dirty-tile rendering after
+excavation/settling matches a fresh renderer, restored saves render identically,
+and rendering leaves collision cells unchanged. Representative intact and
+damaged captures were inspected. Captures, logs, and source hashes are in
+`test-browser/out/terrain-depth/`. These are browser regression checks, not
+DOS fidelity evidence or proof of matching the generated concept art.
 
 The desert geology update (2026-11-08) checks visibly separated mesa heights
 and asymmetric slopes across six seeds, alongside the retained desert placement,

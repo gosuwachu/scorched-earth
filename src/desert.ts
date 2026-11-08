@@ -1,6 +1,7 @@
 /** Browser-only sandstone geology. Dimensions are relative to the map; the
  * material shader uses fixed world coordinates so damage/save reloads agree. */
 import { hash } from "./modern";
+import { rockRelief } from "./terrain_depth";
 
 function noise(x: number, seed: number): number {
   const a = Math.floor(x), t = x - a, s = t * t * (3 - 2 * t);
@@ -19,7 +20,7 @@ export function desertMesas(seed: number) {
     cap: .30 + hash(i, 209, seed) * .18,
     leftWall: .09 + hash(i, 210, seed) * .10,
     rightWall: .18 + hash(i, 211, seed) * .16,
-    ledge: .25 + hash(i, 212, seed) * .13,
+    ledge: .40 + hash(i, 212, seed) * .16,
   }));
 }
 
@@ -43,7 +44,13 @@ export function desertProfile(width: number, seed: number): Float64Array {
         const t = (d - mesa.cap) / wall;
         shape = 1 - (1 - mesa.ledge) * (t * .80 + Math.floor(t * 4) / 4 * .20);
       } else if (d < shoulder + .07) shape = mesa.ledge - (d - shoulder) * .35;
-      else shape = Math.max(0, (mesa.ledge - .0245) * (1 - d) / (1 - shoulder - .07));
+      else {
+        const t = Math.max(0, (1 - d) / (1 - shoulder - .07));
+        // Eroded terraces give the lower face broad shoulders and intermediate
+        // firing shelves while preserving the original full height range.
+        const terrace = Math.floor(t * 3) / 3;
+        shape = (mesa.ledge - .0245) * (t * .90 + terrace * .10);
+      }
       uplift = Math.max(uplift, shape * mesa.rise);
     }
     const value = 1 - uplift + (noise(u * 17, seed + 206) - .5) * .025 +
@@ -55,32 +62,15 @@ export function desertProfile(width: number, seed: number): Float64Array {
   return heights;
 }
 
-/** Warm sedimentary beds, fractured vertical faces and fine erosion. Keep the
- * generic soil photograph subtle: sandstone should read as long strata and
- * columns, rather than the same chunky texture pasted across every cliff. */
-export function sandstoneColor(x: number, y: number, seed: number, grain: number, texture: number): [number, number, number] {
-  const bedY = y + Math.sin(x * .012) * 4 + noise(x / 75, seed + 701) * 14 +
-    noise(x / 19, seed + 708) * 2 + noise(y / 95, seed + 709) * 16;
-  const bed = Math.floor(bedY / 31), within = bedY / 31 - bed;
-  const layer = noise(bedY / 43, seed + 702);
-  const meander = Math.sin(y * .017 + noise(x / 90, seed) * 3) * 2;
-  const u = (x + meander) / 26;
-  const row = Math.floor(y / 105), fraction = y / 105 - row;
-  const blend = fraction * fraction * (3 - 2 * fraction);
-  const face = (offset: number) => noise(u + offset, seed + 703 + row * 53) * (1 - blend) +
-    noise(u + offset, seed + 703 + (row + 1) * 53) * blend;
-  const flute = face(0), broad = noise(x / 85 + noise(y / 140, seed + 712) * .3, seed + 704);
-  const facet = Math.floor(flute * 5) / 5;
-  const lighting = (face(.13) - face(-.13)) * 105;
-  let light = (facet - .45) * 47 + (broad - .5) * 32 + lighting + texture * .40 + (grain - .5) * 6;
-  // Narrow bedding seams with a sunlit lower lip, broken by weathering.
-  if (hash(bed, 710, seed) > .63) {
-    if (within < .035 && flute > .32) light -= 15;
-    else if (within < .08) light += 8;
-  }
-  const joint = (x + meander + noise(y / 95, seed + 711) * 8) / 39;
-  if (joint - Math.floor(joint) < .025 && hash(Math.floor(joint), Math.floor(y / 113), seed) > .55) light -= 24;
-  const fine = Math.sin(bedY * 1.5 + flute * 4) * 2;
-  return [173 + layer * 31 + light + fine, 85 + layer * 34 + light * .82 + fine,
-    52 + layer * 25 + light * .66 + fine];
+/** World-anchored sandstone slabs. Bedding colour and broad relief carry the
+ * form; the source photograph supplies only fine mineral variation. */
+export function sandstoneColor(x: number, y: number, seed: number, grain: number, texture: number,
+  relief = rockRelief(x, y, seed)): [number, number, number] {
+  const bed = hash(relief.bed, 702, seed);
+  const pale = bed > .70 ? 1 : 0;
+  const striae = Math.sin((y + Math.sin(x * .021) * 6) * .72) * 2;
+  const light = relief.light + texture * .42 + striae + (grain - .5) * 5;
+  return [181 + bed * 26 + pale * 12 + light,
+    88 + bed * 25 + pale * 29 + light * .82,
+    49 + bed * 18 + pale * 18 + light * .59];
 }

@@ -78,6 +78,7 @@ const browserDefaults: Record<string, number | string> = {
   FLY_SOUND: "POS",
   ELASTIC: "RUBBER",
   HOSTILE_ENVIRONMENT: "OFF",
+  EXPLOSION_SCALE: "LARGE",
   INITIAL_CASH: 10000,
 };
 // Pin legacy parser/serializer scenarios to their original input configuration.

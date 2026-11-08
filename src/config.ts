@@ -338,7 +338,7 @@ export class Config {
   HOSTILE_ENVIRONMENT: string = "OFF";
   TUNNELLING: string = "ON"; // manual default; saved OFF still wins (binary no-cfg default was OFF)
   USELESS_ITEMS: string = "ON"; // binary no-cfg default (FUN_22a5_0005.c:600; manual says OFF)
-  EXPLOSION_SCALE: string = "NORMAL";
+  EXPLOSION_SCALE: string = "LARGE";
   // economy
   INITIAL_CASH: number = 10000; // $0-$1,000,000
   INTEREST_RATE: number = 0.05;

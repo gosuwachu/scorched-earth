@@ -7,49 +7,91 @@ function shade(color: ArtColor, amount: number): string {
 export function modernBarrel(design = 0) {
   return { pivotY: -8.5, length: 16.2 + (design % 7) % 3 };
 }
+// Browser artwork only: design IDs retain their existing mobility and weapon rules.
+// Silhouettes are deliberately different even when painted the same team colour.
+const TANK_DESIGNS = [
+  { hull: [[-12,-5],[-9,-9],[8,-9],[12,-5]], turret: [-5.8,-14,12,7,3.5], gear: "tracks", wheels: 6 }, // domed howitzer
+  { hull: [[-13,-5],[-10,-10],[7,-10],[13,-5]], turret: [-8,-13,15,5,0.6], gear: "tracks", wheels: 5 }, // flat heavy tank
+  { hull: [[-12,-4],[-8,-7],[-3,-7],[-3,-10],[3,-10],[5,-5],[12,-4]], turret: [-3,-13,6,6,0.7], gear: "wheels", wheels: 2 }, // field artillery
+  { hull: [[-12,-5],[-9,-9],[5,-9],[12,-6],[12,-4],[-12,-4]], turret: [-5,-13,10,6,2], gear: "wheels", wheels: 3 }, // armoured car
+  { hull: [[-13,-5],[-10,-8],[10,-8],[13,-5]], turret: [-9,-13,18,6,2], gear: "wheels", wheels: 4 }, // broad turret
+  { hull: [[-10,0],[-8,-5],[-5,-8],[5,-8],[8,-5],[10,0]], turret: [-4,-12,8,5,2], gear: "base", wheels: 0 }, // compact emplacement
+  { hull: [[-13,-5],[-10,-10],[9,-10],[13,-5]], turret: [-7,-14,14,7,0.5], gear: "tracks", wheels: 4 }, // stepped command tank
+] as const;
+
 export function drawModernTank(ctx: CanvasRenderingContext2D, x: number, y: number,
   width: number, color: ArtColor, angle: number, design = 0): void {
+  const variant = ((Math.trunc(design) % 7) + 7) % 7;
+  const model = TANK_DESIGNS[variant] ?? TANK_DESIGNS[0];
   ctx.save(); ctx.translate(x, y); ctx.scale(width / 26, width / 26);
-  const variant = design % 7;
-  // Ground contact, rubber tread, machined rollers and individually spaced links.
-  ctx.fillStyle = "rgba(8,18,23,.24)"; ctx.beginPath(); ctx.ellipse(0, 0.5, 14, 2, 0, 0, Math.PI * 2); ctx.fill();
-  const tracks = ctx.createLinearGradient(0, -7, 0, 0); tracks.addColorStop(0, "#536471"); tracks.addColorStop(0.5, "#16242c"); tracks.addColorStop(1, "#08141b");
-  ctx.fillStyle = tracks; ctx.strokeStyle = "#07121b"; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.roundRect(-13, -6, 26, 6, 3); ctx.fill(); ctx.stroke();
-  for (let i = 0; i < 6; i++) {
-    const px = -9.5 + i * 3.8;
-    ctx.fillStyle = "#80929a"; ctx.beginPath(); ctx.arc(px, -2.8, 1.8, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#263e4a"; ctx.beginPath(); ctx.arc(px, -2.8, 1.05, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#a6b6b9"; ctx.fillRect(px - .25, -3.1, .5, .5);
+  ctx.fillStyle = "rgba(8,18,23,.24)";
+  ctx.beginPath(); ctx.ellipse(0, .5, 14, 2, 0, 0, Math.PI * 2); ctx.fill();
+  const paint = ctx.createLinearGradient(-4, -15, 4, -3);
+  paint.addColorStop(0, shade(color, 65)); paint.addColorStop(.32, shade(color, 15));
+  paint.addColorStop(.7, shade(color, -18)); paint.addColorStop(1, shade(color, -65));
+  const plate = (left: number, top: number, w: number, h: number, radius: number) => {
+    ctx.fillStyle = paint; ctx.strokeStyle = shade(color, -80); ctx.lineWidth = .7;
+    ctx.beginPath(); ctx.roundRect(left, top, w, h, radius); ctx.fill(); ctx.stroke();
+  };
+  if (model.gear === "tracks") {
+    const tracks = ctx.createLinearGradient(0, -7, 0, 0);
+    tracks.addColorStop(0, "#536471"); tracks.addColorStop(.5, "#16242c"); tracks.addColorStop(1, "#08141b");
+    ctx.fillStyle = tracks; ctx.strokeStyle = "#07121b"; ctx.lineWidth = .8;
+    ctx.beginPath(); ctx.roundRect(-13, -6, 26, 6, 3); ctx.fill(); ctx.stroke();
   }
-  ctx.strokeStyle = "#9aa9a9"; ctx.lineWidth = 0.45;
-  for (let px = -10; px <= 10; px += 2) { ctx.beginPath(); ctx.moveTo(px, -0.2); ctx.lineTo(px + .5, -1); ctx.stroke(); }
-  const paint = ctx.createLinearGradient(-4, -13, 4, -3);
-  paint.addColorStop(0, shade(color, 65)); paint.addColorStop(.32, shade(color, 15)); paint.addColorStop(.7, shade(color, -18)); paint.addColorStop(1, shade(color, -65));
+  if (model.gear !== "base") {
+    for (let i = 0; i < model.wheels; i++) {
+      const px = -9.5 + i * 19 / (model.wheels - 1);
+      const radius = model.gear === "wheels" ? (variant === 2 ? 3.8 : 2.9) : 1.9;
+      ctx.fillStyle = "#101e28"; ctx.beginPath(); ctx.arc(px, -radius, radius, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#80929a"; ctx.beginPath(); ctx.arc(px, -radius, radius * .63, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#263e4a"; ctx.beginPath(); ctx.arc(px, -radius, radius * .3, 0, Math.PI * 2); ctx.fill();
+    }
+  } else {
+    plate(-12, -2, 24, 2, .4);
+  }
+  if (model.gear === "tracks") {
+    ctx.strokeStyle = "#9aa9a9"; ctx.lineWidth = .45;
+    for (let px = -10; px <= 10; px += 2) {
+      ctx.beginPath(); ctx.moveTo(px, -.2); ctx.lineTo(px + .5, -1); ctx.stroke();
+    }
+  }
   ctx.fillStyle = paint; ctx.strokeStyle = shade(color, -80); ctx.lineWidth = .7;
-  ctx.beginPath(); ctx.moveTo(-12, -5.4); ctx.lineTo(-9, -9); ctx.lineTo(8, -9); ctx.lineTo(12.5, -5.4); ctx.closePath(); ctx.fill(); ctx.stroke();
-  // A matte identification plate keeps the assigned team colour unambiguous
-  // alongside the shaded armour, including in small controller previews.
-  ctx.fillStyle = shade(color, 0); ctx.fillRect(-7.5, -7.8, 6, 1.7);
-  ctx.strokeStyle = shade(color, 65); ctx.lineWidth = .6;
-  ctx.beginPath(); ctx.moveTo(-8, -8.3); ctx.lineTo(7, -8.3); ctx.stroke();
-  for (let px = -8; px <= 8; px += 4) { ctx.fillStyle = "#c6dae0"; ctx.beginPath(); ctx.arc(px, -6.2, .35, 0, Math.PI * 2); ctx.fill(); }
+  ctx.beginPath(); model.hull.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // A solid identification plate preserves the assigned player colour.
+  ctx.fillStyle = shade(color, 0); ctx.fillRect(-4, -6.5, 7, 1.5);
+  if (variant === 1 || variant === 6) {
+    // Large side armour panels distinguish heavy tracked chassis at battle scale.
+    for (let px = -11; px < 10; px += 5.5) plate(px, -6.8, 4.8, 2.8, .3);
+  }
   const geometry = modernBarrel(design);
   ctx.save(); ctx.translate(0, geometry.pivotY); ctx.rotate(-angle * Math.PI / 180);
-  const barrel = ctx.createLinearGradient(0, -1.3, 0, 1.3); barrel.addColorStop(0, shade(color, 95)); barrel.addColorStop(.4, shade(color, 15)); barrel.addColorStop(1, shade(color, -65));
+  const barrel = ctx.createLinearGradient(0, -1.3, 0, 1.3);
+  barrel.addColorStop(0, shade(color, 95)); barrel.addColorStop(.4, shade(color, 15)); barrel.addColorStop(1, shade(color, -65));
   ctx.fillStyle = barrel; ctx.strokeStyle = shade(color, -75); ctx.lineWidth = .55;
   ctx.beginPath(); ctx.roundRect(1, -1.2, geometry.length - 1.2, 2.4, .5); ctx.fill(); ctx.stroke();
   ctx.fillStyle = "#15313b"; ctx.fillRect(geometry.length - 2.2, -1.35, 2.2, 2.7);
   ctx.fillStyle = shade(color, 55); ctx.fillRect(geometry.length - 2.2, -1.35, 2.2, .6);
   ctx.restore();
-  ctx.fillStyle = paint; ctx.strokeStyle = shade(color, -70);
-  ctx.beginPath(); ctx.roundRect(-5.8, -13 - variant % 2, 12, 6, [3, 3, 1, 1]); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = shade(color, 65); ctx.fillRect(-3, -13.5 - variant % 2, 5.5, 1);
-  ctx.fillStyle = "#143843"; ctx.fillRect(1.8, -11, 2.8, 1.2);
-  ctx.fillStyle = "#99edee"; ctx.fillRect(2, -11, 1.9, .45);
-  ctx.strokeStyle = "#263c45"; ctx.lineWidth = .45;
-  ctx.beginPath(); ctx.moveTo(-4.3, -12); ctx.lineTo(-5.6, -19); ctx.stroke();
-  ctx.fillStyle = "#edbf67"; ctx.beginPath(); ctx.arc(-5.6, -19, .45, 0, Math.PI * 2); ctx.fill();
+  const [turretX, turretY, turretWidth, turretHeight, turretRadius] = model.turret;
+  plate(turretX, turretY, turretWidth, turretHeight, turretRadius);
+  if (variant === 6) { plate(-4.5, -17, 8, 3, .5); plate(-2, -19, 4, 2, .3); }
+  if (variant === 2) {
+    // Tall gun shield and open breech on the two-wheel field piece.
+    plate(-3, -16, 2, 8, .3);
+    ctx.fillStyle = "#182e38"; ctx.fillRect(0, -12, 2, 3);
+  } else {
+    const [left, top, w] = model.turret;
+    ctx.fillStyle = shade(color, 65); ctx.fillRect(left + 2, top + .5, w - 4, .8);
+    ctx.fillStyle = "#143843"; ctx.fillRect(1, top + 2, 2.8, 1.2);
+    ctx.fillStyle = "#99edee"; ctx.fillRect(1.2, top + 2, 1.9, .45);
+  }
+  if (variant === 0 || variant === 3 || variant === 6) {
+    ctx.strokeStyle = "#263c45"; ctx.lineWidth = .45;
+    ctx.beginPath(); ctx.moveTo(-4.3, -12); ctx.lineTo(-5.6, -19); ctx.stroke();
+    ctx.fillStyle = "#edbf67"; ctx.beginPath(); ctx.arc(-5.6, -19, .45, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.restore();
 }
 

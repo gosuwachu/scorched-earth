@@ -1,5 +1,6 @@
 import { drawModernTank, drawModernBlast } from "./modern_art";
 import { sandstoneColor } from "./desert";
+import { TerrainDepth, RockReliefCache, caveShade } from "./terrain_depth";
 import type { BlastEffect } from "./combat_effects";
 import type { GameState } from "./render";
 import { ITEMS } from "./weapons";
@@ -116,16 +117,21 @@ export class ModernRenderer {
   private cutTerrain!: HTMLCanvasElement;
   private debris = new WeakMap<BlastEffect, Array<{ x: number; y: number; color: string; size: number }>>();
   private base!: HTMLCanvasElement;
+  private cave!: HTMLCanvasElement;
   frame!: HTMLCanvasElement;
   private tileVersions = new Uint32Array(0);
   private assetVersion = -1;
   private lastVersion = -1;
   private flash: HTMLCanvasElement | null = null;
   private pixelTile: ImageData | null = null;
+  private depth = new TerrainDepth();
+  private relief!: RockReliefCache;
   prepare(world: ModernWorld, surf: Surface): void {
     if (world !== this.world) {
       this.world = world;
+      this.relief = new RockReliefCache(world.w, world.h, world.seed);
       this.cutTerrain = canvas(world.fw, world.fh);
+      this.cave = canvas(Math.ceil(world.fw / 4), Math.ceil(world.fh / 4));
       this.debris = new WeakMap();
       this.terrain = canvas(world.fw, world.fh); this.base = canvas(world.fw, world.fh); this.frame = canvas(world.fw, world.fh);
       this.tileVersions = new Uint32Array(world.tileVersions.length); this.lastVersion = -1; this.flash = null;
@@ -144,6 +150,23 @@ export class ModernRenderer {
       sky.addColorStop(0, world.biome === "DESERT" ? "#d9b58e" : world.layout === "CAVE" ? "#153e40" : "#69a9e1");
       sky.addColorStop(1, "#d5ded2"); ctx.fillStyle = sky; ctx.fillRect(0, 0, world.fw, world.fh);
       if (bg.complete && bg.naturalWidth) ctx.drawImage(bg, 0, 0, world.fw, world.fh);
+      // Atmospheric perspective belongs behind collision geometry and tanks.
+      const haze = ctx.createLinearGradient(0, 0, 0, world.fh);
+      const tint = world.biome === "DESERT" ? "239,204,173" : world.layout === "CAVE" ? "80,115,119" : "183,207,221";
+      haze.addColorStop(0, `rgba(${tint},0)`);
+      haze.addColorStop(.45, `rgba(${tint},.12)`);
+      haze.addColorStop(1, `rgba(${tint},.32)`);
+      ctx.fillStyle = haze; ctx.fillRect(0, 0, world.fw, world.fh);
+      const rear = this.cave.getContext("2d")!;
+      const shade = caveShade(world.cells, world.fw, world.fh);
+      const pixels = rear.createImageData(this.cave.width, this.cave.height);
+      const rgb = world.biome === "DESERT" ? [92, 65, 54] : world.biome === "SWAMP" ? [38, 61, 58] : [52, 68, 79];
+      for (let i = 0; i < shade.length; i++) {
+        pixels.data[i * 4] = rgb[0]; pixels.data[i * 4 + 1] = rgb[1];
+        pixels.data[i * 4 + 2] = rgb[2]; pixels.data[i * 4 + 3] = shade[i];
+      }
+      rear.putImageData(pixels, 0, 0);
+      ctx.drawImage(this.cave, 0, 0, world.fw, world.fh);
       this.assetVersion = assetsVersion; this.lastVersion = world.version;
     }
     // All existing effects and HUD draw in logical coordinates on a transparent overlay.
@@ -174,6 +197,8 @@ export class ModernRenderer {
         const [x, y] = path ? path.path[Math.max(0, Math.min(path.path.length - 1, Math.trunc(path.i)))] : [tank.x, tank.y];
         const color = state.lut?.table[tank.color] ?? [75, 210, 230];
         drawModernTank(ctx, x, y, tank.half_width * 2, color, tank.angle, tank.tank_icon);
+        // Match Classic descent: keep overhead markers out of the parachute.
+        if (path) continue;
         const by = y - (tank.shield_hp > 0 ? 29 : 25);
         ctx.fillStyle = "#092133"; ctx.beginPath(); ctx.roundRect(x - 12, by, 24, 3, 1.5); ctx.fill();
         ctx.fillStyle = "#68dfbb"; ctx.beginPath(); ctx.roundRect(x - 11.5, by + .5, Math.max(0, 23 * tank.health / 100), 2, 1); ctx.fill();
@@ -286,6 +311,7 @@ export class ModernRenderer {
         for (let ny = Math.max(0, ty - 1); ny <= Math.min(m.tilesY - 1, ty + 1); ny++) version = Math.max(version, m.tileVersions[nx * m.tilesY + ny]);
       if (!all && this.tileVersions[t] === version) continue;
       this.tileVersions[t] = version; pixels.fill(0);
+      this.depth.update(m.cells, m.fw, m.fh, tx * 128, ty * 128);
       for (let xx = 0; xx < 128 && tx * 128 + xx < m.fw; xx++) {
         const x = tx * 128 + xx;
         const lawn = lawns.find(p => Math.abs(x / 2 - p.x) < p.w / 2);
@@ -295,13 +321,15 @@ export class ModernRenderer {
           let color: RGB;
           if (material >= 16) color = propColor(m.props[material - 16], x / 2, y / 2, m.seed, m.biome);
           else {
+            const sample = yy * 128 + xx;
             const n = hash(x, y, m.seed);
             const band = Math.sin(y * 0.045 + Math.sin(x * 0.007) * 2 + Math.sin(x * 0.023) * 0.35) * 11;
             let tex = 0;
             if (texture) { const i = ((y % texture.height) * texture.width + x % texture.width) * 4; tex = (texture.data[i] * 0.3 + texture.data[i + 1] * 0.6 + texture.data[i + 2] * 0.1 - 100) * 0.85; }
-            const detail = tex + band + (n - 0.5) * 7;
-            color = m.biome === "DESERT" ? sandstoneColor(x / 2, y / 2, m.seed, n, tex) :
-              material === 2 ? [87 + detail * 0.8, 88 + detail * 0.8, 87 + detail * 0.85] :
+            const relief = material === 2 && m.biome !== "DESERT" ? this.relief.sample(x / 2, y / 2).light : 0;
+            const detail = tex * .65 + band * .5 + relief + (n - 0.5) * 7;
+            color = m.biome === "DESERT" ? sandstoneColor(x / 2, y / 2, m.seed, n, tex, this.relief.sample(x / 2, y / 2)) :
+              material === 2 ? [100 + detail * 0.8, 110 + detail * 0.8, 116 + detail * 0.85] :
               m.biome === "SWAMP" ? [83 + detail, 70 + detail * 0.85, 45 + detail * 0.7] : [127 + detail, 92 + detail * 0.85, 57 + detail * 0.7];
             // Only natural soil carries turf; fresh deposited soil remains bare.
             const above = (d: number) => y >= d && m.cells[index - d] === 0;
@@ -316,8 +344,19 @@ export class ModernRenderer {
             if (material === 1 && lawn && (above(1) || above(4) || above(8))) {
               color = parkColor("lawn", 0.5, 1, n);
             }
-            if (above(1) || x > 0 && !m.cells[index - m.fh]) color = color.map(c => c + 19) as RGB;
-            if (y + 2 < m.fh && !m.cells[index + 2]) color = color.map(c => c * 0.66) as RGB;
+            const top = this.depth.top[sample];
+            const cap = 7 + Math.sin(x * .065) * 2 + Math.sin(x * .019) * 2;
+            // A thicker sandy cap and shaded lip, entirely inside the mask.
+            // Freshly exposed rock also gets a bevel; deposited rubble stays bare.
+            if (m.biome === "DESERT" && material !== 3 &&
+              top < cap + 5 && top < this.depth.left[sample] && top < this.depth.right[sample]) {
+              if (top < cap) {
+                const mix = .72 * (1 - top / (cap * 1.8));
+                color = color.map((c, k) => c * (1 - mix) + [241, 183, 101][k] * mix) as RGB;
+              } else color = color.map(c => c * .84) as RGB;
+            }
+            const light = this.depth.light(sample);
+            color = [color[0] + light, color[1] + light * .92, color[2] + light * .78];
           }
           const i = (yy * 128 + xx) * 4;
           pixels[i] = color[0]; pixels[i + 1] = color[1]; pixels[i + 2] = color[2]; pixels[i + 3] = 255;

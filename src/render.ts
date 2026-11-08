@@ -951,7 +951,7 @@ export class Renderer {
       const i = Math.max(0, Math.min(pth.length - 1, Math.trunc(cd.i)));
       [x, y] = pth[i];
       if (!state.terrain.modern) this._spritesDrawTank(surf, x, y, t, col);
-      this._draw_parachute(surf, x, y - hw, col);
+      this._draw_parachute(surf, x, y - hw, state.terrain.modern ? 3 : 2);
       return;
     }
     if (!state.terrain.modern) this._spritesDrawTank(surf, x, y, t, col);
@@ -1000,16 +1000,16 @@ export class Renderer {
     return out;
   })();
 
-  private _draw_parachute(surf: pygame.Surface, cx: number, cy: number, col: RGB): void {
-    const canopy: RGB = [Math.min(255, col[0] + 70), Math.min(255, col[1] + 70), Math.min(255, col[2] + 70)];
-    const W = this.w;
-    const H = this.h;
+  private _draw_parachute(surf: pygame.Surface, cx: number, cy: number, scale: number): void {
+    // Browser visibility adjustment: enlarge the retained DOS silhouette and
+    // use white fabric/shrouds independently of the player's tank colour.
     for (const [dx, dy] of Renderer.PARACHUTE) {
-      const X = cx + dx;
-      const Y = cy + dy;
-      if (X >= 0 && X < W && Y >= 0 && Y < H) {
-        surf.set_at([X, Y], canopy);
-      }
+      pygame.draw.rect(surf, [255, 255, 255], [
+        cx + dx * scale - Math.floor(scale / 2),
+        cy + dy * scale,
+        scale,
+        scale,
+      ]);
     }
   }
 

@@ -191,7 +191,7 @@ function makeCfg(over: { [k: string]: string | number | boolean } = {}): Config 
   // Keep the recorded scenarios independent of browser startup preferences.
   const cfg = Object.assign(new Config(), {
     PLAY_ORDER: "RANDOM", ELASTIC: "NONE", HOSTILE_ENVIRONMENT: "ON",
-    INITIAL_CASH: 0, OUTLAST_BONUS: "OFF",
+    INITIAL_CASH: 0, OUTLAST_BONUS: "OFF", EXPLOSION_SCALE: "NORMAL",
   });
   cfg.SOUND = "OFF";
   cfg.TALKING_TANKS = "OFF";
