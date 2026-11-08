@@ -52,15 +52,17 @@ describe("Modern terrain", () => {
       const m = ModernWorld.generate(w, h, seed, options);
       const repeated = ModernWorld.generate(w, h, seed, options);
       expect(m.cells.every((v, i) => v === repeated.cells[i])).toBe(true);
-      expect(Math.max(...m.surface) - Math.min(...m.surface)).toBeGreaterThan(h * .7);
+      // The connected sand apron now spans the valley instead of extending
+      // narrow clefts nearly to the bottom of the map.
+      expect(Math.max(...m.surface) - Math.min(...m.surface)).toBeGreaterThan(h * .30);
       // A tank-width stretch high above the floor must be nearly flat.
       const span = Math.round(w * .06);
       const cap = m.surface.findIndex((y, x) => x + span < m.fw && y < h * .45 &&
         Math.abs(y - m.surface[x + span]) < h * .015);
       expect(cap).toBeGreaterThanOrEqual(0);
-      // Cliffs lose at least a quarter of the map height in 4% of its width.
+      // Cliff walls remain steep above the lower, continuous sand apron.
       const wallSpan = Math.round(m.fw * .04);
-      expect(m.surface.some((y, x) => x + wallSpan < m.fw && Math.abs(y - m.surface[x + wallSpan]) > h * .25)).toBe(true);
+      expect(m.surface.some((y, x) => x + wallSpan < m.fw && Math.abs(y - m.surface[x + wallSpan]) > h * .15)).toBe(true);
       const before = m.cells.slice(); m.settle();
       expect(m.cells.every((v, i) => v === before[i])).toBe(true); // Natural cliffs are grounded and stable.
       const cx = cap / 2, cy = m.surface[cap] + h * .04;

@@ -79,6 +79,18 @@ try {
         const y = gs.terrain.column_top(x);
         world.circle(x, y + 8, 28);
       }
+      let bedrockCut = null;
+      if (world.biome === "DESERT" && world.layout === "MOUNTAINS") {
+        const { DesertLayers } = await import("/src/desert_layers.ts");
+        const layers = new DesertLayers(world.w, world.h, world.seed);
+        const x = world.w * .65, bottom = layers.column(x).bedBottom;
+        const y = (bottom + world.h) / 2, radius = Math.min(18, (world.h - bottom) * .2);
+        if (layers.sample(x, y).layer !== 3 || !world.solid(x, y))
+          throw new Error("Bedrock damage check must begin inside solid layer 3");
+        world.circle(x, y, radius);
+        if (world.solid(x, y)) throw new Error("Bedrock damage check did not excavate layer 3");
+        bedrockCut = { x, y, radius };
+      }
       const start = performance.now();
       const damaged = draw(renderer, world);
       const damageRenderMs = performance.now() - start;
@@ -89,7 +101,7 @@ try {
       const restored = ModernWorld.restore(world.serialize(), world.w, world.h);
       const reload = same(settled, draw(new ModernRenderer(), restored));
       render();
-      return { cached, unmodified, rebuilt, settledRebuilt, reload, damageRenderMs };
+      return { cached, unmodified, rebuilt, settledRebuilt, reload, damageRenderMs, bedrockCut };
     });
     for (const flag of ["cached", "unmodified", "rebuilt", "settledRebuilt", "reload"])
       assert.equal(check[flag], true, `${name}: ${flag}`);

@@ -52,3 +52,24 @@ skill/tool. These are game assets, not DOS captures or fidelity references.
 not a regression fixture generator. It records crop bounds and 128×128 binary
 silhouettes. Both rendering and generation use those exact samples, so image
 load timing and browser image resampling cannot affect collision or saves.
+
+- `terrain-v3/desert-{sand,cliff,beds}.webp` and `desert-deep-v2.webp`: four painted desert zones,
+  composited as rough bedrock, rolling sediment beds, a broad sand plane, and
+  separate mesa cliffs over the sand. Each layer has its own seeded contour;
+  textures and boundaries remain fixed under excavation and save restoration.
+- `desert-v1/{shrub,rock,adobe,truck}.png`: transparent decorative scenery,
+  drawn after terrain, including inside the broad sand plane, only where the
+  full root/base footprint meets visible live sand. These add no
+  collision cells or foundations and disappear when support is excavated.
+  Original built-in imagegen atlases and exact prompts are retained in
+  `artwork/desert-v1/`. Runtime sprites are alpha-preserving atlas crops; terrain
+  crops use WebP quality 93. These assets are browser artwork, not DOS evidence.
+
+`terrain-v3/desert-deep-v2.webp` replaces the original deep-rock atlas strip
+with a full-frame 4:3 painting of flat red sandstone slabs and fine fractures.
+The generated source is 1448×1086; the renderer maps it once across the complete
+world raster at any game resolution, then clips it to the bottom layer. There
+is no tiled repeat, seed shift, or stretching around the layer boundary. The
+original, user reference and exact built-in imagegen prompt are retained in
+`artwork/desert-v2/`. `python scripts/compile_desert_art.py` transcodes it at
+WebP quality 93 without cropping or resizing.

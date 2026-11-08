@@ -2,7 +2,8 @@
  * palette plane is a conservative contact/weapon compatibility view. No DOS claim. */
 import * as C from "./constants";
 import masks from "./modern_masks.json";
-import { desertProfile } from "./desert";
+import { desertScenery } from "./desert_scenery";
+import { DesertLayers } from "./desert_layers";
 import { landmarkMasks } from "./landmark_masks";
 import { PAINTED_ART, buildingMasks, buildingAspect, paintedMasks, paintedAspect, paintedContains } from "./painted_sprites";
 import { PARK_PROPS, isParkProp, parkContains, type ParkProp } from "./city_parks";
@@ -133,7 +134,8 @@ export class ModernWorld {
     const layout = LAYOUTS.includes(options.TERRAIN_LAYOUT as Layout) ? options.TERRAIN_LAYOUT as Layout : layouts[Math.floor(hash(seed, 2) * layouts.length)];
     const m = new ModernWorld(w, h, seed, biome, layout);
     const desert = biome === "DESERT" && layout === "MOUNTAINS";
-    const ridges = layout === "CITY" ? null : desert ? desertProfile(m.fw, seed) : mountainProfile(m.fw, seed);
+    const desertLayers = desert ? new DesertLayers(w, h, seed) : null;
+    const ridges = layout === "CITY" || desert ? null : mountainProfile(m.fw, seed);
     const cliffs = layout === "CAVE" || (layout === "MOUNTAINS" && !desert);
     if (cliffs) terrainCliffs(ridges!, seed, biome === "SWAMP" || layout === "CAVE");
     for (let x = 0; x < m.fw; x++) {
@@ -142,9 +144,11 @@ export class ModernWorld {
       if (layout === "CITY") height = 0.68 + noise(u * 5, seed) * 0.17 + (noise(u * 13, seed + 1) - .5) * .035;
       // Taller cave ridges trade some headroom for deep gullies and cliffs.
       else if (layout === "CAVE") height = 0.38 + ridges![x] * 0.53;
-      const top = Math.floor(height * m.fh);
+      const top = Math.floor(desertLayers ? desertLayers.surface(x / 2) * 2 : height * m.fh);
       m.surface[x] = top / 2;
-      for (let y = top; y < m.fh; y++) m.cells[x * m.fh + y] = y - top > h * (desert ? 0.035 : 0.16) ? 2 : 1;
+      for (let y = top; y < m.fh; y++) m.cells[x * m.fh + y] = desertLayers
+        ? desertLayers.sandContains(x / 2, y / 2) ? 1 : 2
+        : y - top > h * .16 ? 2 : 1;
       if (layout === "CAVE") {
         const roof = Math.floor((0.12 + noise(u * 13, seed + 4) * 0.065 + Math.pow(noise(u * 39, seed + 5), 9) * 0.12) * m.fh);
         m.cells.fill(2, x * m.fh, x * m.fh + roof);
@@ -338,7 +342,7 @@ export class ModernWorld {
       const rnd = hash(n, 19, this.seed);
       const px = Math.round(x + rnd * 15);
       let kind: PropKind = this.biome === "DESERT" ? "cactus" : this.biome === "SWAMP" ? "tree" : "pine";
-      if (n % 7 === 3) kind = "house";
+      if (n % 7 === 3 && !(this.biome === "DESERT" && this.layout === "MOUNTAINS")) kind = "house";
       const aspect = paintedAspect(kind);
       const h = kind === "house" ? 45 / (aspect ?? (45 / 38)) : 40 + rnd * 40;
       const w = aspect ? h * aspect : kind === "house" ? 45 : 26 + rnd * 14;
@@ -356,7 +360,7 @@ export class ModernWorld {
       if (y - h < (this.layout === "CAVE" ? this.h * .32 : 40)) continue;
       const prop: Prop = { id: this.props.length + 16, kind, x: px, y, w, h, variant: rnd };
       if (paintedMasks[kind]) prop.art = PAINTED_ART;
-      if (this.stampSupportedProp(prop, 17)) this.props.push(prop);
+      if (this.stampSupportedProp(prop, this.biome === "DESERT" && this.layout === "MOUNTAINS" ? 0 : 17)) this.props.push(prop);
     }
     if (this.biome === "DESERT" && this.layout === "MOUNTAINS") this.placeRocks(tanks);
     if ((this.biome === "GRASS" || this.biome === "SNOW") && this.layout === "MOUNTAINS") placeAlpineRocks(this, tanks);
@@ -364,6 +368,8 @@ export class ModernWorld {
   /** Boulders with smaller fallen fragments. Reject cliff faces and occupied
    * ground; bury the bases slightly so the rocks sit into the sand. */
   private placeRocks(tanks: ReadonlyArray<{x: number; half_width: number}>): void {
+    const scenery = desertScenery(this);
+    // Reserve planted scenery before filling the remaining shelves with rubble.
     // Reserve space for larger stones before filling gaps with small rubble.
     for (let piece = 0; piece < 4; piece++) {
       for (let n = 0, anchor = 16; anchor < this.w - 12 && this.props.length < 180; n++, anchor += piece === 0 ? 12 : 24) {
@@ -376,7 +382,9 @@ export class ModernWorld {
         const px = Math.round(center + offset);
         if (px - w / 2 < 1 || px + w / 2 >= this.w - 1 ||
           tanks.some(t => Math.abs(t.x - px) < w / 2 + t.half_width + 18) ||
-          this.props.some(p => Math.abs(p.x - px) < (p.w + w) / 2 + 2)) continue;
+          this.props.some(p => Math.abs(p.x - px) < (p.w + w) / 2 + 2) ||
+          scenery.some(p => Math.abs(p.x - px) < (p.w + w) / 2 + 5 &&
+            this.surface[Math.floor(px * 2)] > p.y - p.h - 3 && this.surface[Math.floor(px * 2)] - h < p.y + 3)) continue;
         const x0 = Math.floor((px - w / 2) * 2), x1 = Math.ceil((px + w / 2) * 2);
         let high = this.h, low = 0;
         for (let x = x0; x < x1; x++) {

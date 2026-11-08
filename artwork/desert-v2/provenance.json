@@ -1,0 +1,16 @@
+{
+  "tool": "built-in image_gen",
+  "prompt": "Use case: stylized-concept. Asset type: a full-screen 2D game bedrock texture, 2048 by 1536 pixels, landscape 4:3. Use the attached narrow image ONLY as the visual/material reference. Expand its illustrated rock treatment into one complete large continuous rectangular rock cross-section filling the entire 2048x1536 image edge to edge. The reference has flat, horizontally elongated irregular red sandstone slabs separated by thin dark angular cracks, fine branching hairline fissures and small mottled mineral marks, gently undulating strata, subdued rust-red/terracotta/brick red palette, darker reddish brown towards bottom. Match that hand-painted flat cross-section style closely. Rock pieces roughly 80-220 pixels wide at the requested resolution, distributed across the entire screen; variable sizes and shapes, no repeating stamped shapes. Subtle soft ambient upper-left light, low relief, restrained contrast. The entire screen is rock, including every corner. No sky, no ground silhouette, no sand surface, no scenery, no objects, no text, no border. NO giant vertical cliff faces, NO protruding boulders, NO 3D canyon, NO luminous yellow highlights, NO black deep crevasses. This is one large non-repeating material painting to be mapped exactly once onto the game screen; do not make an atlas or separate panels. Preserve the reference's small-scale crack network and mostly horizontal slabs across the full image. Full opaque image.",
+  "reference": "reference.png",
+  "original": "bedrock.png",
+  "runtime": "../../public/assets/modern/terrain-v3/desert-deep-v2.webp",
+  "mapping": "Full-frame normalized world coordinates, no tiling or seed offset. The image's native resolution is retained.",
+  "nativeDimensions": [
+    1448,
+    1086
+  ],
+  "requestedDimensions": [
+    2048,
+    1536
+  ]
+}
