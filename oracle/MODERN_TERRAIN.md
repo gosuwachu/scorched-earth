@@ -18,7 +18,14 @@ in both modes.
   spikes before normalizing the height range, preserving the broad relief.
   Desert mountain layouts instead generate two or three broad sandstone mesas:
   gently weathered caps, steep upper walls, small shoulders and sloping talus feet
-  above sandy canyon floors. Seeds vary their height, width and wall asymmetry.
+  above sandy canyon floors. Heights are stratified from low terraces to tall
+  mesas so every map has a visibly varied skyline. Each side has its own slope,
+  cap width and ledge proportions, with small eroded shelves along the walls.
+  The desert material uses warm sedimentary beds, vertical fluting, interrupted
+  fissures and directional facet shading inspired by `assets/modern/desert.png`.
+  Sand highlights collect on shelves rather than outlining the cliff walls.
+  Material details use stable world coordinates and remain aligned after damage
+  and save restoration; the painted background remains non-collidable scenery.
   A thin soil cap covers solid rock; the same mask handles collisions, craters,
   settling and saves. Desert ground also carries seeded clusters of angular
   sandstone boulders and smaller rubble, with lit facets and bedding cracks.
@@ -67,6 +74,15 @@ in both modes.
   LAN uses its existing authoritative host simulation.
 
 ## Verification
+
+The desert geology update (2026-11-08) checks visibly separated mesa heights
+and asymmetric slopes across six seeds, alongside the retained desert placement,
+rock, destruction and save tests. The build, Modern browser driver and all 77
+general render states passed. Four final desert scenes (1, 19, 71, 313) passed
+firing, crater and save checks after the shading refinement; inspected captures
+and reports are in `test-browser/out/desert-geology/final/`.
+The latest full working-tree suite reported 16,299 passes and seven failures in
+concurrent city-park/placement work; this is not a passing full-suite baseline.
 
 The desert surface-occlusion fix passed all 16,291 tests, the production build,
 and the Modern browser driver. Regression checks require the entire generated
@@ -191,15 +207,22 @@ mask compilation instructions are in `public/assets/modern/README.md`.
 
 ### Alpine hillside caves
 
-Modern GRASS/SNOW mountain maps carve seeded chambers into downhill faces,
-leaving rock overhangs and entrances that meet the hillside. Roofs use the same
+Modern GRASS/SNOW mountain maps carve one or two seeded chambers of varied
+width and height into downhill faces, with entrances that meet the hillside.
+Two compressed ridge slopes form steep cliffs with weathered rock shoulders.
+Their broad roots, rounded noses and chipped undersides vary by seed and
+blend into the cliff face.
+Round placement mixes safe cave-floor seats with surface starts when chambers
+have enough hull/turret clearance and floor support. Placement falls back to
+surface seats if a player's neighbourhood has no suitable cave. Roofs use the same
 support/destruction mask as other rock; loose fragments settle during generation.
 Cave openings have no interior backdrop or vegetation overlay; the distant
 landscape shows through their empty collision space. Exposed rock stays bare. Existing saved masks
 remain authoritative and are not regenerated.
 
 `test/alpine_caves.test.ts` checks exterior connectivity, underground space,
-rock roofs, stable settling and mask save/restore for seeds 1, 19, 71 and 313 at
+the two-cave limit, size variation, steep cliffs, projecting ledges, stable
+settling and mask save/restore for seeds 1, 19, 71 and 313 at
 320×240, 640×480 and 1024×768, for both alpine biomes. `node test-browser/alpine.mjs http://127.0.0.1:4188`
 captures eight alpine scenes and checks cave space, normal firing/destruction
 and save roundtrips; `modern.mjs` also checks cave space in its biome sweep. These are

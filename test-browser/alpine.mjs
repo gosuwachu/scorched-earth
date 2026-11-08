@@ -14,7 +14,8 @@ try {
   await page.evaluate(() => window.harnessReady);
   for (const biome of ["GRASS", "SNOW"]) for (const seed of [1, 19, 71, 313]) {
     const meta = await page.evaluate(async ([biome, seed]) =>
-      (await import("/test-browser/modern.ts")).scene(biome, "MOUNTAINS", seed), [biome, seed]);
+      (await import("/test-browser/modern.ts")).scene(biome, "MOUNTAINS", seed, 4), [biome, seed]);
+    assert.ok(meta.caveTanks > 0 && meta.caveTanks < 4, "mix cave and surface spawns");
     assert.ok(meta.propKinds.filter(kind => kind === "rock").length > 0, "cave rocks and rubble are present");
     const outside = await page.evaluate(() => {
       const m = window.modernTest.gs.terrain.modern;

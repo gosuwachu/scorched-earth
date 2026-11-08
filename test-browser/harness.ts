@@ -194,6 +194,43 @@ function trailDemo(sky: string, age = 0): StateMeta {
   return { sky, age, baseline, fresh, faded };
 }
 
+function modernRocketDemo(age = 0): StateMeta {
+  const gs = buildState(71, { TERRAIN_STYLE: "MODERN", TERRAIN_BIOME: "DESERT", TERRAIN_LAYOUT: "MOUNTAINS", TRACE: "OFF", BOMB_ICON: "SMALL" });
+  driveToAim(gs);
+  const r = freshRenderer(gs), surf = newSurf();
+  r.render(surf, gs, 0);
+  const baseline = surf.ctx.getImageData(200, 90, 600, 200).data.slice();
+  const shots = [
+    new Projectile(gs.current_shooter, ITEMS[0], 400, 180, 160, 40),
+    new Projectile(gs.current_shooter, ITEMS[0], 720, 180, -160, -40),
+  ];
+  gs.projectiles = shots;
+  for (let frame = 0; frame <= 20; frame++) {
+    shots[0].sx = 400 + frame * 5; shots[0].sy = 180 - frame * 1.5;
+    shots[1].sx = 720 - frame * 5; shots[1].sy = 180 + frame * 1.5;
+    r.render(surf, gs, frame * 25);
+  }
+  const difference = () => {
+    const data = surf.ctx.getImageData(200, 90, 600, 200).data;
+    let changed = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (Math.abs(data[i] - baseline[i]) + Math.abs(data[i + 1] - baseline[i + 1]) + Math.abs(data[i + 2] - baseline[i + 2]) > 10) changed++;
+    }
+    return changed;
+  };
+  const fresh = difference();
+  checkTrail(fresh > 100, "Modern rocket/smoke is missing");
+  if (age) { gs.projectiles = []; r.render(surf, gs, 500 + age); }
+  const changed = difference();
+  if (age === 250) checkTrail(changed > 0 && changed < fresh, "Modern smoke did not fade after impact");
+  if (age === 500) checkTrail(changed === 0, "Modern smoke did not expire");
+  checkTrail(shots[0].vx === 160 && shots[1].vy === -40 && gs.trace_marks.length === 0,
+    "Modern artwork changed simulation/TRACE state");
+  surf.ctx.drawImage(r.modernFrame!, 0, 0, W, H);
+  blit(surf);
+  return { age, fresh, changed };
+}
+
 function trailRules(): StateMeta {
   const gs = buildTrailState();
   const surf = newSurf();
@@ -284,6 +321,9 @@ function sweepSetters(panel: { widgets: unknown[] }): void {
 const STATES: { [name: string]: () => StateMeta } = {
   ...laserSightStates(buildTrailState, freshRenderer, blit),
   ...projectileIndicatorStates(buildTrailState, freshRenderer, blit),
+  trail_modern_rocket: () => modernRocketDemo(),
+  trail_modern_smoke: () => modernRocketDemo(250),
+  trail_modern_expired: () => modernRocketDemo(500),
   trail_dark: () => trailDemo("BLACK"),
   trail_bright: () => trailDemo("PLAIN"),
   trail_fade: () => trailDemo("BLACK", 75),

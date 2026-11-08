@@ -2,8 +2,10 @@
  * palette plane is a conservative contact/weapon compatibility view. No DOS claim. */
 import * as C from "./constants";
 import masks from "./modern_masks.json";
+import { desertProfile } from "./desert";
 import { landmarkMasks } from "./landmark_masks";
 import { PAINTED_ART, buildingMasks, buildingAspect, paintedMasks, paintedAspect, paintedContains } from "./painted_sprites";
+import { PARK_PROPS, isParkProp, parkContains, type ParkProp } from "./city_parks";
 import { rockContains } from "./modern_rocks";
 import { placeAlpineRocks } from "./alpine_rocks";
 import { CITY_BUILDINGS, CITY_LANDMARKS, cityContains, isCityBuilding, type CityBuilding } from "./city_shapes";
@@ -12,7 +14,7 @@ export { CITY_BUILDINGS, isCityBuilding, type CityBuilding } from "./city_shapes
 export type Biome = "GRASS" | "SNOW" | "DESERT" | "SWAMP";
 export type Layout = "MOUNTAINS" | "CAVE" | "CITY";
 // Car/animal IDs remain readable in existing saved masks, but are never placed.
-export type PropKind = "pine" | "tree" | "cactus" | "house" | "tower" | "car" | "animal" | "rock" | CityBuilding;
+export type PropKind = "pine" | "tree" | "cactus" | "house" | "tower" | "car" | "animal" | "rock" | CityBuilding | ParkProp;
 export interface Prop { id: number; kind: PropKind; x: number; y: number; w: number; h: number; variant: number; art?: "illustrated-v1" | typeof PAINTED_ART }
 export interface ModernData { version: 1; seed: number; biome: Biome; layout: Layout; w: number; h: number; runs: number[]; props: Prop[] }
 export interface ModernOptions { TERRAIN_BIOME?: string; TERRAIN_LAYOUT?: string }
@@ -64,37 +66,42 @@ function mountainProfile(width: number, seed: number): Float64Array {
   return heights;
 }
 
-/** Western mesas: broad caps, steep upper walls and eroded talus feet.
- * All dimensions are fractions of the map, so small worlds retain usable caps.
- * This is intentional browser terrain, not a transcription of DOS generation. */
-function desertProfile(width: number, seed: number): Float64Array {
-  const heights = new Float64Array(width);
-  const count = 2 + Math.floor(hash(0, 201, seed) * 2);
-  const mesas = Array.from({ length: count }, (_, i) => ({
-    center: (i + .38 + hash(i, 202, seed) * .24) / count,
-    radius: (.32 + hash(i, 203, seed) * .10) / count,
-    rise: .70 + hash(i, 204, seed) * .30,
-    lean: (hash(i, 205, seed) - .5) * .20,
-  }));
-  let lo = Infinity, hi = -Infinity;
-  for (let x = 0; x < width; x++) {
-    const u = x / width;
-    let uplift = 0;
-    for (const mesa of mesas) {
-      const side = u < mesa.center ? -1 : 1;
-      const d = Math.abs(u - mesa.center) / (mesa.radius * (1 + side * mesa.lean));
-      // A short shoulder breaks the wall above a gentler pile of fallen rock.
-      const shape = d < .50 ? 1 : d < .67 ? 1 - (d - .50) / .17 * .70 :
-        d < .77 ? .30 - (d - .67) / .10 * .04 : Math.max(0, .26 * (1 - d) / .23);
-      uplift = Math.max(uplift, shape * mesa.rise);
+/** Compress two broad downhill slopes into cliff faces, retaining the ridge's
+ * endpoints and relief. The shoulders remain wide enough for tank seats. */
+function terrainCliffs(heights: Float64Array, seed: number, weathered: boolean): void {
+  const source = heights.slice(), width = heights.length;
+  const span = Math.floor(width * .10);
+  for (let region = 0; region < 2; region++) {
+    let left = 0, drop = 0;
+    for (let x = Math.floor(width * (region * .5 + .06)); x < width * (region * .5 + .40) - span; x++) {
+      const d = Math.abs(source[x + span] - source[x]);
+      if (d > drop) { drop = d; left = x; }
     }
-    const value = 1 - uplift + (noise(u * 17, seed + 206) - .5) * .025 +
-      (noise(u * 63, seed + 207) - .5) * .005;
-    heights[x] = value; lo = Math.min(lo, value); hi = Math.max(hi, value);
+    for (let x = left; x <= left + span; x++) {
+      const u = (x - left) / span;
+      const t = Math.max(0, Math.min(1, (u - .44) / .12));
+      let cliff = .08 * u + .92 * t * t * (3 - 2 * t);
+      if (weathered) {
+        const smooth = (a: number, b: number): number => {
+          const v = Math.max(0, Math.min(1, (u - a) / (b - a)));
+          return v * v * (3 - 2 * v);
+        };
+        const center = .43 + hash(region, 351, seed) * .14;
+        const face = .18 + hash(region, 352, seed) * .09;
+        // Unequal rock faces interrupt the main drop; sloping shoulders and
+        // a broad talus foot ease it back into the original hillside.
+        cliff = .12 * smooth(0, center) + .58 * smooth(center - face / 2, center + face / 2) +
+          .16 * smooth(center + face * .15, center + face * 1.1) + .14 * smooth(center, 1);
+        const envelope = Math.sin(Math.PI * u) ** 2;
+        const fractures = (noise(u * 8, seed + 353 + region) - .5) * .055;
+        const original = source[x] - (source[left] + (source[left + span] - source[left]) * u);
+        heights[x] = source[left] + (source[left + span] - source[left]) * (cliff + fractures * envelope) +
+          original * .22 * envelope;
+      } else {
+        heights[x] = source[left] + (source[left + span] - source[left]) * cliff;
+      }
+    }
   }
-  const range = Math.max(1e-9, hi - lo);
-  for (let x = 0; x < width; x++) heights[x] = (heights[x] - lo) / range;
-  return heights;
 }
 
 export class ModernWorld {
@@ -127,11 +134,14 @@ export class ModernWorld {
     const m = new ModernWorld(w, h, seed, biome, layout);
     const desert = biome === "DESERT" && layout === "MOUNTAINS";
     const ridges = layout === "CITY" ? null : desert ? desertProfile(m.fw, seed) : mountainProfile(m.fw, seed);
+    const cliffs = layout === "CAVE" || (layout === "MOUNTAINS" && !desert);
+    if (cliffs) terrainCliffs(ridges!, seed, biome === "SWAMP" || layout === "CAVE");
     for (let x = 0; x < m.fw; x++) {
       const u = x / m.fw;
       let height = 0.16 + (ridges?.[x] ?? 0) * 0.75;
       if (layout === "CITY") height = 0.68 + noise(u * 5, seed) * 0.17 + (noise(u * 13, seed + 1) - .5) * .035;
-      else if (layout === "CAVE") height = 0.53 + ridges![x] * 0.38;
+      // Taller cave ridges trade some headroom for deep gullies and cliffs.
+      else if (layout === "CAVE") height = 0.38 + ridges![x] * 0.53;
       const top = Math.floor(height * m.fh);
       m.surface[x] = top / 2;
       for (let y = top; y < m.fh; y++) m.cells[x * m.fh + y] = y - top > h * (desert ? 0.035 : 0.16) ? 2 : 1;
@@ -142,6 +152,9 @@ export class ModernWorld {
     }
     if (layout === "MOUNTAINS" && (biome === "GRASS" || biome === "SNOW")) {
       m.carveAlpineCaves();
+    }
+    if (cliffs) {
+      m.addCliffOverhangs();
       // Eroded lips can release small fragments; settle these before play.
       m.settle();
     }
@@ -151,15 +164,16 @@ export class ModernWorld {
   /** Cut chambers into downhill faces, leaving a grounded rock cantilever.
    * The original ridge profile remains the reference for surface vegetation. */
   private carveAlpineCaves(): void {
-    const span = Math.max(12, Math.floor(this.fw * .085));
-    const radius = this.fh * .047;
-    for (let region = 0; region < 3; region++) {
+    const count = hash(this.seed, 301) < .3 ? 1 : 2;
+    for (let region = 0; region < count; region++) {
+      const span = Math.max(24, Math.floor(this.fw * (.075 + hash(region, 302, this.seed) * .045)));
+      const radius = Math.max(40, this.fh * (.052 + hash(region, 303, this.seed) * .035));
       let mouth = 0, direction = 1, best = -Infinity;
-      const start = Math.floor(this.fw * (region / 3 + .035));
-      const end = Math.floor(this.fw * ((region + 1) / 3 - .035));
+      const start = Math.floor(this.fw * (region / count + .045));
+      const end = Math.floor(this.fw * ((region + 1) / count - .045));
       for (let x = start; x < end; x++) for (const d of [-1, 1]) {
         const inner = x - d * span;
-        if (inner < 8 || inner >= this.fw - 8) continue;
+        if (inner < this.fw * region / count + 8 || inner >= this.fw * (region + 1) / count - 8) continue;
         const drop = (this.surface[x] - this.surface[inner]) * 2;
         const score = drop + hash(x, region + 310, this.seed) * radius * .15;
         if (score > best) { best = score; mouth = x; direction = d; }
@@ -168,13 +182,24 @@ export class ModernWorld {
       const cy = Math.min(this.fh - radius - 12, this.surface[mouth] * 2 - radius * .3);
       const center = mouth - direction * span * .64;
       const rx = span * .85;
-      const left = Math.max(1, Math.floor(center - rx)), right = Math.min(this.fw - 1, Math.ceil(center + rx));
-      for (let x = left; x <= right; x++) {
+      const left = Math.max(Math.floor(this.fw * region / count) + 1, Math.floor(center - rx));
+      const right = Math.min(Math.floor(this.fw * (region + 1) / count) - 2, Math.ceil(center + rx));
+      const bounds = (x: number): [number, number] => {
         const u = (x - center) / rx;
         const arch = Math.sqrt(Math.max(0, 1 - u * u));
         const rough = (noise(x / 18, this.seed + region + 320) - .5) * radius * .16;
-        const roof = Math.floor(cy - radius * arch + rough);
-        const floor = Math.ceil(cy + radius * .65 * arch + rough);
+        return [Math.floor(cy - radius * arch + rough), Math.ceil(cy + radius * .65 * arch + rough)];
+      };
+      // A cutter crossing a valley would create another cave in the next ridge.
+      // Keep only its longest underground stretch, including its open mouth.
+      let run = left, first = left, last = left - 1;
+      for (let x = left; x <= right + 1; x++) {
+        if (x <= right && bounds(x)[1] > this.surface[x] * 2 + 12) continue;
+        if (x - run > last - first + 1) { first = run; last = x - 1; }
+        run = x + 1;
+      }
+      for (let x = first; x <= last; x++) {
+        const [roof, floor] = bounds(x);
         const surface = Math.floor(this.surface[x] * 2);
         // Rock carries the roof sideways into the mountain; a thin turf cap
         // remains on top. Both materials still use the normal weapon mask.
@@ -184,6 +209,74 @@ export class ModernWorld {
         for (let y = Math.max(0, roof); y < floor; y++) this.cells[x * this.fh + y] = 0;
       }
     }
+  }
+  /** Weathered rock shoulders project from cliffs. Broad roots and rounded,
+   * chipped noses blend into the face instead of forming thin straight shelves. */
+  private addCliffOverhangs(): void {
+    const span = Math.max(4, Math.floor(this.fw * .012));
+    for (let region = 0; region < 2; region++) {
+      let edge = 0, best = 0;
+      for (let x = Math.floor(this.fw * (region * .5 + .06)); x < this.fw * (region * .5 + .40) - span; x++) {
+        const drop = Math.abs(this.surface[x + span] - this.surface[x]);
+        if (drop > best) { best = drop; edge = x; }
+      }
+      if (best < this.h * .06) continue;
+      const direction = this.surface[edge] < this.surface[edge + span] ? 1 : -1;
+      const root = direction === 1 ? edge : edge + span;
+      // Sloped swamp/cavern faces need deeper shoulders to expose the undercut.
+      const reach = this.biome === "SWAMP" || this.layout === "CAVE" ? .040 : .022;
+      const length = Math.max(8, Math.floor(this.fw * (reach + hash(region, 341, this.seed) * .017)));
+      const depth = Math.max(8, Math.min(this.fh * (.044 + hash(region, 342, this.seed) * .026), best * 1.2));
+      const top = this.surface[root] * 2 + this.fh * .003;
+      const embed = Math.max(6, Math.floor(length * .4));
+      for (let step = -embed; step < length; step++) {
+        const x = root + direction * step;
+        if (x < 0 || x >= this.fw) continue;
+        const u = Math.max(0, step / length);
+        const round = Math.sqrt(Math.max(0, 1 - u * u));
+        const envelope = Math.sin(Math.PI * u);
+        // Broad fractures plus smaller chips avoid a regular sawtooth edge.
+        const upperChip = (noise(u * 5, this.seed + 343 + region) - .5) * depth * .10 * envelope;
+        const lowerChip = ((noise(u * 7, this.seed + 345 + region) - .5) * .14 +
+          (noise(u * 19, this.seed + 347 + region) - .5) * .045) * depth * envelope;
+        const shoulder = step < 0 ? this.surface[x] * 2 : top + depth * (.13 * u + .37 * (1 - round));
+        const roof = Math.floor(shoulder + upperChip);
+        const bottom = Math.ceil(top + depth * (.5 + .75 * round) + lowerChip);
+        for (let y = roof; y < Math.min(this.fh, bottom); y++) this.cells[x * this.fh + y] = 2;
+        // Convert the buried root to rock without filling existing cave air.
+        if (step <= 0) for (let y = bottom; y < this.fh; y++) {
+          const i = x * this.fh + y;
+          if (this.cells[i] !== 1) break;
+          this.cells[i] = 2;
+        }
+      }
+    }
+  }
+  /** Find a clear cave floor below a genuine roof. Return null when a tank's
+   * neighbourhood has no chamber large enough; surface placement is the fallback. */
+  caveSeatNear(x: number, halfWidth: number, minX: number, maxX: number): [number, number] | null {
+    if (this.layout !== "MOUNTAINS" || (this.biome !== "GRASS" && this.biome !== "SNOW")) return null;
+    let best: [number, number] | null = null, score = Infinity;
+    for (let cx = Math.max(halfWidth + 2, Math.ceil(minX)); cx <= Math.min(this.w - halfWidth - 3, Math.floor(maxX)); cx++) {
+      if (Math.abs(cx - x) >= score) continue;
+      let roof = false, gap = 0;
+      for (let y = 1; y < this.h - 18; y++) {
+        if (!this.solid(cx, y)) { if (roof) gap++; continue; }
+        if (roof && gap >= 38 && y > 65 && y > this.surface[cx * 2] + 24) {
+          const seat = y - 1;
+          let safe = true;
+          for (let dx = -halfWidth - 2; dx <= halfWidth + 2 && safe; dx++) {
+            for (let yy = seat - 32; yy <= seat; yy++) {
+              if (this.solid(cx + dx, yy)) { safe = false; break; }
+            }
+            if (!this.solid(cx + dx, seat + 12)) safe = false;
+          }
+          if (safe) { best = [cx, seat]; score = Math.abs(cx - x); break; }
+        }
+        roof = true; gap = 0;
+      }
+    }
+    return best;
   }
   /** Exact fine-cell contact. World-pixel callers use the conservative grid. */
   solid(x: number, y: number): boolean {
@@ -251,25 +344,20 @@ export class ModernWorld {
       const w = aspect ? h * aspect : kind === "house" ? 45 : 26 + rnd * 14;
       if (tanks.some(t => Math.abs(t.x - px) < w / 2 + t.half_width + 18)) continue;
       let y = this.h;
-      for (let yy = this.layout === "CAVE" ? Math.floor(this.h * 0.45) : 0; yy < this.h; yy++) if (this.solid(px, yy)) { y = yy; break; }
+      let start = 0;
+      if (this.layout === "CAVE") while (start < this.h && this.solid(px, start)) start++;
+      for (let yy = start; yy < this.h; yy++) if (this.solid(px, yy)) { y = yy; break; }
       if (y >= this.h || y - h < (this.layout === "CAVE" ? this.h * 0.32 : 40)) continue;
-      // Structures seat on a short foundation; plants require a gentle local slope.
+      // Avoid steep sites, then seat the whole silhouette above the uphill edge.
       const edge = Math.floor(w / 2);
       if (Math.abs(this.surface[Math.min(this.fw - 1, (px + edge) * 2)] - this.surface[Math.max(0, (px - edge) * 2)]) > 17) continue;
+      const x0 = Math.max(0, Math.floor((px - w / 2) * 2)), x1 = Math.min(this.fw, Math.ceil((px + w / 2) * 2));
+      for (let xx = x0; xx < x1; xx++) y = Math.min(y, Math.floor(this.surface[xx]));
+      if (y - h < (this.layout === "CAVE" ? this.h * .32 : 40)) continue;
       const prop: Prop = { id: this.props.length + 16, kind, x: px, y, w, h, variant: rnd };
       if (paintedMasks[kind]) prop.art = PAINTED_ART;
       this.props.push(prop);
-      const x0 = Math.max(0, Math.floor((px - w / 2) * 2)), x1 = Math.min(this.fw, Math.ceil((px + w / 2) * 2));
-      const y0 = Math.max(0, Math.floor((y - h) * 2)), y1 = Math.min(this.fh, (y + 3) * 2);
-      for (let xx = x0; xx < x1; xx++) for (let yy = y0; yy < y1; yy++) {
-        const dx = (xx / 2 - px) / w, v = (y - yy / 2) / h;
-        if (propContains(kind, dx, v)) this.cells[xx * this.fh + yy] = prop.id;
-      }
-      // Foundations support the full width of structures without floating corners.
-      if (kind === "house") for (let xx = x0; xx < x1; xx++) {
-        for (let yy = y * 2; yy < Math.min(this.fh, y * 2 + 36) && !this.cells[xx * this.fh + yy]; yy++) this.cells[xx * this.fh + yy] = 2;
-      }
-      this.publish(x0, y0, x1, Math.min(this.fh, y1 + 36));
+      this.stampSupportedProp(prop);
     }
     if (this.biome === "DESERT" && this.layout === "MOUNTAINS") this.placeRocks(tanks);
     if ((this.biome === "GRASS" || this.biome === "SNOW") && this.layout === "MOUNTAINS") placeAlpineRocks(this, tanks);
@@ -279,7 +367,7 @@ export class ModernWorld {
   private placeRocks(tanks: ReadonlyArray<{x: number; half_width: number}>): void {
     // Reserve space for larger stones before filling gaps with small rubble.
     for (let piece = 0; piece < 4; piece++) {
-      for (let n = 0, anchor = 16; anchor < this.w - 12 && this.props.length < 180; n++, anchor += 36) {
+      for (let n = 0, anchor = 16; anchor < this.w - 12 && this.props.length < 180; n++, anchor += piece === 0 ? 12 : 24) {
         const center = anchor + hash(n, 501, this.seed) * 20;
         const boulderWidth = 16 + hash(n, 502, this.seed) * 24;
         const rnd = hash(n, 502 + piece, this.seed);
@@ -295,7 +383,7 @@ export class ModernWorld {
         for (let x = x0; x < x1; x++) {
           high = Math.min(high, this.surface[x]); low = Math.max(low, this.surface[x]);
         }
-        if (low - high > h * .35 || high - h < 40) continue;
+        if (low - high > h * .65 || high - h < 40) continue;
         const y = Math.min(this.h - 1, low + .5);
         const p: Prop = { id: this.props.length + 16, kind: "rock", x: px, y, w, h, variant: rnd };
         const y0 = Math.floor((y - h) * 2), y1 = Math.ceil(y * 2);
@@ -340,13 +428,18 @@ export class ModernWorld {
         const tall = ["office", "tower", "gherkin", "big_ben", "lighthouse"].includes(kind);
         // A taller silhouette needs a proportionally wider plot. Constrained
         // plots fit the whole sprite; no independent width/height variation.
-        const w = Math.min(tall && aspect ? this.h * fraction * aspect : width, end - left);
-        if (w < 30 * scale) break;
+        // Do not squeeze a home into a leftover sliver: its whole painted
+        // silhouette would shrink, making doors and windows smaller than tanks.
+        const minimumWidth = downtown ? 30 * scale : Math.max(60, 40 * (aspect ?? 1)) * scale;
+        const requestedWidth = tall && aspect ? this.h * fraction * aspect : Math.max(width, minimumWidth);
+        const w = Math.min(requestedWidth, end - left);
+        if (w < minimumWidth) break;
         this.stampCityProp(kind, left, w, aspect ? w / aspect : this.h * fraction);
         left += w + Math.floor((downtown ? 7 + rnd * 8 : 16 + rnd * 14) * scale);
       }
     }
-    if (this.w >= 480 && hash(this.seed, 47) > .3) {
+    const crossing = this.w >= 480 && hash(this.seed, 47) > .3;
+    if (crossing) {
       const left = downtownRight + 6, w = parkWidth - 12;
       const kind = hash(this.seed, 48) > .5 ? "golden_gate" : "bridge";
       const bank = Math.floor(Math.min(this.surface[left * 2], this.surface[(left + w - 1) * 2]));
@@ -362,12 +455,30 @@ export class ModernWorld {
       }
       this.stampCityProp(kind, left, w, h, bank + depth);
     }
-    // One boundary tree leaves the rest of the park open for several tanks.
-    for (const x of [downtownLeft - parkWidth + 8]) {
-      const kind = this.biome === "DESERT" ? "cactus" : "tree", height = Math.floor(38 * scale);
-      this.stampCityProp(kind, Math.round(x), height * (paintedAspect(kind) ?? .5), height);
-    }
+    this.placePark(downtownLeft - parkWidth + 3, parkWidth - 6, false);
+    if (!crossing) this.placePark(downtownRight + 3, parkWidth - 6, true);
     this.publish(0, 0, this.fw, this.fh);
+  }
+  /** Plant public lawns, with low equipment and clear ground between trees. */
+  private placePark(left: number, width: number, sports: boolean): void {
+    const x0 = Math.ceil(left * 2), x1 = Math.floor((left + width) * 2);
+    let ground = this.h;
+    for (let x = x0; x < x1; x++) ground = Math.min(ground, this.surface[x]);
+    ground = Math.floor(ground);
+    // Follow the existing terrain so the park edges do not create tall walls
+    // beside neighbouring tank seats. The lawn descriptor preserves its extent.
+    this.props.push({ id: this.props.length + 16, kind: "lawn", x: left + width / 2,
+      y: ground + 4, w: width, h: 4, variant: 0 });
+    const treeWidth = width * .23;
+    for (const x of [left, left + width * .1]) {
+      this.stampCityProp("tree", x, treeWidth, treeWidth / paintedAspect("tree")!);
+    }
+    if (sports) {
+      this.stampCityProp("stadium", left + width * .35, width * .6, width * .2);
+    } else {
+      this.stampCityProp("swings", left + width * .32, width * .15, width * .17);
+      this.stampCityProp("playground", left + width * .49, width * .16, width * .18);
+    }
   }
   /** Stamp a collision silhouette and support only its actual feet. */
   stampCityProp(kind: PropKind, left: number, w: number, height: number, baseY?: number): Prop {
@@ -385,30 +496,61 @@ export class ModernWorld {
     const p: Prop = { id: this.props.length + 16, kind, x: left + w / 2, y, w, h, variant: hash(left, 51, this.seed) };
     if (paintedMasks[kind]) p.art = PAINTED_ART;
     this.props.push(p);
-    for (let x = x0; x < x1; x++) {
-      const u = (x / 2 - p.x) / w;
-      let foot = -1;
-      for (let yy = Math.max(0, (y - h) * 2); yy < y * 2; yy++) {
-        if (propContains(kind, u, (y - yy / 2) / h)) { this.cells[x * this.fh + yy] = p.id; foot = yy; }
-      }
-      // Painted base stones have slightly uneven edges. Seat their actual
-      // bottom pixels, while leaving elevated arches and bridge spans open.
-      if (foot >= (y - Math.max(.5, h * .05)) * 2) {
-        for (let yy = foot + 1; yy < this.fh && !this.cells[x * this.fh + yy]; yy++) this.cells[x * this.fh + yy] = 2;
-      }
-    }
-    this.publish(x0, Math.max(0, (y - h) * 2), x1, this.fh);
+    this.stampSupportedProp(p);
     return p;
   }
+  /** Seat the actual lower silhouette, including uneven painted base stones.
+   * Plants get a continuous flat soil patch; structures get rock down to the
+   * existing terrain. Elevated bridge spans must remain open. */
+  private stampSupportedProp(p: Prop): void {
+    const plant = p.kind === "tree" || p.kind === "pine" || p.kind === "cactus";
+    const x0 = Math.max(0, Math.floor((p.x - p.w / 2) * 2));
+    const x1 = Math.min(this.fw, Math.ceil((p.x + p.w / 2) * 2));
+    const y0 = Math.max(0, Math.floor((p.y - p.h) * 2));
+    const y1 = Math.min(this.fh, Math.ceil(p.y * 2));
+    const feet: Array<[number, number]> = [];
+    for (let x = x0; x < x1; x++) {
+      let foot = -1;
+      for (let y = y0; y < y1; y++) {
+        if (propContains(p.kind, (x / 2 - p.x) / p.w, (p.y - y / 2) / p.h)) foot = y;
+      }
+      if (foot >= (p.y - Math.max(.5, p.h * .05)) * 2) feet.push([x, foot]);
+    }
+    let left = x0, right = x1;
+    if (plant && feet.length) {
+      // Level just the root footprint, not the full canopy. A little soil at
+      // either edge keeps the painted roots visibly embedded in the ground.
+      left = Math.max(0, feet[0][0] - 2);
+      right = Math.min(this.fw, feet[feet.length - 1][0] + 3);
+      const top = Math.min(...feet.map(([, foot]) => foot + 1));
+      for (let x = left; x < right; x++) {
+        for (let y = top; y < this.fh && !this.cells[x * this.fh + y]; y++) this.cells[x * this.fh + y] = 1;
+        this.surface[x] = Math.min(this.surface[x], top / 2);
+      }
+    } else {
+      for (const [x, foot] of feet) {
+        for (let y = foot + 1; y < this.fh && !this.cells[x * this.fh + y]; y++) this.cells[x * this.fh + y] = 2;
+      }
+    }
+    for (let x = x0; x < x1; x++) for (let y = y0; y < y1; y++) {
+      if (propContains(p.kind, (x / 2 - p.x) / p.w, (p.y - y / 2) / p.h)) {
+        this.cells[x * this.fh + y] = p.kind === "lawn" ? 1 : p.id;
+      }
+    }
+    this.publish(Math.min(left, x0), y0, Math.max(right, x1), this.fh);
+  }
+
   /** Mix ground and roof preferences, without pulling every tank out of
    * its neighbourhood. Open parks and streets remain valid starting positions. */
   citySeatNear(x: number, halfWidth: number, minX: number, maxX: number, preferGround: boolean): number {
     let best = Math.max(Math.ceil(minX), Math.min(Math.floor(maxX), x)), score = Infinity;
     for (let candidate = Math.ceil(minX); candidate <= Math.floor(maxX); candidate++) {
-      const ground = this.props.every(p => Math.abs(candidate - p.x) > p.w / 2 + halfWidth + 4);
+      const ground = this.props.every(p => p.kind === "lawn" || Math.abs(candidate - p.x) > p.w / 2 + halfWidth + 4);
       let top = 0;
       while (top < this.h && !this.solid(candidate, top)) top++;
       if (top < 65 || top >= this.h - 2) continue;
+      if (ground && Array.from({ length: halfWidth * 2 + 1 }, (_, i) => candidate - halfWidth + i)
+        .some(xx => this.solid(xx, top - 6))) continue;
       if (!ground) {
         const material = this.cells[candidate * 2 * this.fh + top * 2];
         const prop = this.props[material - 16];
@@ -483,7 +625,7 @@ export class ModernWorld {
       !Array.isArray(data.props) || data.props.length > 180) throw new Error("Invalid or unsupported Modern terrain save");
     const m = new ModernWorld(w, h, data.seed, data.biome, data.layout);
     m.props = data.props.map((p, i) => {
-      if (p.id !== i + 16 || !["pine", "tree", "cactus", "house", "tower", "car", "animal", "rock", ...CITY_BUILDINGS].includes(p.kind) ||
+      if (p.id !== i + 16 || !["pine", "tree", "cactus", "house", "tower", "car", "animal", "rock", ...CITY_BUILDINGS, ...PARK_PROPS].includes(p.kind) ||
         ![p.x,p.y,p.w,p.h,p.variant].every(Number.isFinite) || p.x < 0 || p.x >= w || p.y < 0 || p.y > h || p.w <= 0 || p.w > w || p.h <= 0 || p.h > h ||
         p.art !== undefined && p.art !== "illustrated-v1" && p.art !== PAINTED_ART) throw new Error("Invalid Modern prop");
       return {...p};
@@ -507,6 +649,7 @@ export function propContains(kind: PropKind, x: number, y: number, variant = .5)
     const ix = Math.floor((x + .5) * size), iy = Math.floor((1 - y) * size);
     return ix >= 0 && ix < size && iy >= 0 && iy < size && landmark.rows[iy][ix] === "1";
   }
+  if (isParkProp(kind)) return parkContains(kind, x, y);
   if (kind === "rock") return rockContains(x, y, variant);
   if (isCityBuilding(kind)) return cityContains(kind, x, y);
   const ix = Math.floor((x + 0.5) * 128), iy = Math.floor((1 - y) * 128);

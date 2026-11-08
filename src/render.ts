@@ -645,6 +645,7 @@ export class Renderer {
   private _dirt_lo: number;
   private _dirt_hi: number;
   private _projectileTrails: ProjectileTrails;
+  private _projectileSmoke: ProjectileTrails;
   private _indicatorFont: pygame.Font;
   private modernRenderer: ModernRenderer | null = null;
   modernFrame: HTMLCanvasElement | null = null;
@@ -657,6 +658,7 @@ export class Renderer {
     this.w = width;
     this.h = height;
     this._projectileTrails = new ProjectileTrails(width, height);
+    this._projectileSmoke = new ProjectileTrails(width, height, 500, 0.28);
     this._indicatorFont = pygame.font.SysFont("consolas,couriernew,monospace", 9, true);
     // at-rest fallback table (used before a frame's state LUT is available).
     this.pal = build_palette();
@@ -1231,20 +1233,30 @@ export class Renderer {
     if (this._trailState !== state || this._trailTerrain !== state.terrain ||
         this._trailRound !== state.round_index || this.cfg.BOMB_ICON.toUpperCase() === "INVISIBLE") {
       this._projectileTrails.clear();
+      this._projectileSmoke.clear();
       this._trailState = state;
       this._trailTerrain = state.terrain;
       this._trailRound = state.round_index;
     }
     if (this.cfg.BOMB_ICON.toUpperCase() === "INVISIBLE") return;
     const airborne = state.projectiles.filter(isAirborneProjectile);
-    const pixels = this._projectileTrails.update(airborne, nowMs);
+    const modern = !!state.terrain.modern;
+    const pixels = (modern ? this._projectileSmoke : this._projectileTrails).update(airborne, nowMs);
     const ctx = surf.ctx;
     ctx.save();
     ctx.fillStyle = "rgb(252, 252, 252)";
     for (const { x, y, opacity } of pixels) {
       if (C.is_dirt(gridAt(state.terrain.grid, this.w, this.h, x, y))) continue;
       ctx.globalAlpha = opacity;
-      ctx.fillRect(x, y, 1, 1);
+      if (modern) {
+        // Small overlapping wisps widen as they cool, then disappear.
+        const age = 1 - opacity / 0.28;
+        ctx.fillStyle = "rgb(255, 245, 225)";
+        ctx.beginPath();
+        const wisp = Math.sin(x * 1.7 + y * 0.9);
+        ctx.arc(x, y - age * 2 + wisp * age * 0.6, 1 + age * 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      } else ctx.fillRect(x, y, 1, 1);
     }
     ctx.restore();
   }
@@ -1263,6 +1275,10 @@ export class Renderer {
     }
     const icon = this.cfg.BOMB_ICON.toUpperCase();
     if (icon === "INVISIBLE") {
+      return;
+    }
+    if (state.terrain.modern && isAirborneProjectile(p)) {
+      this._draw_rocket(surf, p, icon === "BIG");
       return;
     }
     // White (pal 0xff) in-flight dot; Small=1px, Big=5px plus.
@@ -1290,6 +1306,55 @@ export class Renderer {
     }
   }
 
+  /** Modern visibility artwork only; velocity is read without changing physics. */
+  private _draw_rocket(surf: pygame.Surface, p: ProjectileLike, big: boolean): void {
+    if (p.sx < 0 || p.sx >= this.w || p.sy < 0 || p.sy >= this.h) return;
+    const vx = typeof p.vx === "number" ? p.vx : 1;
+    const vy = typeof p.vy === "number" ? p.vy : 0;
+    const ctx = surf.ctx;
+    ctx.save();
+    ctx.translate(p.sx, p.sy);
+    ctx.rotate(Math.atan2(-vy, vx));
+    const scale = big ? 1.3 : 1;
+    ctx.scale(scale, scale);
+    // A white-hot engine and golden bloom stay visible against bright skies.
+    const glow = ctx.createRadialGradient(-5, 0, 0, -5, 0, 11);
+    glow.addColorStop(0, "rgba(255, 255, 225, 1)");
+    glow.addColorStop(0.3, "rgba(255, 223, 100, 0.9)");
+    glow.addColorStop(0.6, "rgba(255, 175, 45, 0.4)");
+    glow.addColorStop(1, "rgba(255, 160, 45, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(-16, -11, 22, 22);
+    ctx.fillStyle = "#ffcb49";
+    ctx.beginPath();
+    ctx.moveTo(-3, -2); ctx.lineTo(-13, 0); ctx.lineTo(-3, 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(-3, -1.2); ctx.lineTo(-10, 0); ctx.lineTo(-3, 1.2);
+    ctx.fill();
+    ctx.fillStyle = "#ffb52e";
+    ctx.strokeStyle = "#e87520";
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(5, 0); ctx.lineTo(1.5, -1.7); ctx.lineTo(-2, -1.7);
+    ctx.lineTo(-4, -3); ctx.lineTo(-3.5, 0); ctx.lineTo(-4, 3);
+    ctx.lineTo(-2, 1.7); ctx.lineTo(1.5, 1.7); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#ffe396";
+    ctx.beginPath();
+    ctx.moveTo(4, 0); ctx.lineTo(0.5, -1); ctx.lineTo(0.5, 1);
+    ctx.fill();
+    // The incandescent engine overlaps the rear silhouette, as in the concept.
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowColor = "#ffffb0";
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.ellipse(-3.5, 0, 3.2, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   private _draw_weapon_effect(surf: pygame.Surface, effect: WeaponEffect, state: GameState): void {
     if (effect.kind === "funky") {
       for (const trail of effect.trails) {
@@ -1313,19 +1378,27 @@ export class Renderer {
         for (const point of c.pixels) surf.set_at(point, [240, 40, 40]);
       }
     } else if (effect.kind === "blast") {
-      if (state.terrain.modern) return; // HD fire/smoke is drawn with the final scene.
+      // Keep the animated blast surface in both modes. Modern particles and
+      // debris are composited over this layer when the final scene is drawn.
       const e = effect;
       const left = Math.max(0, e.x - e.radius), top = Math.max(0, e.y - e.radius);
       const w = Math.min(this.w, e.x + e.radius + 1) - left;
       const h = Math.min(this.h, e.y + e.radius + 1) - top;
       if (w <= 0 || h <= 0) return;
       const frame = surf.ctx.getImageData(left, top, w, h);
+      const opacity = state.terrain.modern ? 0.75 : 1;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         const color = blastPixel(e, left + x - e.x, top + y - e.y);
         if (!color) continue;
         const i = (y * w + x) * 4;
-        frame.data[i] = color[0]; frame.data[i + 1] = color[1]; frame.data[i + 2] = color[2];
-        frame.data[i + 3] = 255; // Modern effects draw onto a transparent overlay.
+        // Source-over blending preserves earlier effects on the transparent
+        // Modern overlay, including overlapping blasts.
+        const behind = frame.data[i + 3] / 255 * (1 - opacity);
+        const alpha = opacity + behind;
+        for (let channel = 0; channel < 3; channel++) {
+          frame.data[i + channel] = (color[channel] * opacity + frame.data[i + channel] * behind) / alpha;
+        }
+        frame.data[i + 3] = alpha * 255;
       }
       surf.ctx.putImageData(frame, left, top);
     } else if (effect.kind === "death") {

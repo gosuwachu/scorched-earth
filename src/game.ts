@@ -595,12 +595,23 @@ export class GameState {
         xs[i] = this.terrain.modern.citySeatNear(original[i], this.tanks[i].half_width, lo, hi, i % 3 !== 0);
       }
     }
+    const caveSeats = new Map<number, number>();
+    if (this.terrain.modern?.layout === "MOUNTAINS") {
+      const original = xs.slice();
+      for (let i = 0; i < n && caveSeats.size < Math.min(2, Math.ceil(n / 3)); i++) {
+        const lo = i === 0 ? margin : xs[i - 1] + spacing;
+        const hi = i === n - 1 ? this.w - margin : original[i + 1] - spacing;
+        const seat = this.terrain.modern.caveSeatNear(original[i], this.tanks[i].half_width,
+          Math.max(lo, original[i] - usable / n * .5), Math.min(hi, original[i] + usable / n * .5));
+        if (seat) { xs[i] = seat[0]; caveSeats.set(seat[0], seat[1]); }
+      }
+    }
     this._shuffle(xs); // Python's module-level random.shuffle (NOT self.rng)
     for (let i = 0; i < this.tanks.length; i++) {
       const t = this.tanks[i];
       const x = xs[i];
       t.x = x;
-      t.y = this.terrain.drop_to_footprint(x, t.half_width); // FUN_4a4c_0fbf full-footprint drop
+      t.y = caveSeats.get(x) ?? this.terrain.drop_to_footprint(x, t.half_width); // Modern cave seat or surface drop
       // carve the flat seat under the tank (FUN_33a1_08e7 conform) so the body
       // sits level on a slope.  Tanks are >= 15px apart and the footprint is 15px.
       this.terrain.level_under_tank(x, t.y, t.half_width);

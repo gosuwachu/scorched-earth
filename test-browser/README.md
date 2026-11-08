@@ -13,7 +13,7 @@ available; set `CHROMIUM_PATH` to an existing browser executable if necessary.
 | Canvas rendering | `run.mjs` | Render states, nonblank canvas, page errors, and render coverage |
 | Menus, input or equipment controls | `ui.mjs` | Real DOM interaction, focus, responsive layout, and control behavior |
 | Modern terrain and artwork | `modern.mjs` | Six biome/layout scenes, extra mountain/city seeds, dense blocks and rooftop starts, visible missile/nuke blasts, destruction, save masks and timings |
-| Painted scenery and city districts | `city_landmarks.mjs` | Twenty building/vegetation specimens, preserved proportions, connected silhouettes, five ten-player district maps, mixed ground/roof starts and height contrast |
+| Painted scenery and city districts | `city_landmarks.mjs` | Twenty building/vegetation specimens, preserved proportions, connected silhouettes, six ten-player district maps, planted playgrounds and a sports park, mixed ground/roof starts and height contrast |
 | Alpine caves and overhangs | `alpine.mjs` | Eight grassy/snowy scenes, open cave space, firing, destruction and save roundtrips |
 | Modern particle explosions | `modern_blast.mjs` | Growing crater visibility, moving/repeatable particles, plasma terrain preservation and unchanged collision cells |
 | Modern setup and application integration | `modern_ui.mjs` | Setup, phone layout, actual save/restore, logical input mapping and host handoff |
@@ -160,3 +160,9 @@ Miscellaneous, verifies the price/count and painted icon, and saves
 `ui-laser-sight-shop.png`. Unit tests cover depletion, synchronous/simultaneous
 launches, remote controller ownership, and save migration. These are browser
 feature checks, not DOS fidelity evidence.
+
+Modern missiles use a velocity-oriented rocket with warm exhaust and a soft,
+500 ms smoke trail. `trail_modern_rocket.png`, `trail_modern_smoke.png`, and
+`trail_modern_expired.png` cover both flight directions, residue after removal,
+and expiry. The render checks verify visible artwork and unchanged velocity/TRACE
+state. Classic mode retains its 150 ms streak; these are browser artwork checks.

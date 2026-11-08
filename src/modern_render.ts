@@ -1,4 +1,5 @@
 import { drawModernTank, drawModernBlast } from "./modern_art";
+import { sandstoneColor } from "./desert";
 import type { BlastEffect } from "./combat_effects";
 import type { GameState } from "./render";
 import { ITEMS } from "./weapons";
@@ -9,6 +10,7 @@ import { landmarkMasks } from "./landmark_masks";
 import { PAINTED_ART, paintedMasks, paintedSample, paintedTexture } from "./painted_sprites";
 import { ModernWorld, hash, isCityBuilding, type Prop } from "./modern";
 import { buildingColor } from "./modern_buildings";
+import { isParkProp, parkColor } from "./city_parks";
 import { rockColor } from "./modern_rocks";
 import { alpineRockColor } from "./alpine_rocks";
 import type { Surface } from "./pygame";
@@ -70,6 +72,7 @@ function propColor(p: Prop, x: number, y: number, seed: number, biome: ModernWor
   }
   if (isCityBuilding(p.kind)) return buildingColor(p, x, y, seed);
   const dx = x - (p.x - p.w / 2), dy = p.y - y, u = dx / p.w, v = dy / p.h;
+  if (isParkProp(p.kind)) return parkColor(p.kind, u, v, hash(Math.floor(x * 2), Math.floor(y * 2), seed));
   if (p.kind === "rock") {
     const grain = hash(Math.floor(x * 2), Math.floor(y * 2), seed);
     return biome === "GRASS" || biome === "SNOW" ? alpineRockColor(u, v, p.variant, grain, biome === "SNOW") : rockColor(u, v, p.variant, grain);
@@ -274,6 +277,7 @@ export class ModernRenderer {
     const ctx = this.terrain.getContext("2d")!;
     this.pixelTile ??= ctx.createImageData(128, 128);
     const tile = this.pixelTile, pixels = tile.data;
+    const lawns = m.props.filter(p => p.kind === "lawn");
     for (let tx = 0; tx < m.tilesX; tx++) for (let ty = 0; ty < m.tilesY; ty++) {
       const t = tx * m.tilesY + ty;
       // Include neighbors because a crater can expose an unchanged tile edge.
@@ -284,6 +288,7 @@ export class ModernRenderer {
       this.tileVersions[t] = version; pixels.fill(0);
       for (let xx = 0; xx < 128 && tx * 128 + xx < m.fw; xx++) {
         const x = tx * 128 + xx;
+        const lawn = lawns.find(p => Math.abs(x / 2 - p.x) < p.w / 2);
         for (let yy = 0; yy < 128 && ty * 128 + yy < m.fh; yy++) {
           const y = ty * 128 + yy, index = x * m.fh + y, material = m.cells[index];
           if (!material) continue;
@@ -295,15 +300,21 @@ export class ModernRenderer {
             let tex = 0;
             if (texture) { const i = ((y % texture.height) * texture.width + x % texture.width) * 4; tex = (texture.data[i] * 0.3 + texture.data[i + 1] * 0.6 + texture.data[i + 2] * 0.1 - 100) * 0.85; }
             const detail = tex + band + (n - 0.5) * 7;
-            color = m.biome === "DESERT" ? [163 + detail, 96 + detail * 0.85, 47 + detail * 0.7] :
+            color = m.biome === "DESERT" ? sandstoneColor(x / 2, y / 2, m.seed, n, tex) :
               material === 2 ? [87 + detail * 0.8, 88 + detail * 0.8, 87 + detail * 0.85] :
               m.biome === "SWAMP" ? [83 + detail, 70 + detail * 0.85, 45 + detail * 0.7] : [127 + detail, 92 + detail * 0.85, 57 + detail * 0.7];
             // Only natural soil carries turf; fresh deposited soil remains bare.
             const above = (d: number) => y >= d && m.cells[index - d] === 0;
-            if (material === 1 && (above(1) || above(4) || above(8) || above(12))) {
+            // Sand collects on shelves, not as a yellow outline down every wall.
+            const sandShelf = m.biome !== "DESERT" || x >= 8 && x + 8 < m.fw &&
+              m.cells[index - 8 * m.fh] !== 0 && m.cells[index + 8 * m.fh] !== 0;
+            if (material === 1 && sandShelf && (above(1) || above(4) || m.biome !== "DESERT" && (above(8) || above(12)))) {
               color = m.biome === "SNOW" ? [218 + n * 27, 233 + n * 20, 241 + n * 14] :
                 m.biome === "DESERT" ? [226 + detail * 0.4, 166 + detail * 0.5, 81 + detail * 0.5] :
                 [83 + n * 48, 117 + n * 55, 35 + n * 25];
+            }
+            if (material === 1 && lawn && (above(1) || above(4) || above(8))) {
+              color = parkColor("lawn", 0.5, 1, n);
             }
             if (above(1) || x > 0 && !m.cells[index - m.fh]) color = color.map(c => c + 19) as RGB;
             if (y + 2 < m.fh && !m.cells[index + 2]) color = color.map(c => c * 0.66) as RGB;

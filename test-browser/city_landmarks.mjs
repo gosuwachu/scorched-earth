@@ -19,14 +19,23 @@ try {
     await page.locator("#game").screenshot({ path: `${out}/${kind}.png` });
     results.push(result);
   }
-  for (const seed of [1, 2, 19, 71, 313]) {
+  for (const seed of [1, 2, 3, 19, 71, 313]) {
     const meta = await page.evaluate(async seed => (await import("/test-browser/modern.ts")).scene("GRASS", "CITY", seed, 10), seed);
+    assert.ok(await page.evaluate(() => window.modernTest.gs.terrain.modern.props
+      .filter(p => ["detached", "semi", "townhouse", "shop", "apartment"].includes(p.kind))
+      .every(p => p.w >= 59 && p.h >= 39.5)), `city ${seed}: readable suburban buildings`);
+    assert.ok(meta.propKinds.includes("lawn") && meta.propKinds.includes("swings") && meta.propKinds.includes("playground"), `city ${seed}: planted playground`);
+    assert.ok(await page.evaluate(() => window.modernTest.gs.tanks.every(t => {
+      const m = window.modernTest.gs.terrain.modern;
+      return t.alive && !m.solid(t.x - t.half_width, t.y - 6) && !m.solid(t.x + t.half_width, t.y - 6);
+    })), `city ${seed}: park equipment leaves tanks clear`);
     assert.ok(meta.groundTanks >= 3 && meta.rooftopTanks >= 1, `city ${seed}: mixed ground and roof starts`);
     assert.ok(meta.buildingCoverage < .76 && meta.heightContrast > 3.5, `city ${seed}: open districts and height contrast`);
     await page.locator("#game").screenshot({ path: `${out}/district-seed-${seed}.png` });
     results.push(meta);
   }
+  assert.ok(results.some(r => r.propKinds?.includes("stadium")), "sports park specimen");
   assert.deepEqual(errors, []);
   writeFileSync(`${out}/summary.json`, JSON.stringify(results, null, 2));
-  console.log(`PASS: ${kinds.length} painted scenery specimens and five ten-player district maps`);
+  console.log(`PASS: ${kinds.length} painted scenery specimens and six ten-player district maps`);
 } finally { await browser.close(); }

@@ -26,7 +26,10 @@ export class ProjectileTrails {
   private pixels = new Map<number, Sample>();
   private lastTime = -Infinity;
 
-  constructor(private width: number, private height: number) {}
+  constructor(
+    private width: number, private height: number,
+    private lifetimeMs = TRAIL_LIFETIME_MS, private opacity = TRAIL_OPACITY,
+  ) {}
 
   clear(): void {
     this.previous.clear();
@@ -38,7 +41,7 @@ export class ProjectileTrails {
     if (nowMs < this.lastTime) this.clear();
     this.lastTime = nowMs;
     for (const [key, sample] of this.pixels) {
-      if (nowMs - sample.time >= TRAIL_LIFETIME_MS) this.pixels.delete(key);
+      if (nowMs - sample.time >= this.lifetimeMs) this.pixels.delete(key);
     }
 
     const current = new Map<Position, Sample>();
@@ -51,7 +54,7 @@ export class ProjectileTrails {
       const elapsed = nowMs - prev.time;
       // Do not bridge teleports (including the DOS Concrete opposite-edge
       // bounce) or gaps after a suspended tab. Stationary shots just age out.
-      if (elapsed <= 0 || elapsed >= TRAIL_LIFETIME_MS ||
+      if (elapsed <= 0 || elapsed >= this.lifetimeMs ||
           Math.abs(dx) > this.width / 2 || Math.abs(dy) > this.height / 2) continue;
       const steps = Math.max(Math.abs(dx), Math.abs(dy));
       for (let i = 0; steps > 0 && i <= steps; i++) {
@@ -69,7 +72,7 @@ export class ProjectileTrails {
     // Removed shots stop sampling, but their pixels finish fading naturally.
     this.previous = current;
     return Array.from(this.pixels.values(), ({ x, y, time }) => ({
-      x, y, opacity: TRAIL_OPACITY * (1 - (nowMs - time) / TRAIL_LIFETIME_MS),
+      x, y, opacity: this.opacity * (1 - (nowMs - time) / this.lifetimeMs),
     }));
   }
 }

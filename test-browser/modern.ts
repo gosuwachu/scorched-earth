@@ -71,7 +71,7 @@ export async function scene(biome: string, layout: string, seed = 71, players = 
   }
   const buildings = world.props.filter(p => isCityBuilding(p.kind) && p.kind !== "bridge" && p.kind !== "golden_gate");
   const rooftops = gs.tanks.filter(t => world.cells[t.x * 2 * world.fh + (t.y + 1) * 2] >= 16).length;
-  return { biome, layout, seed, caveAir, generationMs, firstRenderMs, cachedRenderMs: frames.reduce((a,b)=>a+b,0)/frames.length,
+  return { biome, layout, seed, caveAir, caveTanks: gs.tanks.filter(t => t.y > world.surface[t.x * 2] + 20).length, generationMs, firstRenderMs, cachedRenderMs: frames.reduce((a,b)=>a+b,0)/frames.length,
     props: world.props.length, propKinds: world.props.map(p => p.kind), cells: world.cells.length,
     rooftopTanks: rooftops, groundTanks: gs.tanks.length - rooftops,
     buildingCoverage: buildings.reduce((sum, p) => sum + p.w, 0) / world.w,

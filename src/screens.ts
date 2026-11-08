@@ -619,6 +619,8 @@ export class MainMenuScreen extends Screen {
     // 1. ~Start (tag 0) -> begin game
     p.add(new Button(x, y, "~Start", "start_game", null, true));
     y += dy;
+    p.add(new Button(x, y, "~Quick Game", "quick_game"));
+    y += dy;
     // Submenu items (push:<name>), retaining the original accelerators.
     const submenuItems: [string, string][] = [
       ["S~ound", "sound"], ["~Hardware", "hardware"],

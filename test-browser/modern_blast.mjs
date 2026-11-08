@@ -20,7 +20,12 @@ try {
       blast = gs.projectiles.find(p => p.weaponEffect?.kind === "blast")?.weaponEffect;
     }
     if (!blast) throw new Error("No blast from normal launch");
-    Object.assign(blast, { x: 512, y: gs.terrain.column_top(512) + 80, radius: 60, phase: "grow", grown: 12, cycle: 6 });
+    const { startBlast } = await import("/src/combat_effects.ts");
+    const shot = gs.projectiles.find(p => p.weaponEffect === blast);
+    startBlast(gs, shot, 512, gs.terrain.column_top(512) + 80, 60);
+    gs.projectiles = [gs.projectiles.at(-1)];
+    blast = gs.projectiles[0].weaponEffect;
+    Object.assign(blast, { grown: 12, cycle: 6 });
     const cells = gs.terrain.modern.cells.slice();
     const alpha = dx => renderer.modernRenderer.cutTerrain.getContext("2d").getImageData((blast.x + dx) * 2, blast.y * 2, 1, 1).data[3];
     render();
@@ -37,8 +42,8 @@ try {
     blast.phase = "hold"; blast.cycle = 70; render();
     const settled = png();
     blast.cycle = 92; render();
-    const noRepeat = png() === settled;
-    // All sizes retain their circle after one short burst, with no re-emission
+    const surfaceAnimates = png() !== settled;
+    // All sizes emit one short burst, leaving no outline or re-emission
     // during the hold or when the cleanup phase begins.
     const { drawModernBlast } = await import("/src/modern_art.ts");
     const bursts = [];
@@ -57,17 +62,39 @@ try {
       bursts.push({ radius, hadBurst: active !== quiet,
         expired: frame(growth + 53) === quiet,
         cleanupQuiet: frame(growth + 100, true) === quiet,
-        ringVisible: ctx.getImageData(center + radius, center, 1, 1).data[3] > 0 });
+        fullyClear: !ctx.getImageData(0, 0, canvas.width, canvas.height).data.some((v, i) => i % 4 === 3 && v > 0) });
     }
-    blast.cycle = 30; render();
-    return { early, late, plasma, repeatable, moves, unchanged, noRepeat, bursts };
+    // Exercise the actual composite for small, Baby Nuke, Nuke and larger blasts.
+    const composites = [];
+    for (const radius of [10, 40, 75, 225]) {
+      startBlast(gs, shot, 512, 384, radius);
+      gs.projectiles = [gs.projectiles.at(-1)];
+      const effect = gs.projectiles[0].weaponEffect;
+      Object.assign(effect, { grown: radius, cycle: Math.ceil(radius / (radius < 40 ? 1 : 2)) });
+      render();
+      const pixels = renderer.modernFrame.getContext("2d").getImageData(
+        (512 - radius) * 2, (384 - radius) * 2, radius * 4, radius * 4).data;
+      let red = 0, fire = 0, translucentRed = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i] > 60 && pixels[i] > pixels[i + 1] * 1.5 && pixels[i] > pixels[i + 2] * 1.5) {
+          red++;
+          if (pixels[i + 1] > 0 && pixels[i + 2] > 0) translucentRed++;
+        }
+        if (pixels[i] > 200 && pixels[i + 1] > 100 && pixels[i + 1] < 220 && pixels[i + 2] < 80) fire++;
+      }
+      composites.push({ radius, red, fire, translucentRed });
+    }
+    return { early, late, plasma, repeatable, moves, unchanged, surfaceAnimates, bursts, composites };
   });
   assert.deepEqual(result.early, [0, 255, 255], "only the growing interior disappears");
   assert.deepEqual(result.late, [0, 0, 255], "terrain outside the blast stays visible");
   assert.deepEqual(result.plasma, [255, 255, 255], "plasma preserves terrain");
-  assert.ok(result.repeatable && result.moves && result.unchanged && result.noRepeat);
+  assert.ok(result.repeatable && result.moves && result.unchanged && result.surfaceAnimates);
   for (const burst of result.bursts) {
-    assert.ok(burst.hadBurst && burst.expired && burst.cleanupQuiet && burst.ringVisible, `radius ${burst.radius}: one burst with a retained circle`);
+    assert.ok(burst.hadBurst && burst.expired && burst.cleanupQuiet && burst.fullyClear, `radius ${burst.radius}: one burst without a retained outline`);
+  }
+  for (const composite of result.composites) {
+    assert.ok(composite.red > 0 && composite.fire > 0 && composite.translucentRed > 0, `radius ${composite.radius}: red plasma and fire particles visible together`);
   }
   mkdirSync("test-browser/out/modern", { recursive: true });
   await page.locator("#game").screenshot({ path: "test-browser/out/modern/particle-crater.png" });

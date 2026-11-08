@@ -54,6 +54,7 @@
  *   every screen .draw() need a DOM / a real engine and defer to the Phase-3 visual
  *   gate + a live boot (pixelsDeferredToPhase3 = true).
  */
+import { ITEMS, SLOT_BABY_MISSILE } from "./weapons";
 import { OnlineShopping } from "./online_shop";
 import type { GameState } from "./game";
 import { UiHost, uiOwnsInput, type HtmlScreen } from "./html/host";
@@ -812,7 +813,7 @@ export class App {
   }
 
   /** main.py:474 -- build the GameState from the setup roster and seed the RNG. */
-  private _build_game(colorIndices?: number[]): void {
+  private _build_game(colorIndices?: number[], quick = false): void {
     if (_gameStateFactory === null) {
       // No engine wired: cannot start.  Surface the gap loudly (the menu stays up).
       diag.log.error("cannot start game: no GameStateFactory wired (engine not integrated)");
@@ -825,6 +826,15 @@ export class App {
       gs.add_player(name, ai_class, team, tank_icon, colorIndices?.[i]);
     }
     gs.new_game();
+    if (quick) {
+      // A starter loadout, granted once: normal shopping resumes after round one.
+      for (const tank of gs.tanks as GameState["tanks"]) {
+        for (const item of ITEMS) {
+          if (item.offensive && item.idx !== SLOT_BABY_MISSILE) tank.inventory[item.idx] = 1;
+        }
+      }
+      if (gs.phase === SHOP) gs.begin_next_round();
+    }
     diag.log.info(
       "new game: players=%d rounds=%d seed=%d sky=%s phase=%s",
       gs.tanks.length,
@@ -902,6 +912,14 @@ export class App {
     if (action === "start_game") {
       if (this.chooseMode) this.chooseMode();
       else this._start_setup();
+    } else if (action === "quick_game") {
+      Object.assign(this.cfg, {
+        TERRAIN_STYLE: "MODERN", ECONOMY_MODE: "COMEBACK", MAXROUNDS: 10,
+        MAXPLAYERS: 2, TEAM_MODE: "NONE", PLAY_MODE: "SEQUENTIAL",
+        PLAY_ORDER: "ROUND-ROBIN", SCORING: "STANDARD",
+      });
+      this._setup = [["Player 1", C.AI_HUMAN, 0, 0], ["Computer", C.AI_SHOOTER, 0, 1]];
+      this._build_game(undefined, true);
     } else if (action === "save_changes") {
       // browser: persist the cfg body to localStorage (main.py writes scorch.cfg).
       _saveConfig(this.cfg);

@@ -62,11 +62,6 @@ export function drawModernBlast(ctx: CanvasRenderingContext2D, x: number, y: num
   if (r <= 0 || alpha <= 0) return;
   const random = (n: number) => { const v = Math.sin(n * 127.1 + x * 12.7 + y * 3.1) * 43758.5453; return v - Math.floor(v); };
   ctx.save(); ctx.translate(x, y);
-  // A thin pressure front keeps the true growing circle readable through smoke.
-  ctx.globalAlpha = alpha * .35;
-  ctx.strokeStyle = plasma ? "#a6eaff" : "#ffe7a3";
-  ctx.lineWidth = 1.4;
-  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
   const count = Math.min(1000, Math.ceil(radius * radius / 28) + 24);
   for (let i = 0; i < count; i++) {
     const angle = random(i * 7 + 1) * Math.PI * 2;

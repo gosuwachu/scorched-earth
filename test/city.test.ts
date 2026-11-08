@@ -55,6 +55,25 @@ describe("Painted scenery, landmarks and crossings", () => {
       expect(p.w / p.h).toBeCloseTo(paintedAspect(kind)!, 12);
     }
   });
+  it("keeps generated suburban homes readable instead of shrinking them into leftover plots", () => {
+    const homes = ["detached", "semi", "townhouse", "shop", "apartment"];
+    const seen = new Set<string>();
+    for (const width of [320, 640, 1024]) for (const seed of [1, 2, 3, 19, 71, 313]) {
+      const m = ModernWorld.generate(width, width * .75, seed, { TERRAIN_BIOME: "GRASS", TERRAIN_LAYOUT: "CITY" });
+      m.placeProps([]);
+      const scale = Math.min(1, width / 640);
+      const suburb = m.props.filter(p => homes.includes(p.kind));
+      expect(suburb.length).toBeGreaterThanOrEqual(width < 640 ? 1 : 2);
+      for (const p of suburb) {
+        seen.add(p.kind);
+        // Stamping rounds height down to the nearest half pixel.
+        expect(p.h).toBeGreaterThanOrEqual(40 * scale - .5);
+        expect(p.w).toBeGreaterThanOrEqual(60 * scale - paintedAspect(p.kind)! * .5);
+        expect(p.w / p.h).toBeCloseTo(paintedAspect(p.kind)!, 12);
+      }
+    }
+    expect([...seen].sort()).toEqual(homes.sort());
+  });
   it("retains earlier artwork versions when restoring saved worlds", () => {
     const { m, p } = fixture("st_pauls");
     p.art = "illustrated-v1";

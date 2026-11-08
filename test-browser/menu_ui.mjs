@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-export const menuLabels = ["Start", "Sound", "Hardware", "Economics", "Landscape", "Physics", "Play Options", "Weapons", "Save Changes", "About"];
+export const menuLabels = ["Start", "Quick Game", "Sound", "Hardware", "Economics", "Landscape", "Physics", "Play Options", "Weapons", "Save Changes", "About"];
 
 export async function checkMenuLayout(page) {
   const menu = page.getByRole("region", { name: "Main Menu", exact: true });
@@ -13,10 +13,10 @@ export async function checkMenuLayout(page) {
     assert.ok(box.x >= panel.x && box.x + box.width <= panel.x + panel.width + 1, "Menu actions fit their panel");
     assert.ok(box.height >= 38, "Menu actions have usable hit targets");
   }
-  assert.ok(boxes[0].height > boxes[1].height, "Start is taller than the settings");
-  for (let i = 1; i < 8; i++) {
-    assert.ok(Math.abs(boxes[i].width - boxes[1].width) < 1, "Settings have equal widths");
-    assert.ok(Math.abs(boxes[i].x - boxes[1 + (i - 1) % 2].x) < 1, "Settings form two aligned columns");
+  assert.ok(boxes[0].height > boxes[2].height, "Start is taller than the settings");
+  for (let i = 2; i < 9; i++) {
+    assert.ok(Math.abs(boxes[i].width - boxes[2].width) < 1, "Settings have equal widths");
+    assert.ok(Math.abs(boxes[i].x - boxes[2 + (i - 2) % 2].x) < 1, "Settings form two aligned columns");
   }
   assert.ok(await buttons.evaluateAll((nodes) => nodes.every((node) => {
     const style = getComputedStyle(node);

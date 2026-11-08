@@ -399,6 +399,27 @@ try {
   await page.setViewportSize({ width: 800, height: 480 }); await shot("short-setup"); await click("Done"); await click("Done");
   await shot("short-shop");
   await checkComeback(page, { click, settled, shot });
+  await page.evaluate(() => {
+    window.onlineApp._act("to_menu");
+    Object.assign(window.onlineApp.cfg, { TERRAIN_STYLE: "CLASSIC", ECONOMY_MODE: "CLASSIC", MAXROUNDS: 2, TEAM_MODE: "TEAMS", INITIAL_CASH: 10000 });
+  });
+  await settled();
+  await click("Quick Game");
+  const quick = await page.evaluate(async () => {
+    const app = window.onlineApp, gs = app.gs;
+    const { ITEMS, SLOT_BABY_MISSILE } = await import("/src/weapons.ts");
+    return {
+      screen: app.top.constructor.name, style: app.cfg.TERRAIN_STYLE,
+      economy: app.cfg.ECONOMY_MODE, rounds: app.cfg.MAXROUNDS,
+      modern: !!gs.terrain.modern, comeback: !!gs.comeback,
+      players: gs.tanks.map(t => t.ai_class), round: gs.round_index,
+      stocked: gs.tanks.every(t => ITEMS.filter(i => i.offensive && i.idx !== SLOT_BABY_MISSILE).every(i => t.inventory[i.idx] === 1)),
+    };
+  });
+  assert.deepEqual(quick, { screen: "GameScreen", style: "MODERN", economy: "COMEBACK", rounds: 10,
+    modern: true, comeback: true, players: [0, 2], round: 0, stocked: true });
+  assert.equal(await page.locator("dialog[open]").count(), 0);
+  await shot("quick-game");
   assert.deepEqual(errors, []);
   console.log("HTML UI: local flow, native editing, focus, nested dialogs, shop, inventory, saves, and responsive layouts passed.");
 } finally { await browser?.close(); server?.kill(); }
