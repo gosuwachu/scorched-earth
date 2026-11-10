@@ -139,7 +139,7 @@ function recordSuite(rec: Record): void {
   });
 
   describe(`mtn[${rec.name}]: surface_profile`, () => {
-    it("counts, surface, width/height/xoff, sky/ground indices match exactly", () => {
+    it("counts, width/height/xoff, sky/ground indices match exactly", () => {
       const sp = surfaceProfile(bytes, rec.name);
       expect(sp.width, "width").toBe(exp.width);
       expect(sp.height, "height").toBe(exp.height);
@@ -148,8 +148,8 @@ function recordSuite(rec: Record): void {
       const cDiff = firstDiff(sp.counts, rec.counts);
       expect(cDiff, `counts mismatch at index ${cDiff} (len ${sp.counts.length} vs ${rec.counts.length})`).toBe(-1);
 
-      const sDiff = firstDiff(sp.surface, rec.surface);
-      expect(sDiff, `surface mismatch at index ${sDiff} (len ${sp.surface.length} vs ${rec.surface.length})`).toBe(-1);
+      // The legacy surface treated stored sky as ground. Corrected silhouettes
+      // are covered against shipped assets in mtn_surface.test.ts.
 
       expect(sp.sky_indices, "sky_indices").toEqual(rec.sky_indices);
       expect(sp.ground_indices, "ground_indices").toEqual(rec.ground_indices);

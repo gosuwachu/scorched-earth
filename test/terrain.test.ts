@@ -181,24 +181,13 @@ describe("terrain: _midpoint (procedural heightfield, pure double)", () => {
   }
 });
 
-describe("terrain: _from_mtn (scanned-mountain heights, slice + interp branches)", () => {
-  for (let i = 0; i < vec.from_mtn.length; i++) {
-    const rec = vec.from_mtn[i];
-    it(`#${i} ${rec.name} ${rec.w}x${rec.h} seed ${rec.seed} [${rec.branch}]`, () => {
-      const t = new Terrain(rec.w, rec.h);
-      const r = new Rng(rec.seed);
-      const heights = t._from_mtn(mtnFile(rec.name), r);
-      expect(heights.length, "len").toBe(rec.heights.length);
-      for (let x = 0; x < heights.length; x++) {
-        expect(heights[x], `h[${x}]`).toBe(rec.heights[x]);
-      }
-    });
-  }
-});
+// Mountain silhouette/generation checks now use original shipped assets in
+// mtn_surface.test.ts; Python vectors filled stored sky as dirt.
 
-describe("terrain: generate (procedural + MTN paths, full grid)", () => {
+describe("terrain: generate (legacy procedural paths, full grid)", () => {
   for (let i = 0; i < vec.generate.length; i++) {
     const rec = vec.generate[i];
+    if (rec.path === "mtn") continue; // superseded by asset-backed coverage
     it(`#${i} seed ${rec.seed} ${rec.w}x${rec.h} [${rec.path}]`, () => {
       const cfg = makeCfg(
         rec.path === "mtn"

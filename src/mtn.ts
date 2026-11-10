@@ -80,7 +80,7 @@ export interface MtnHeader {
 }
 
 export interface SurfaceProfile {
-  /** surface[x] = top-most GROUND row of column x (= height - count[x]). */
+  /** surface[x] = first non-sky pixel row of column x (height if empty). */
   surface: Int32Array;
   /** stored ground-pixel count per column. */
   counts: Int32Array;
@@ -259,11 +259,10 @@ export function decode(input: Uint8Array, name = "<mtn>"): MtnGrid {
 }
 
 /**
- * Return the mountain silhouette and the sky/ground index split. Mirrors
- * mtn.surface_profile(path).
+ * Return the mountain silhouette and the sky/ground index split.
+ * Unlike the legacy Python profile, skip sky stored inside compressed columns.
  *
- *   surface[x]      = top-most GROUND row of column x (= height - count[x]);
- *                     equals height where the column is empty (count 0).
+ *   surface[x]      = first stored non-sky row; height if no ground exists.
  *   counts[x]       = stored ground-pixel count per column.
  *   sky_indices     = [sky_index].
  *   ground_indices  = sorted palette indices occurring as stored GROUND pixels,
@@ -275,7 +274,15 @@ export function surfaceProfile(input: Uint8Array, name = "<mtn>"): SurfaceProfil
   const height = hdr.height;
   const sky_index = hdr.sky_index;
   const surface = new Int32Array(width);
-  for (let x = 0; x < width; x++) surface[x] = height - counts[x];
+  for (let x = 0; x < width; x++) {
+    const col = columns[x]; // stored bottom-up
+    let groundCount = col.length;
+    // ROCK002/003 contain long runs of sky at the top of some stored columns.
+    // Counts describe compression, not the silhouette: filling from height-count
+    // turns those sky runs into thin dirt towers. Trim before scaling the profile.
+    while (groundCount > 0 && col[groundCount - 1] === sky_index) groundCount--;
+    surface[x] = height - groundCount;
+  }
   const used = new Set<number>();
   for (const col of columns) {
     for (let i = 0; i < col.length; i++) used.add(col[i]);
