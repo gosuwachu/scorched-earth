@@ -147,3 +147,27 @@ Miscellaneous, verifies the price/count and painted icon, and saves
 `ui-laser-sight-shop.png`. Unit tests cover depletion, synchronous/simultaneous
 launches, remote controller ownership, and save migration. These are browser
 feature checks, not DOS fidelity evidence.
+
+Phone firing uses a 600 ms hold followed by release. A short tap, sliding off,
+second finger, canceled pointer, or controller interruption cancels the gesture.
+The same guard covers final target and Plasma confirmation; keyboard or assistive
+activation of the button opens a confirmation dialog without a timing requirement.
+The online driver checks these gestures in `online_fire.mjs`, exercises deliberate
+shots through its existing battle flows, and asserts a separated Fire row at
+phone, landscape, and desktop sizes. Captures include `online-fire-idle.png`,
+`online-fire-ready.png`, and `online-battle-390x844.png` under `test-browser/out/`.
+These are browser interaction checks, not DOS fidelity comparisons.
+
+With that same LAN server running, the focused driver also checks successful
+touch and accessible confirmation, one shot per player, and cancellation across
+host pause/reconnect:
+
+```bash
+ONLINE_TEST_URL=http://127.0.0.1:4317 node test-browser/online_fire_flow.mjs synchronous
+```
+
+It seeds the retained synchronous engine mode explicitly: normal online setup
+currently offers sequential and simultaneous play.
+
+The same focused driver accepts `targeting`, `plasma`, and `simultaneous` to
+check final confirmations and repeated deliberate firing in live online matches.

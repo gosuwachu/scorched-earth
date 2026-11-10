@@ -4,6 +4,7 @@ import { Connection } from "./online_connection";
 import { button, el, installOnlineTheme, Roster, tankIcon } from "./online_ui";
 import { get_sprite, WEAPON_ICON_BASE, weapon_icon_palette } from "./sprites";
 import { PanelControls } from "./controller_panel";
+import { GuardedFire } from "./controller_fire";
 import { BattleControls } from "./controller_battle";
 import { ShopControls } from "./controller_shop";
 import "./online.css";
@@ -14,6 +15,7 @@ interface ControlNode {
   button?: HTMLButtonElement;
   label?: HTMLElement;
   readout?: HTMLOutputElement;
+  guard?: GuardedFire;
   kind: Control["kind"];
   options?: string;
   optionSlots?: (number | null)[];
@@ -59,6 +61,7 @@ export function startController(roomId: string): void {
   let lobbyBuilt = false;
   let icon = 3;
   let ready = false;
+  const guards = new Set<GuardedFire>();
   const held = new Set<string>();
   const heldButtons = new Map<string, HTMLButtonElement>();
   const keyLabels = new Map<string, string>();
@@ -88,6 +91,10 @@ export function startController(roomId: string): void {
     if (allowed()) connection.send({ type: "input", context: view!.context, seq: ++seq, input });
   };
   const release = (): void => {
+    for (const guard of guards) guard.reset();
+    releaseKeys();
+  };
+  const releaseKeys = (): void => {
     if (held.size) send({ kind: "hold", keys: [] });
     held.clear();
     for (const b of heldButtons.values()) b.dataset.held = "false";
@@ -126,7 +133,7 @@ export function startController(roomId: string): void {
         b.textContent = targetLabels[code][0];
         b.setAttribute("aria-label", targetLabels[code][1]);
         b.title = targetLabels[code][1];
-      } else if (normalBattle) {
+      } else if (normalBattle && code !== "Space") {
         const moving = view?.movement?.active;
         const label = moving && code === "ArrowLeft" ? "Move left" : moving && code === "ArrowRight" ? "Move right" : keyLabels.get(code)!;
         b.textContent = battleLabels[code] || label;
@@ -144,6 +151,7 @@ export function startController(roomId: string): void {
       if (record.field) record.field.disabled = !allowed() || !!c?.disabled;
       if (record.button) record.button.disabled = !allowed() || !!c?.disabled;
     }
+    for (const guard of guards) guard.update(guard.element.dataset.fireLabel!, guard.element.disabled);
     shop?.setEnabled(allowed());
     if (readyButton) readyButton.disabled = !connection.connected || !room?.hostConnected;
   }
@@ -217,6 +225,7 @@ export function startController(roomId: string): void {
       // Keyboard/screen-reader activation emits a complete tap.
       b.onclick = (e) => { if (e.detail === 0) { key(code, true); key(code, false); } };
       b.oncontextmenu = (e) => e.preventDefault();
+      if (code === "Space") guards.add(new GuardedFire(b, () => { key(code, true); key(code, false); }));
       heldButtons.set(code, b); keys.append(b);
     }
     battle = new BattleControls(() => send({ kind: "control", id: "move" }));
@@ -238,6 +247,7 @@ export function startController(roomId: string): void {
   function renderControl(c: Control): HTMLElement {
     let record = controlNodes.get(c.id);
     if (!record || record.kind !== c.kind) {
+      if (record?.guard) { record.guard.dispose(); guards.delete(record.guard); }
       record?.node.remove();
       const node = el("div");
       node.dataset.controlId = c.id;
@@ -247,6 +257,13 @@ export function startController(roomId: string): void {
           if (view?.targeting) release();
           send({ kind: "control", id: c.id });
         });
+        if (c.id === "plasma-fire" || c.id === "target-fire") {
+          record.guard = new GuardedFire(record.button, () => {
+            if (view?.targeting) releaseKeys();
+            send({ kind: "control", id: c.id });
+          });
+          guards.add(record.guard);
+        }
         node.append(record.button);
       } else if (c.kind === "label") node.textContent = c.label;
       else if (c.kind === "readout") {
@@ -304,10 +321,11 @@ export function startController(roomId: string): void {
         b.setAttribute("aria-pressed", String(purchase.selected));
         b.setAttribute("aria-label", `${purchase.name}, owned ${purchase.owned}, $${purchase.price} per ${purchase.bundle}`);
       } else {
-        b.textContent = c.label;
+        if (record.guard) record.guard.update(c.label, !allowed() || !!c.disabled);
+        else b.textContent = c.label;
         b.classList.remove("lan-shop-row");
         b.removeAttribute("aria-pressed");
-        b.removeAttribute("aria-label");
+        if (!record.guard) b.removeAttribute("aria-label");
         record.purchase = undefined;
       }
     }
@@ -350,7 +368,11 @@ export function startController(roomId: string): void {
     if (screenChanged && active instanceof HTMLElement && content.contains(active)) focusHistory.set(screenKey, active);
     // Different panels can reuse widget IDs for unrelated actions.
     if (screenChanged) {
-      for (const record of controlNodes.values()) record.node.remove();
+      release();
+      for (const record of controlNodes.values()) {
+        if (record.guard) { record.guard.dispose(); guards.delete(record.guard); }
+        record.node.remove();
+      }
       controlNodes.clear();
       panel.body.scrollTop = 0;
       screenKey = nextScreenKey;
@@ -384,7 +406,10 @@ export function startController(roomId: string): void {
     const scrollTop = shop.list.scrollTop;
     const visibleControls = view.controls.filter((c) => !(useShop && c.id === "category") && !(useBattle && c.id === "move"));
     const ids = new Set(visibleControls.map((c) => c.id));
-    for (const [id, record] of controlNodes) if (!ids.has(id)) { record.node.remove(); controlNodes.delete(id); }
+    for (const [id, record] of controlNodes) if (!ids.has(id)) {
+      if (record.guard) { record.guard.dispose(); guards.delete(record.guard); }
+      record.node.remove(); controlNodes.delete(id);
+    }
     const counts = new Map<HTMLElement, number>();
     visibleControls.forEach((c) => {
       const target = useShop ? shop.target(c) : !useBattle ? panel.target(c) : c.id === "tank" ? battle.panel : battle.extra;
@@ -433,6 +458,8 @@ export function startController(roomId: string): void {
     } else if (m.type === "ended" || m.type === "replaced" || (m.type === "error" && m.fatal)) {
       release(); ended = true; view = undefined;
       status.textContent = m.message;
+      for (const guard of guards) guard.dispose();
+      guards.clear();
       content.replaceChildren();
       root.classList.remove("lan-controller-game", "lan-controller-battle", "lan-controller-shop", "lan-controller-panel");
     } else if (m.type === "error") error.textContent = m.message;
@@ -443,6 +470,7 @@ export function startController(roomId: string): void {
     updateStatus();
   });
   window.addEventListener("keydown", (e) => {
+    if (document.querySelector(".lan-fire-confirm[open]")) return;
     if (!gameBuilt || e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
     if (view?.screen !== "Battle" && !view?.targeting && e.code !== "Escape") return;
     if (view?.targeting && !targetLabels[e.code] && e.code !== "Escape" && !e.code.startsWith("Digit")) return;

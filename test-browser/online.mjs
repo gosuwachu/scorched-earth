@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { checkFireGuard } from "./online_fire.mjs";
 import { checkBattleControls, checkPreciseAim, checkHealthPower, checkResults, checkDisabledBattle, checkMovement } from "./online_battle.mjs";
 import { checkGuestEquipment, checkPanelLayout } from "./online_panel.mjs";
 import { checkTargetArrows } from "./online_targeting.mjs";
@@ -34,11 +35,14 @@ const wireErrors = (page) => {
 };
 const click = async (page, name) => {
   await settledDialogs(page);
-  await page.getByRole("button", { name, exact: true }).click();
+  const guarded = page.locator(`button[data-fire-label="${name}"]`);
+  if (await guarded.count()) await guarded.click({ delay: 700 });
+  else await page.getByRole("button", { name, exact: true }).click();
   await settledDialogs(page);
 };
 const enabled = async (page, name) => {
-  const b = page.getByRole("button", { name, exact: true });
+  const guarded = page.locator(`button[data-fire-label="${name}"]`);
+  const b = await guarded.count() ? guarded : page.getByRole("button", { name, exact: true });
   return await b.count() > 0 && await b.isEnabled();
 };
 
@@ -253,6 +257,7 @@ try {
   await click(a, "Esc");
   assert.equal(await host.getByRole("dialog", { name: "System Menu", exact: true }).count(), 0, "Guest Escape never opens the host menu");
   await checkBattleControls({ host, a, b, root, until });
+  await checkFireGuard({ page: a, until, root });
   await checkDisabledBattle(b);
   await checkMovement({ host, a, b, root, until });
   await checkGuestReconnect(a, until);

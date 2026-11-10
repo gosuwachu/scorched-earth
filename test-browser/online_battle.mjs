@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { settledDialogs } from "./dialogs.mjs";
 
 /** Browser presentation/binding checks; these are not DOS comparison fixtures. */
 export async function checkBattleControls({ host, a, b, root, until }) {
@@ -62,6 +63,7 @@ export async function checkBattleControls({ host, a, b, root, until }) {
         padding: parseFloat(getComputedStyle(document.querySelector(".lan-controller-body")).paddingTop),
         meters: [bounds(".lan-angle"), bounds(".lan-power")],
         arrows: ["ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"].map((code) => bounds(`button[data-key=${code}]`)),
+        fire: bounds(".lan-battle-fire button"),
         overflow: document.documentElement.scrollWidth > innerWidth,
         scroll: document.documentElement.scrollHeight > innerHeight + 1,
         targets: [...battle.querySelectorAll("button, summary")].filter((node) => node.checkVisibility()).map((node) => {
@@ -78,6 +80,7 @@ export async function checkBattleControls({ host, a, b, root, until }) {
     assert.ok(layout.targets.every((r) => r.width >= 44 && r.height >= 44 && r.right <= viewport.width && r.bottom <= viewport.height), "All battle actions fit and retain touch targets");
     assert.ok(Math.abs(layout.status.top - layout.title.bottom - layout.padding) < 1, "Status stays at the top beneath the title");
     assert.ok(layout.battle.top - layout.status.bottom <= 24, "Battle follows the status without vertical centering");
+    assert.ok(layout.fire.top - Math.max(...layout.arrows.map((r) => r.bottom)) >= 28, "Fire is separated from aiming controls");
     const [angle, power] = layout.meters;
     const [up, left, down, right] = layout.arrows;
     assert.ok(Math.abs(angle.top - power.top) < 1 && angle.right <= power.left, "Meters share one horizontal row");
@@ -201,6 +204,9 @@ export async function checkHealthPower({ host, page, until, root }) {
     await page.getByRole("button", { name: /^Discharge battery/ }).click();
     await until(async () => await host.evaluate(() => window.onlineApp.gs.tanks[0].health) === 40, "battery heals");
     assert.equal(await host.evaluate(() => window.onlineApp.gs.tanks[0].power), 300, "Healing keeps selected power");
+    // The battery confirmation closes asynchronously; wait for its new input context.
+    await settledDialogs(host);
+    await until(async () => await page.getByRole("button", { name: /^Discharge battery.*0 left$/ }).count() > 0, "battery result reaches the phone");
     await page.getByRole("button", { name: "Quit", exact: true }).click();
     await until(async () => await meter.getAttribute("aria-valuemax") === "400", "healing refreshes the maximum");
     await up.click();
