@@ -53,11 +53,19 @@ These check browser interaction and state ownership, not DOS fidelity.
 
 Comeback economy checks run through `ui.mjs` and `online.mjs`. The local driver
 selects the mode, checks the Greedy restriction, completes a controlled duel,
-and verifies the shop income breakdown and responsive layout. The online driver
+and verifies scaled damage/kill cash, the separate victory payment, resupply,
+recovery and responsive layout. The online driver
 selects Comeback in the host lobby and checks matching host/controller income
 after a round and a controller reload, without duplicate credits. Captures include
 `ui-comeback-{setup,winner-shop,recovery-shop,mobile-shop}.png` and
 `online-comeback-{lobby,shop-host,shop-phone}.png` under `test-browser/out/`.
+
+The local Comeback check also verifies cumulative score, gaps to the leader, and
+round income including pending resupply/recovery without early or duplicate
+payment. Captures are `ui-comeback-results.png`, `ui-comeback-results-mobile.png`,
+and `ui-comeback-final-results.png`. The last round excludes assistance, and the
+final standings show remaining cash. `test/results.test.ts` covers these income
+calculations, penalties, Classic/Outlast income and save compatibility.
 
 ## Reuse one development server
 

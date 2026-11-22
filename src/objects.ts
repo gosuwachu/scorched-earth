@@ -170,6 +170,8 @@ export class Tank {
 
   // economy
   cash: number;
+  /** Balance after shopping, used only to display this round's cash earnings. */
+  round_start_cash?: number;
   cash_ceiling: number;
   inventory: number[];
   selected_weapon: number;

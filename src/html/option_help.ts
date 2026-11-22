@@ -27,10 +27,10 @@ const optionHelp: Readonly<Record<string, OptionHelp>> = {
   FIRE_DELAY: { text: "The original game's firing delay. Browser flight speed is fixed. Positive values preserve magnetic shield strength; 0 uses the original alternate magnetic timing." },
   calibrate: { text: "Measures a connected gamepad's center and range for the joystick pointer. Calibration lasts until the page is reloaded." },
   ECONOMY_MODE: {
-    text: "Fixed for the match. Combat rewards stay at 100%.",
+    text: "Fixed for the match. Combat scores are unchanged.",
     values: {
       CLASSIC: "Classic: existing rewards, interest, and optional Outlast cash.",
-      COMEBACK: "Comeback: everyone receives $5,000 before each subsequent shop, plus $500 per consecutive loss (up to $1,500). A win resets recovery; every other player loses, regardless of placement. Team results count; draws preserve streaks. No interest, Outlast cash, or final-round payment. Basic and Standard scoring only; Greedy switches to Standard.",
+      COMEBACK: "Comeback: $7,500 resupply before each subsequent shop and a $7,500 victory pool. Enemy damage cash and $1,000 per kill are multiplied by 3 / (players − 1), using the starting roster. Health damage pays $30 per point; shield damage pays $2. Recovery adds $500 per consecutive loss, up to $1,500; a win resets it. Team results count and share the victory pool; draws preserve streaks. No interest, Outlast cash, or final-shop resupply. Basic and Standard scoring only; Greedy switches to Standard. Older saved matches retain their original rules.",
     },
   },
   INTEREST_RATE: { text: "Unspent cash earns interest between rounds: 0.05 means 5%. Comeback disables cash interest. This rate still affects the price of Auto Defense." },

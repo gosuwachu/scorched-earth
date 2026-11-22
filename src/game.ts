@@ -48,7 +48,7 @@ import * as ai from "./ai";
 import * as scoring from "./scoring";
 import { Terrain, type MtnFile } from "./terrain";
 import { Economy } from "./economy";
-import { createComeback, beginComebackRound, finishComebackRound, payComeback, recordCombatCash, type ComebackMatch } from "./comeback";
+import { createComeback, beginComebackRound, finishComebackRound, payComeback, recordCombatCash, scaledComeback, type ComebackMatch } from "./comeback";
 import { startOutlastRound, accrueOutlast, payOutlast, type OutlastRound } from "./outlast";
 import { Tank, Projectile } from "./objects";
 import * as weapons from "./weapons";
@@ -464,6 +464,7 @@ export class GameState {
     sfx.field_height = this.h;
     this._place_tanks();
     this._reset_round_tanks();
+    for (const tank of this.tanks) tank.round_start_cash = tank.cash;
     if (this.comeback) beginComebackRound(this.comeback);
     this.outlast = !this.comeback && this.cfg.is_on("OUTLAST_BONUS") ? startOutlastRound(this.tanks) : null;
     this._build_firing_order();
@@ -2814,8 +2815,10 @@ export class GameState {
       t.health = 0;
       t.power = 0;
       t.score += share; // equal split, NO win_counter++
-      t.cash = Math.max(0, t.cash + share); // awards feed cash too
-      recordCombatCash(this.comeback, t.player_index, share);
+      // Revised Comeback pays for earned combat and real victories, not an admin end.
+      const cash = scaledComeback(this.comeback) ? 0 : share;
+      t.cash = Math.max(0, t.cash + cash);
+      recordCombatCash(this.comeback, t.player_index, cash);
     }
     if (this.comeback) finishComebackRound(this.comeback, this.tanks, this.cfg.team_mode, true);
     this.round_index += 1;

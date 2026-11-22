@@ -2,6 +2,7 @@
 export interface ShopIncome {
   resupply: number;
   combat: number;
+  victory: number;
   penalties: number;
   recovery: number;
 }

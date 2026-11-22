@@ -28,7 +28,7 @@
  *    .reverse() (which would flip tie order).
  *  - `a is b` (identity)             -> reference equality (===) on the tank objects.
  */
-import { recordCombatCash, type ComebackMatch } from "./comeback";
+import { combatCash, KILL_CASH, recordCombatCash, scaledComeback, VICTORY_CASH, type ComebackMatch } from "./comeback";
 import {
   TEAM_NONE,
   SCORING_BASIC,
@@ -85,7 +85,7 @@ function floordiv(a: number, b: number): number {
   return Math.floor(a / b);
 }
 
-function _award(state: State, tank: Tank, amount: number): void {
+function _award(state: State, tank: Tank, amount: number, cashAmount = amount, kind: "combat" | "victory" = "combat"): void {
   /* Credit an award to spendable cash (tank.cash, the binary's +0xbe) AND, as a
      PORT RECONSTRUCTION, the ranking total (tank.score). The binary's award path
      writes ONLY +0xbe (FUN_2089_0166; VERIFY_FIXES.md 1f - there is no +0xba store
@@ -97,8 +97,9 @@ function _award(state: State, tank: Tank, amount: number): void {
      bug.) */
   const previousCash = tank.cash;
   tank.score += amount;
-  tank.cash = Math.max(0, tank.cash + amount);
-  recordCombatCash(state.comeback, tank.player_index, tank.cash - previousCash);
+  // Comeback can adjust cash independently; original score semantics stay intact.
+  tank.cash = Math.max(0, tank.cash + cashAmount);
+  recordCombatCash(state.comeback, tank.player_index, tank.cash - previousCash, kind);
 }
 
 /** FUN_3a16_198d contract: same team / self = friendly (returns 0). */
@@ -121,7 +122,8 @@ export function award_kill(state: State, killer: Tank | null, victim: Tank): voi
     _award(state, killer, killer === victim ? SCORE_SELF_KILL : SCORE_TEAMMATE_KILL);
   } else {
     const bonus = state.cfg.scoring === SCORING_BASIC ? SCORE_KILL_BASIC : SCORE_KILL_STD;
-    _award(state, killer, bonus);
+    const cash = scaledComeback(state.comeback) ? combatCash(state.comeback, killer.player_index, KILL_CASH) : bonus;
+    _award(state, killer, bonus, cash);
   }
 }
 
@@ -136,10 +138,13 @@ export function award_hit(
   if (attacker === null || damage <= 0) {
     return;
   }
-  if (state.cfg.scoring === SCORING_BASIC) {
+  const basic = state.cfg.scoring === SCORING_BASIC;
+  const scaled = scaledComeback(state.comeback);
+  if (basic && !scaled) {
     return;
   }
   if (friendly(state, attacker, victim)) {
+    if (basic) return; // BASIC has no hit penalties either.
     // Friendly-fire penalty = -15*damage, IDENTICAL for normal and shield hits.
     // Byte-verified in SCORCH_FP.EXE FUN_4098_0308 (file 0x37688): the friendly
     // branch at +0x85 does `mov dx,0xffff; mov ax,0xffe2` (dx:ax = -30) ->
@@ -150,10 +155,10 @@ export function award_hit(
     // The prior -1*damage shield case came from VERIFY_FIXES.md offsets that did
     // not reproduce (a cmp sequence, not the immediates); it was a bug.
     _award(state, attacker, -15 * Math.trunc(damage));
-  } else if (shield_hit) {
-    _award(state, attacker, SCORE_SHIELD_HIT_MULT * Math.trunc(damage));
   } else {
-    _award(state, attacker, Math.trunc(damage * HIT_POINT_MULT));
+    const amount = shield_hit ? SCORE_SHIELD_HIT_MULT * Math.trunc(damage) : Math.trunc(damage * HIT_POINT_MULT);
+    const cash = scaled ? combatCash(state.comeback!, attacker.player_index, amount) : amount;
+    _award(state, attacker, basic ? 0 : amount, cash);
   }
 }
 
@@ -170,22 +175,27 @@ export function survival_award(state: State): void {
     pool = SCORE_SURVIVAL_STD;
   }
 
+  const scaled = scaledComeback(state.comeback);
+  const cashPool = scaled ? VICTORY_CASH : pool;
+  const kind = scaled ? "victory" : "combat";
+
   if (state.cfg.team_mode === TEAM_NONE) {
     for (const t of alive) {
       t.win_counter += 1;
-      _award(state, t, pool);
+      _award(state, t, pool, cashPool, kind);
     }
   } else {
     const team = alive[0].team_id;
     const members = state.tanks.filter((t) => t.team_id === team);
     const aliveMembers = members.filter((t) => t.alive).length;
     const share = floordiv(pool, Math.max(1, aliveMembers));
+    const cashShare = floordiv(cashPool, Math.max(1, aliveMembers));
     for (const t of members) {
       if (t.alive) {
         t.win_counter += 1;
-        _award(state, t, share);
+        _award(state, t, share, cashShare, kind);
       } else {
-        _award(state, t, floordiv(share, 2)); // dead teammate gets half
+        _award(state, t, floordiv(share, 2), floordiv(cashShare, 2), kind); // dead teammate gets half
       }
     }
   }

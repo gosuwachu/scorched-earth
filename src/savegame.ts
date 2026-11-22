@@ -376,6 +376,7 @@ export interface SaveTank {
   guidance_target?: SaveTank | null;
   guidance_target_pt: [number, number] | null;
   cash: number;
+  round_start_cash?: number;
   cash_ceiling: number;
   inventory: number[];
   selected_weapon: number;
@@ -494,6 +495,7 @@ export interface SaveTankData {
   guidance_target_index: number | null;
   guidance_target_pt: [number, number] | null;
   cash: number;
+  round_start_cash?: number;
   cash_ceiling: number;
   inventory: number[];
   selected_weapon: number;
@@ -620,6 +622,7 @@ function tankToValueTree(t: SaveTank): { [k: string]: JsonValue } {
         : null,
     // economy
     cash: t.cash,
+    ...(t.round_start_cash === undefined ? {} : { round_start_cash: t.round_start_cash }),
     cash_ceiling: t.cash_ceiling,
     inventory: t.inventory.slice() as JsonValue,
     selected_weapon: t.selected_weapon,
@@ -693,6 +696,7 @@ function tankToData(t: SaveTank): SaveTankData {
         ? [t.guidance_target_pt[0], t.guidance_target_pt[1]]
         : null,
     cash: t.cash,
+    ...(t.round_start_cash === undefined ? {} : { round_start_cash: t.round_start_cash }),
     cash_ceiling: t.cash_ceiling,
     inventory: t.inventory.slice(),
     selected_weapon: t.selected_weapon,
@@ -747,6 +751,8 @@ export function applyTank(
   const pt = d.guidance_target_pt;
   t.guidance_target_pt = pt != null ? [pt[0], pt[1]] : null;
   t.cash = d.cash;
+  if (d.round_start_cash === undefined) delete t.round_start_cash;
+  else t.round_start_cash = d.round_start_cash;
   t.cash_ceiling = d.cash_ceiling;
   t.inventory = d.inventory.slice();
   if (t.inventory.length === DOS_NUM_ITEMS) t.inventory.push(0);

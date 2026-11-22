@@ -1,5 +1,5 @@
 import type { Config } from "../config";
-import { incomeLines } from "../comeback";
+import { incomeLines, incomeTotal } from "../comeback";
 import type { ShopIncome } from "../../shared/economy";
 import { el, field } from "./components";
 import { describeOption } from "./option_help";
@@ -30,7 +30,7 @@ export function economyChoice(cfg: Config): { element: HTMLElement; select: HTML
 /** Same labels and amounts on the local shop and remote controller. */
 export class IncomeBreakdown {
   readonly element = el("section", "", "ui-income");
-  private rows = Array.from({ length: 4 }, () => el("div"));
+  private rows = Array.from({ length: 5 }, () => el("div"));
   private total = el("strong");
 
   constructor() {
@@ -43,7 +43,7 @@ export class IncomeBreakdown {
     this.element.hidden = !income;
     if (!income) return;
     incomeLines(income).forEach((line, i) => { this.rows[i].textContent = line; });
-    const total = income.resupply + income.combat + income.penalties + income.recovery;
+    const total = incomeTotal(income);
     this.total.textContent = `Total ${total < 0 ? "−" : "+"}$${Math.abs(total).toLocaleString("en-US")}`;
   }
 }

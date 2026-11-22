@@ -5,6 +5,7 @@ const snapshot = (host) => host.evaluate(() => {
   const app = window.onlineApp, gs = app.gs;
   return {
     phase: gs.phase, round: gs.round_index, room: app.online.room.id,
+    comebackVersion: gs.comeback?.version,
     tanks: gs.tanks.map(({ alive, health, power, score, cash, win_counter }) => ({ alive, health, power, score, cash, win_counter })),
   };
 });
@@ -57,9 +58,10 @@ export async function massKillRound({ host, guests, click, until, root, capture 
   assert.equal(after.room, before.room, "Mass Kill keeps the room open");
   const share = after.tanks[0].score - before.tanks[0].score;
   assert.ok(share > 0);
+  const cashShare = before.comebackVersion === 2 ? 0 : share;
   after.tanks.forEach((tank, i) => assert.deepEqual(tank, {
     ...before.tanks[i], alive: false, health: 0, power: 0,
-    score: before.tanks[i].score + share, cash: Math.max(0, before.tanks[i].cash + share),
-  }, "Every tank gets the same award without win credit"));
+    score: before.tanks[i].score + share, cash: Math.max(0, before.tanks[i].cash + cashShare),
+  }, "Mass Kill shares scores without granting Comeback victory cash or win credit"));
   assert.deepEqual(await host.evaluate(() => window.onlineApp.stack.map((screen) => screen.uiKind)), ["battle", "rankings"], "Battle dialogs do not survive Mass Kill");
 }

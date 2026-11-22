@@ -93,19 +93,31 @@ and Mass Kill pays only rewards already earned. Waiting earns no money.
 The usual combat rewards, victory rewards, and interest rules still apply.
 
 **Optional browser economy — Comeback:** choose **Comeback** under **Economy**
-in the new-game dialog or online host lobby. Everyone receives $5,000 before
+in the new-game dialog or online host lobby. Everyone receives $7,500 before
 each subsequent shop, plus $500 per consecutive loss, capped at $1,500. In a
 five-player free-for-all, the winner resets their streak and all four other
 players add a loss. Team results apply in team games; draws and Mass Kill leave
 streaks unchanged. Recovery then uses the unchanged streak.
 
-Combat cash and scores remain at 100%. Comeback disables bank interest and
-Outlast cash, preserves cash and equipment carryover, and adds no payment after
-the final round. It supports Basic and Standard scoring; choosing it with Greedy
+Victory pays a $7,500 cash pool. Enemy health damage pays $30 per point, shield
+damage $2 per point, and kills $1,000, with damage and kill cash multiplied by
+`3 / (starting players - 1)`. Scores and penalties are unchanged. The multiplier
+equalizes full sweeps; it does not guarantee equal average purchasing power.
+Comeback disables bank interest and Outlast cash, preserves cash and equipment
+carryover, and adds no resupply or recovery after the final round. It supports
+Basic and Standard scoring; choosing it with Greedy
 switches scoring to Standard. The mode is fixed for the match, with income
-breakdowns in both host and controller shops. **Classic** remains the default.
+breakdowns in both host and controller shops, including a separate victory row.
+Older Comeback saves retain their original rules; start a new match to playtest
+the revised payouts. **Classic** remains the default.
 See the editable [Comeback economy plan](COMEBACK_ECONOMY_PLAN.md) for the rules
 and balance evaluation.
+
+Round results show cumulative score, the gap to the leader, wins, and money earned
+that round. Comeback income includes the resupply and recovery due before the next
+shop; viewing results does not pay them early. Classic round income includes
+combat and Outlast earnings after penalties, excluding bank interest. Greedy shows
+net worth as its ranking measure. Final standings show the remaining cash balance.
 
 ### Play together on a LAN
 

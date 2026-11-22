@@ -1,110 +1,114 @@
-# Multiplayer comeback economy plan
+# Multiplayer Comeback economy
 
-Status: implemented as an optional browser economy. The amounts remain starting values for balance playtesting.
+Status: revised rules implemented for new matches and accepted after user playtesting.
+Classic remains unchanged. These are intentional browser rules, not DOS fidelity
+changes. A round is one battle; a ten-round match has nine subsequent shops.
 
-Introduce an optional Comeback economy that helps players afford useful equipment after losing a round. Preserve the full cash and score rewards for damage, kills, and survival. Winning should remain rewarding while losing players retain a practical chance to compete in the next round.
+## Cash rules
 
-A round is one battle followed by a shop. A match contains multiple rounds.
+| Source | Cash |
+| --- | --- |
+| Resupply before each subsequent shop | $7,500 for every player |
+| Round victory | $7,500 pool, independent of player count |
+| Enemy kill | $1,000 before player-count scaling |
+| Enemy health damage | $30 per point before scaling |
+| Enemy shield damage | $2 per point before scaling |
+| Recovery after consecutive losses | $500 per loss, capped at $1,500 |
 
-## Current feedback loop
+Multiply positive damage and kill cash by `3 / (starting players - 1)`. Four
+players is the reference balance. Count the complete starting roster, including
+AI players, eliminated players and disconnected controllers. Do not recalculate
+the rate as tanks die. A one-player roster uses a denominator of one.
 
-Winning and surviving produce more cash, which buys stronger equipment and improves the chance of winning subsequent rounds. Several existing systems reinforce this:
+Cash is credited when damage, kills and victories are awarded. Round each
+player's cumulative scaled damage/kill cash to the nearest dollar (half up),
+crediting the difference from the previous rounded total. This makes one large
+hit and many small hits pay identically. Persist the unscaled accumulator through
+saves, and reset it at the next battle. Victory cash is separate and unscaled.
 
-- Damage and kills award both cash and score.
-- Standard scoring awards a $5,000 survival pool.
-- Outlast awards $500 per opponent outlived when enabled.
-- Surviving players earn interest on banked cash; the default rate is 5%.
-- Cash and purchased equipment carry between rounds.
+Combat **scores**, win counters, rankings and existing suicide/friendly-fire
+penalties stay unchanged. Basic still awards no hit score, but now pays the same
+positive damage/kill cash as Standard. Basic's absence of hit penalties remains
+unchanged. Greedy still switches to Standard when Comeback is selected.
 
-Relevant implementation: [scoring.ts](src/scoring.ts), [outlast.ts](src/outlast.ts), [economy.ts](src/economy.ts), and the round transitions in [game.ts](src/game.ts).
+## Recovery, teams and exceptional endings
 
-## Proposed rules
+The current round counts toward the losing streak. A win resets recovery; every
+other player loses regardless of elimination order. No survivors means a draw,
+which preserves streaks. Team results include eliminated teammates.
 
-### Resupply for everyone
+Team mode retains the existing victory distribution: divide the $7,500 cash pool
+among surviving winners, with eliminated teammates each receiving half of a
+survivor's share, rounded down. As before, payments to dead teammates are additional
+to the pool distributed to survivors. The combat multiplier uses the full starting
+roster in team games too; team-specific balancing is not part of this playtest.
 
-Give every player $5,000 before each subsequent shop, including players eliminated immediately. Do not add this payment to the initial shop or after the final round.
+Administrative Mass Kill preserves earned combat cash and streaks, pays no new
+victory cash, and still grants resupply and existing recovery before the next shop.
+Its existing score distribution is unchanged. Draws pay earned combat cash but no
+victory. Neither the initial shop nor the final round grants resupply/recovery.
+Final-round combat and victory cash still accrue, but there is no subsequent shop.
 
-At current base prices, $5,000 buys a Battery bundle or two Missile bundles. Availability and changing market prices still apply.
+Comeback disables bank interest and Outlast cash. Cash and inventory carry over.
+The interest-rate setting still affects Auto Defense pricing; item prices,
+Free Market behavior, arms availability and starting cash are unchanged.
 
-### Full combat rewards
+## Purchasing target and limits
 
-Keep 100% of existing cash and score rewards for damage, kills, and survival. Keep existing friendly-fire and suicide penalties. Resupply and recovery payments add no score or win credit.
+A four-player winner dealing 100 health damage and earning one kill receives
+$19,000: $7,500 resupply + $7,500 victory + $3,000 damage + $1,000 kill.
+After $10,000 in regular purchases, $9,000 remains. Five **consecutive wins with
+that performance** yield $45,000 from zero savings, enough to buy the $40,000
+two-item Super Mag bundle before round 6. This is an acceptance example, not a
+guarantee for the eventual match winner.
 
-### Recovery after consecutive losses
+A duel's full 100-damage kill pays $12,000 combat cash; with victory and resupply
+the winner receives $27,000. A full sweep pays the same $12,000 combat total at
+2, 4, 6 or 10 players. A first-time loser with no combat income receives $8,000,
+rising to $9,000 after three losses.
 
-Add a recovery payment to resupply based on the player's consecutive losses:
+The multiplier equalizes sweeps, not average purchasing power. The cash-flow
+simulation showed that strong players in larger games can still take longer to
+afford Super Mag. The user chose to playtest this proposal despite that tradeoff.
+The $10,000-per-shop supply budget also exceeds guaranteed losing-player income;
+actual supply spending is a major variable to measure.
 
-- One loss: $500.
-- Two losses: $1,000.
-- Three or more losses: $1,500.
+## Persistence and presentation
 
-Include the round just completed when calculating the streak. Reset the streak on a win, so the winner receives no recovery payment for that round. Reset all streaks when starting a new match.
+The economy is fixed at match creation. New Comeback matches carry version 2.
+Unversioned Comeback saves retain $5,000 resupply and their original full combat
+cash rules for the rest of that match. Saves without a Comeback tracker remain
+Classic. Starting a new Comeback match selects the revised rules.
 
-In a five-player free-for-all, one player wins and all four others lose, regardless of elimination order.
+Local and controller shops display Resupply, Combat earnings, Victory, Penalties,
+Recovery bonus and Total. Victory is no longer included in combat earnings for
+new matches. Old saves keep their previously combined earnings in the combat row.
+Purchases do not change the income history. Host-authoritative payouts, saved
+accumulators and payment guards prevent duplication during reconnects or restores.
 
-Use the team's result in team games, including for teammates eliminated before their team won. Draws and administrative mass kills neither increase nor reset streaks; the next recovery payment uses the unchanged streak.
+Round results show cumulative score and its gap to the leader alongside wins and
+net round income. Income includes the next shop's resupply and recovery without
+crediting them early; the final round includes neither. Expand the income details
+to see each player's components. Final standings show remaining cash instead of
+round income. Classic also tracks round earnings from the post-shopping balance;
+older Classic saves show an unavailable total until a new round starts.
 
-### Remove additional compounding bonuses
+## Verification and playtest
 
-Disable bank-interest accrual and Outlast cash while Comeback mode is active. Keep saved cash and equipment.
+`test/comeback.test.ts` covers 2/4/6/10-player cash rates, full sweeps, damage-packet
+rounding, fractional save/restore, unchanged scores and penalties, recovery,
+teams, administrative endings, old saves, controllers and the five-round Super Mag
+purchase with actual shop transactions. These expectations are browser-rule
+acceptance cases, separate from DOS fixtures.
 
-Skip interest accrual directly rather than setting `INTEREST_RATE` to zero: that setting also affects Auto Defense pricing. Preserve that pricing behavior.
+Run `npm test` and `npm run build`. Follow [test-browser/README.md](test-browser/README.md)
+for local `ui.mjs` and multiplayer `online.mjs` checks, including screenshots of
+the income breakdown, mode help, mobile layout and controller reconnects.
 
-### Lobby setting and scoring compatibility
-
-Add one lobby choice: Classic or Comeback. Fix the selection for the duration of the match and explain the rules in the lobby help.
-
-Classic preserves the existing economy. Comeback is a browser rule, not a DOS fidelity change. Initially support Comeback with Basic and Standard scoring only. Greedy ranks players by wealth, so assistance would directly affect the match standings and needs a separate design decision.
-
-The implemented selector is in the new-game dialog and online host lobby. Classic is the default. Selecting Comeback while Greedy is configured switches scoring to Standard, as explained in the control's help.
-
-## Example payout
-
-Assume a Standard duel with another round remaining. Both players have $0 banked before rewards. The winner deals 100 health damage, earns one kill, and survives; the loser earns no combat rewards. The current economy has Outlast enabled and 5% interest.
-
-Current winner income is $9,450: $3,000 damage + $500 kill + $5,000 survival + $500 Outlast + $450 interest. The loser receives $0.
-
-With Comeback, the winner receives $13,500: $5,000 resupply + the full $8,500 in combat rewards. The loser receives $5,500 after one consecutive loss, $6,000 after two, or $6,500 after three or more.
-
-The winner still earns $8,500 score and the loser earns zero score in either economy. These figures describe new income, not total wealth or equipment value.
-
-This is a modest comeback mechanic. Full combat rewards allow a strong player to keep building a substantial equipment advantage; resupply and recovery primarily keep losing players able to make useful purchases. The proposed amounts need playtesting.
-
-## Implementation steps
-
-1. Add the economy mode to configuration, lobby controls, and option help. Preserve existing behavior for Classic and older saves without the new fields.
-2. Add a small dedicated module for recovery streaks and resupply calculations. Use deterministic integer amounts without additional randomness.
-3. Integrate streak updates with completed round results. Pay resupply and recovery exactly once before the next shop, before either human or AI purchases. Keep existing combat reward timing.
-4. Gate Outlast and bank-interest accrual on the selected mode without changing Auto Defense pricing.
-5. Persist the selected mode, streaks, and any payment bookkeeping needed to prevent duplicate credits through saves and restores. Use the authoritative game state for multiplayer payouts and reconnects.
-6. Display a shop income breakdown: Resupply, Combat earnings, and Recovery bonus. Keep penalties visible when relevant and distinguish new income from the player's total cash balance.
-
-## Verification
-
-Add focused browser-rule tests for:
-
-- Resupply to winners and eliminated players.
-- Full combat cash and score rewards, with existing penalties intact.
-- Recovery increments, the $1,500 cap, and resets on wins or new matches.
-- Team outcomes, draws, and administrative mass kills.
-- No initial-shop or final-round resupply payment.
-- Disabled interest and Outlast in Comeback, with Auto Defense pricing preserved.
-- Save and restore, reconnects, and repeated round-transition calls without duplicate credits.
-- Classic behavior and compatibility with older saved games.
-- Lobby scoring restrictions and matching payout information for local and remote players.
-
-Run focused tests during implementation, then `npm test` and `npm run build`. Follow [test-browser/README.md](test-browser/README.md) for browser verification, including `ui.mjs` for the lobby and shop interactions. Inspect representative captures and verify the multiplayer shop flow.
-
-Keep these expectations separate from DOS fixtures. Passing them validates the new browser rule, not full-game DOS parity.
-
-## Balance evaluation
-
-Compare Classic and Comeback over repeatable seeded scenarios and human multiplayer sessions with different player counts and match lengths. Check:
-
-- Whether players can afford useful purchases after repeated losses.
-- Whether early winners dominate subsequent rounds.
-- How cash and equipment advantages develop over a match.
-- Whether the extra income makes expensive weapons too common.
-- Whether deliberate losses or passive play become attractive ways to earn recovery payments.
-
-Tune the resupply amount and recovery cap from these results. Keep full combat rewards as the agreed design constraint.
+For human playtesting, start a **new** Comeback match with Standard scoring,
+four players, ten rounds, $10,000 starting cash, Arms level 4 and Free Market off.
+Track actual supply spending, kills, victory income, first Super Mag purchase and
+round-5 balances. Repeat at two and ten players to assess the multiplier. Verify
+that active attackers retain a meaningful advantage and that losing players can
+still buy useful supplies. Passing the automated checks does not establish good
+balance or full-game DOS parity.

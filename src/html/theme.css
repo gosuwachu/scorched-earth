@@ -89,9 +89,16 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
 .ui-art h1 { position: relative; font: bold 56px/1 Consolas, monospace; text-shadow: 3px 3px #181040; margin: 55px 10px 25px; }
 .ui-art p { position: relative; color: #ff78be; font-weight: bold; }
 .ui-art small { position: absolute; bottom: 20px; left: 0; right: 0; }
-.ui-results { width: 480px; padding: 22px; }
+.ui-results { width: 620px; max-width: 100%; padding: 22px; }
 .ui-results table { width: 100%; border-collapse: collapse; }
-.ui-results td, .ui-results th { padding: 2px 5px; text-align: left; }
+.ui-results td, .ui-results th { padding: 7px 5px; text-align: left; overflow-wrap: anywhere; }
+.ui-results td:nth-child(n+3), .ui-results th:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
+.ui-results-gap { display: block; font-size: 11px; font-weight: normal; }
+.ui-results-note { font-size: 12px; margin: 10px 0; }
+.ui-results-income { font-size: 12px; margin: 12px 0; }
+.ui-results-income summary { cursor: pointer; }
+.ui-results-income strong { display: block; margin-top: 10px; }
+.ui-results-income ul { margin: 4px 0; padding-left: 18px; }
 .ui-results .ui-dialog-footer { padding-bottom: 0; }
 .ui-results h1 { margin: 0 0 14px; font-size: 24px; line-height: 1.2; text-align: center; }
 .ui-status { white-space: pre-wrap; }

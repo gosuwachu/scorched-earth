@@ -473,7 +473,7 @@ try {
   const guestIncome = a.getByRole("region", { name: "Round income", exact: true });
   await until(async () => await guestIncome.isVisible(), "Comeback income reaches controller");
   assert.equal(await guestIncome.innerText(), await hostIncome.innerText());
-  assert.match(await guestIncome.innerText(), /Resupply \+\$5,000/);
+  assert.match(await guestIncome.innerText(), /Resupply \+\$7,500/);
   await a.reload(); await until(() => enabled(a, "Done"), "rejoin purchasing");
   assert.equal(await guestIncome.innerText(), await hostIncome.innerText());
   assert.deepEqual(await host.evaluate(() => window.onlineApp.gs.tanks.map((t) => t.cash)), beforeReconnect);
