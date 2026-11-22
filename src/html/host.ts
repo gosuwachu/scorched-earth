@@ -259,7 +259,6 @@ export class UiHost {
     const number = (amount: number) => amount.toLocaleString("en-US");
     const cash = (amount: number, signed = false) => `${amount < 0 ? "−" : signed ? "+" : ""}$${number(Math.abs(amount))}`;
     const standing = (amount: number) => greedy ? cash(amount) : number(amount);
-    const leader = ranked.length ? value(ranked[0]) : 0;
     for (const label of ["Rank", "Player", greedy ? "Net worth" : "Score", "Wins", final ? "Cash" : "Round income"]) {
       const cell = el("th", label); cell.scope = "col"; head.append(cell);
     }
@@ -267,32 +266,23 @@ export class UiHost {
     ranked.forEach((tank, i) => {
       const row = el("tr"); row.style.color = `rgb(${layout.row_colors[i].join(",")})`;
       const score = el("td", standing(value(tank)));
-      const gap = leader - value(tank);
-      score.append(el("small", gap === 0 ? (i === 0 ? "Leader" : "Tied") : `${standing(gap)} behind`, "ui-results-gap"));
       const earned = roundEarnings(gs, tank);
       row.append(el("td", `#${i + 1}`), el("td", tank.name), score, el("td", String(tank.win_counter)),
         el("td", final ? cash(tank.cash) : earned === undefined ? "—" : cash(earned, true)));
       body.append(row);
     });
     table.append(thead, body); section.append(table);
-    section.append(el("p", `${greedy ? "Net worth determines rank." : "Score is cumulative."} Gaps are to the leader.`, "ui-results-note"));
-    if (!final) {
+    if (!final && gs.comeback) {
       const nextShop = gs.round_index < gs.cfg.MAXROUNDS;
-      if (gs.comeback) {
-        section.append(el("p", nextShop ? "Round income includes resupply and recovery for the next shop." : "Final round: no resupply or recovery payment.", "ui-results-note"));
-        const details = el("details", "", "ui-results-income"); details.append(el("summary", "Round income details"));
-        for (const tank of ranked) {
-          const income = roundIncome(gs.comeback, tank.player_index, nextShop);
-          if (!income) continue;
-          details.append(el("strong", tank.name));
-          const list = el("ul"); for (const line of incomeLines(income)) list.append(el("li", line));
-          details.append(list);
-        }
-        section.append(details);
-      } else {
-        section.append(el("p", "Round income includes combat and Outlast earnings, after penalties; excludes bank interest.", "ui-results-note"));
-        if (ranked.some((tank) => roundEarnings(gs, tank) === undefined)) section.append(el("p", "— Round income unavailable for this older save.", "ui-results-note"));
+      const details = el("details", "", "ui-results-income"); details.append(el("summary", "Round income details"));
+      for (const tank of ranked) {
+        const income = roundIncome(gs.comeback, tank.player_index, nextShop);
+        if (!income) continue;
+        details.append(el("strong", tank.name));
+        const list = el("ul"); for (const line of incomeLines(income)) list.append(el("li", line));
+        details.append(list);
       }
+      section.append(details);
     }
     if (!final) section.append(el("p", `${gs.cfg.MAXROUNDS - gs.round_index} rounds remain.`));
     if (layout.qlines.length) section.append(el("p", layout.qlines.join("\n"), "ui-status"));

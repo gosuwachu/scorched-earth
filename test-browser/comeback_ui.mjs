@@ -46,8 +46,8 @@ export async function checkComeback(page, { click, settled, shot }) {
   const results = page.locator(".ui-results");
   assert.deepEqual(await results.locator("th").allTextContents(), ["Rank", "Player", "Score", "Wins", "Round income"]);
   const rows = results.locator("tbody tr");
-  assert.deepEqual(await rows.nth(0).locator("td").allTextContents(), ["#1", "Winner", "8,500Leader", "1", "+$27,000"]);
-  assert.deepEqual(await rows.nth(1).locator("td").allTextContents(), ["#2", "Recoveri", "08,500 behind", "0", "+$8,000"]);
+  assert.deepEqual(await rows.nth(0).locator("td").allTextContents(), ["#1", "Winner", "8,500", "1", "+$27,000"]);
+  assert.deepEqual(await rows.nth(1).locator("td").allTextContents(), ["#2", "Recoveri", "0", "0", "+$8,000"]);
   const beforeResults = await page.evaluate(() => window.onlineApp.gs.tanks.map(t => t.cash));
   await results.getByText("Round income details", { exact: true }).click();
   assert.match(await results.locator("details").innerText(), /Resupply \+\$7,500/);
@@ -85,7 +85,6 @@ export async function checkComeback(page, { click, settled, shot }) {
   await settled();
   assert.equal(await results.locator("tbody tr").nth(0).locator("td").last().textContent(), "+$7,500");
   assert.equal(await results.locator("tbody tr").nth(1).locator("td").last().textContent(), "+$0");
-  assert.match(await results.innerText(), /Final round: no resupply or recovery/);
   await click("Go");
   assert.deepEqual(await results.locator("th").allTextContents(), ["Rank", "Player", "Score", "Wins", "Cash"]);
   await shot("comeback-final-results");

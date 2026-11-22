@@ -86,7 +86,7 @@ new matches. Old saves keep their previously combined earnings in the combat row
 Purchases do not change the income history. Host-authoritative payouts, saved
 accumulators and payment guards prevent duplication during reconnects or restores.
 
-Round results show cumulative score and its gap to the leader alongside wins and
+Round results show cumulative score alongside wins and
 net round income. Income includes the next shop's resupply and recovery without
 crediting them early; the final round includes neither. Expand the income details
 to see each player's components. Final standings show remaining cash instead of

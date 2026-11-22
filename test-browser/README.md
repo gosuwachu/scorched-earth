@@ -60,7 +60,7 @@ after a round and a controller reload, without duplicate credits. Captures inclu
 `ui-comeback-{setup,winner-shop,recovery-shop,mobile-shop}.png` and
 `online-comeback-{lobby,shop-host,shop-phone}.png` under `test-browser/out/`.
 
-The local Comeback check also verifies cumulative score, gaps to the leader, and
+The local Comeback check also verifies cumulative score and
 round income including pending resupply/recovery without early or duplicate
 payment. Captures are `ui-comeback-results.png`, `ui-comeback-results-mobile.png`,
 and `ui-comeback-final-results.png`. The last round excludes assistance, and the

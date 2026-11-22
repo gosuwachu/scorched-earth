@@ -113,7 +113,7 @@ the revised payouts. **Classic** remains the default.
 See the editable [Comeback economy plan](COMEBACK_ECONOMY_PLAN.md) for the rules
 and balance evaluation.
 
-Round results show cumulative score, the gap to the leader, wins, and money earned
+Round results show cumulative score, wins, and money earned
 that round. Comeback income includes the resupply and recovery due before the next
 shop; viewing results does not pay them early. Classic round income includes
 combat and Outlast earnings after penalties, excluding bank interest. Greedy shows

@@ -93,8 +93,6 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
 .ui-results table { width: 100%; border-collapse: collapse; }
 .ui-results td, .ui-results th { padding: 7px 5px; text-align: left; overflow-wrap: anywhere; }
 .ui-results td:nth-child(n+3), .ui-results th:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
-.ui-results-gap { display: block; font-size: 11px; font-weight: normal; }
-.ui-results-note { font-size: 12px; margin: 10px 0; }
 .ui-results-income { font-size: 12px; margin: 12px 0; }
 .ui-results-income summary { cursor: pointer; }
 .ui-results-income strong { display: block; margin-top: 10px; }
