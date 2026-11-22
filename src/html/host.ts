@@ -288,6 +288,7 @@ export class UiHost {
     if (layout.qlines.length) section.append(el("p", layout.qlines.join("\n"), "ui-status"));
     const footer = el("div", "", "ui-dialog-footer");
     const go = button("Go", () => this.change(screen, () => this.app._act(final ? "to_menu" : "rankings_done"))); go.dataset.default = "true";
+    go.autofocus = true;
     footer.append(go); section.append(footer); view.element.append(section);
     view.update = (active) => { go.disabled = !active; };
   }

@@ -44,6 +44,8 @@ export async function checkComeback(page, { click, settled, shot }) {
   });
   await settled();
   const results = page.locator(".ui-results");
+  const goFocused = () => results.getByRole("button", { name: "Go", exact: true }).evaluate(node => node === document.activeElement);
+  assert.equal(await goFocused(), true, "Round results focus Go rather than income details");
   assert.deepEqual(await results.locator("th").allTextContents(), ["Rank", "Player", "Score", "Wins", "Round income"]);
   const rows = results.locator("tbody tr");
   assert.deepEqual(await rows.nth(0).locator("td").allTextContents(), ["#1", "Winner", "8,500", "1", "+$27,000"]);
@@ -83,10 +85,12 @@ export async function checkComeback(page, { click, settled, shot }) {
     app.gs.tanks[1].alive = false; app.gs._end_round(); app._act("round_end");
   });
   await settled();
+  assert.equal(await goFocused(), true, "Final-round results focus Go");
   assert.equal(await results.locator("tbody tr").nth(0).locator("td").last().textContent(), "+$7,500");
   assert.equal(await results.locator("tbody tr").nth(1).locator("td").last().textContent(), "+$0");
-  await click("Go");
+  await page.keyboard.press("Enter"); await settled();
   assert.deepEqual(await results.locator("th").allTextContents(), ["Rank", "Player", "Score", "Wins", "Cash"]);
+  assert.equal(await goFocused(), true, "Final standings focus Go");
   await shot("comeback-final-results");
   await page.evaluate(() => window.onlineApp._act("to_menu"));
 }
